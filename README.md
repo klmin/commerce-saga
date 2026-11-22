@@ -70,6 +70,8 @@ scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메�
 - 시드 데이터: 재고 상품 1~3은 100개, 4는 1개, 5는 품절 / 포인트 사용자 1~3은 10,000P, 4는 0P
 - 결제 실패 주입: `curl -X PUT localhost:8084/admin/payment-faults -H 'Content-Type: application/json' -d '{"mode":"DECLINE","delayMillis":0}'`
 
+진행 현황과 다음 작업: [docs/PROGRESS.md](docs/PROGRESS.md)
+
 ## 시나리오
 
 | # | 시나리오 | 결과 |
