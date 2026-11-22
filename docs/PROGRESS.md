@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (main = `185524c`, PR #13 머지 직후)
-- 현재 위치: **3단계(신뢰성) 진행 중. 3-A, 3-B 완료, 다음은 3-A 보강(동시성 테스트) → 3-C(Debezium relay)**
+- 마지막 갱신: 2026-11-23 (PR #14 머지 후, 3-A 보강 PR)
+- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B 완료, 다음은 3-C(Debezium relay)**
 
 ## 1. 목표와 범위 (합의된 것)
 
@@ -60,17 +60,17 @@ flowchart LR
 | #7~#11 | 2단계: 메시지 계약 확장, 재고 해제·확정, 포인트, 가짜 PG(장애 주입), Saga 오케스트레이터·보상, 알림, 시나리오 1·8 |
 | #12 | 3-A 멱등 컨슈머 (`processed_message`), 오프셋 되감기 스크립트, 시나리오 3, ADR 0006, 스키마 호환 규칙(ADR 0005) |
 | #13 | 3-B DLT 조회·재처리 CLI(`tools/dlt-replay`, `scripts/dlt.sh`), 시나리오 6, ADR 0012 |
+| #14 | 이 문서 |
+| (이번 PR) | 3-A 보강: 같은 메시지 동시 처리 통합 테스트 (inventory 커밋·롤백, point 커밋) |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 자동으로 돈다.
 
+멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
+
 ## 4. 남은 일 (3단계)
 
-### 3-A 보강: 같은 메시지 동시 처리 테스트 (작은 PR, 3-C 전에)
-- 지금 테스트는 "같은 메시지가 **순서대로** 두 번 오면 건너뜀"과 "롤백되면 기록도 사라짐"만 증명한다
-- 추가할 것: 두 스레드가 **같은 messageId**로 동시에 `reserve`(inventory)·`use`(point)를 호출해도 재고·포인트가 한 번만 바뀌고 응답 outbox도 한 건인지 (Testcontainers Postgres, `CountDownLatch`로 동시 시작, `@RepeatedTest`)
-- 원리: 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리)
-
-### 3-C. Debezium relay
+### 3-C. Debezium relay (다음 작업)
+- 시작할 때 Kafka 이미지 4.3.2 → 4.4.0(Dependabot PR #3)을 compose·Testcontainers·Kafka Connect 버전과 함께 맞춘다
 - compose에 Kafka Connect + Debezium Postgres 커넥터 추가 (Postgres는 이미 `wal_level=logical`)
 - 서비스별 outbox 커넥터 JSON(`infra/connect/`) + 등록 스크립트(`scripts/register-connectors.sh`)
   - Outbox Event Router: `route.by.field=aggregatetype`(토픽), `aggregateid`가 key, `id`·`type`을 헤더로, `table.expand.json.payload=true`

@@ -88,4 +88,5 @@ CI 결과는 이 PR의 `e2e` 실행 로그로 채운다.
 - `PointServiceTest`, `PaymentServiceTest`, `OrderServiceTest`의 `redelivered*`
 - `ReserveStockIntegrationTest.redeliveredMessage_isSkipped_withoutSecondReply`: Kafka로 같은 `id`를 두 번 보내 응답이 한 번만 나가는지
 - `ReserveStockIntegrationTest.processedMessage_requiresTransaction_andRollsBackWithIt`: 트랜잭션 밖 호출은 오류, 롤백되면 기록도 사라짐
+- `ReserveStockIntegrationTest.sameMessageConcurrently_*`, `PointIntegrationTest.sameMessageConcurrently_deductsOnce`: 같은 메시지가 **동시에** 두 번 처리될 때. 앞 트랜잭션을 커밋 직전에 멈춰 두면 늦은 쪽은 끝나지 않고 기다린다(PK 선점). 앞이 커밋하면 늦은 쪽은 건너뛰고, 앞이 롤백하면 늦은 쪽이 이어받아 처리한다. 어느 쪽이든 재고·포인트 변경과 응답은 한 번
 - 각 리스너 테스트의 `missingOrInvalidIdHeader_isNonRetryable`
