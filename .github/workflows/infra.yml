@@ -1,0 +1,45 @@
+name: infra
+
+# 로컬 인프라(docker-compose)가 실제로 뜨고 토픽·서비스 DB가 만들어지는지 확인한다
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**', '.github/workflows/infra.yml']
+  pull_request:
+    paths: ['infra/**', '.github/workflows/infra.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: docker compose up
+        run: docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180 postgres kafka kafka-ui
+
+      - name: 토픽 생성 확인
+        run: |
+          docker compose -f infra/docker-compose.yml up --exit-code-from kafka-init kafka-init
+          topics=$(docker compose -f infra/docker-compose.yml exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list)
+          echo "$topics"
+          for t in inventory.command inventory.reply order.events; do echo "$topics" | grep -qx "$t"; done
+
+      - name: 서비스 DB 분리 확인
+        run: |
+          pg() { docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD="$2" postgres psql -h localhost -U "$1" -d "$3" -tAc 'select 1'; }
+          pg order_svc order_svc order_db
+          pg inventory_svc inventory_svc inventory_db
+          # 다른 서비스 DB 에는 접속할 수 없어야 한다
+          if pg order_svc order_svc inventory_db; then echo "order_svc 가 inventory_db 에 접속됨"; exit 1; fi
+
+      - name: Logs
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs

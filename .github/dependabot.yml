@@ -16,3 +16,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  - package-ecosystem: docker-compose
+    directories: ['/infra']
+    schedule:
+      interval: weekly
+    ignore:
+      # PostgreSQL 메이저는 기존 데이터 볼륨과 호환되지 않아 직접 올린다
+      - dependency-name: postgres
+        update-types: ['version-update:semver-major']
