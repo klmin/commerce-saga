@@ -35,7 +35,7 @@ jobs:
       - name: 인프라 기동
         run: |
           docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180 postgres kafka
-          docker compose -f infra/docker-compose.yml up --exit-code-from kafka-init kafka-init
+          docker compose -f infra/docker-compose.yml run --rm --no-deps kafka-init
 
       - name: 서비스 기동
         run: |
