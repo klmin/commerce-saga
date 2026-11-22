@@ -30,7 +30,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: bootJar
-        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar
 
       # README 의 기동 명령 그대로. postgres-init(서비스 DB·계정), kafka-init(토픽)까지 끝나야 성공한다
       - name: 인프라 기동
@@ -51,13 +51,23 @@ jobs:
             curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }
           done
 
+      # notification-service 는 일부러 띄우지 않는다 (알림 장애 중에도 주문이 완료되는지)
       - name: 스모크 테스트
         run: bash scripts/smoke-saga.sh
+
+      - name: 알림 서비스 기동 후 밀린 이벤트 처리 확인 (시나리오 8)
+        run: |
+          nohup java -jar services/notification-service/build/libs/notification-service-*.jar > logs/notification-service.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8085/actuator/health | grep -q UP && break
+            sleep 2
+          done
+          bash scripts/smoke-notification-catchup.sh
 
       - name: Logs
         if: always()
         run: |
-          for svc in inventory-service point-service payment-service order-service; do
+          for svc in inventory-service point-service payment-service order-service notification-service; do
             echo "===== $svc"
             tail -n 150 logs/$svc.log || true
           done

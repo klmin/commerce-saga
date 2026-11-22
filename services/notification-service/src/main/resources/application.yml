@@ -1,0 +1,26 @@
+server:
+  port: ${SERVER_PORT:8085}
+
+spring:
+  application:
+    name: notification-service
+  # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification_db}
+    username: ${NOTIFICATION_DB_USERNAME:notification_svc}
+    password: ${NOTIFICATION_DB_PASSWORD:notification_svc}
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      # 서비스가 내려가 있던 동안의 이벤트도 다시 뜨면 이어서 처리한다 (처음 뜰 때는 처음부터)
+      auto-offset-reset: earliest
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
