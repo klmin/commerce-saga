@@ -16,6 +16,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 services/<name>-service/   독립 실행·배포되는 Spring Boot 앱. 서비스마다 자기 DB만 사용
 libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 토픽 이름만
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
+tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 build-logic/               공통 빌드 설정 (convention plugin)
 infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect)
 scripts/                   커넥터 등록, 부하 생성, 장애 주입, 스모크 테스트
@@ -65,7 +66,7 @@ docker compose -f infra/docker-compose.yml up -d
   - 같은 메시지의 재전달: 유스케이스가 `(messageId, 커맨드)`를 받아 트랜잭션 첫 줄에서 `ProcessedMessagePort.markProcessed`(`processed_message` INSERT). 이미 있으면 상태도 응답도 바꾸지 않고 skip. `messageId`는 Kafka 헤더 `id`(= 보낸 쪽 outbox `id`), 없으면 DLT
   - 내용이 같은 다른 메시지(재요청): 주문별 기록(`order_id` 유니크)으로 걸러 상태는 그대로, 처음 결과를 다시 응답
 - 메시지 스키마(`libs/messaging-contract`)는 필드 추가만 한다. 삭제·이름·타입·의미 변경은 새 타입으로 (ADR 0005)
-- 처리 불가 메시지는 retry 토픽 → DLQ. 예외를 삼키고 오프셋만 커밋하지 않는다
+- 처리 불가 메시지는 DLT로 보존하고 `scripts/dlt.sh`로 재처리한다. 지연 retry 토픽은 같은 주문의 순서를 깨므로 쓰지 않는다 (ADR 0012). 예외를 삼키고 오프셋만 커밋하지 않는다
   - 일시 오류(DB 장애 등)는 복구될 때까지 재시도, 재시도해도 같은 오류(본문·헤더 이상, 데이터 불일치)는 `<토픽>.DLT`로 원본 보존 (각 서비스 `KafkaErrorHandlingConfig`)
   - 커맨드·응답 토픽은 계약에 없는 타입이 오면 DLT로 보낸다. 이벤트 토픽(`*.events`)은 소비자가 여럿이라 관심 없는 타입은 건너뛴다. 단 `type` 헤더 자체가 없거나 비면 어느 토픽이든 DLT
 - 보상 커맨드(`ReleaseStock`, `RefundPoint`)는 여러 번 와도, 앞 단계가 없었어도 안전하고 항상 같은 응답을 보낸다. Saga는 현재 단계에서 기다리는 응답이 아니면 무시한다 (ADR 0003)
@@ -139,9 +140,9 @@ common/error, common/web, common/config
 - 멱등 컨슈머
   - 상태를 바꾸는 컨슈머가 `messageId` 중복 검사를 비즈니스 처리와 같은 트랜잭션에서 하는지. 재전송 시 재고·포인트가 두 번 반영되면 P0
   - 중복 검사가 트랜잭션 밖(커밋 후 기록, 별도 트랜잭션)이면 처리 실패 시 메시지가 기록만 남고 유실되거나, 기록 전 재전달로 두 번 반영된다 (P0)
+  - 리스너에서 예외를 삼켜 메시지가 유실되지 않는지, 재시도할 수 없는 오류가 무한 재시도되지 않는지(DLT). 영구 오류 예외가 `NonRetryableMessageException` 등으로 분류되지 않으면 그 파티션이 계속 막힌다 (P1)
 - 메시지 스키마 호환
   - `libs/messaging-contract` record의 필드 삭제·이름·타입·의미 변경은 배포 중인 다른 버전의 서비스를 깨뜨린다 (P1). 필드 추가만 허용
-  - 리스너에서 예외를 삼켜 메시지가 유실되지 않는지, 재시도할 수 없는 오류가 무한 재시도되지 않는지(DLQ)
 - 서비스별 DB 분리
   - 다른 서비스의 DB·스키마·테이블을 조회하거나 datasource를 공유하는 코드
   - `services/*` 사이 의존, 도메인 클래스를 `libs/`로 옮겨 공유하는 변경

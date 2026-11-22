@@ -20,7 +20,7 @@ import tools.jackson.core.JacksonException;
  *       DLT 발행이 실패하면 오프셋을 커밋하지 않고 다시 시도한다</li>
  * </ul>
  * DLT 는 원본을 그대로 옮기는 인프라 처리라 outbox 를 거치지 않는다 (보낼 비즈니스 변경이 없다).
- * 지연 단계별 retry 토픽과 DLT 재처리 도구는 3단계에서 추가한다.
+ * 지연 retry 토픽은 같은 주문(키)의 메시지 순서를 깨므로 쓰지 않는다. DLT 조회·재처리는 scripts/dlt.sh (ADR 0012).
  */
 @Configuration(proxyBeanMethods = false)
 class KafkaErrorHandlingConfig {
