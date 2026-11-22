@@ -122,7 +122,7 @@ class OrderFlowIntegrationTest {
         assertThat(completed.paidAmount()).isEqualTo(1_500L);
         assertThat(completed.pointAmount()).isEqualTo(500L);
         awaitStatus(order, OrderStatus.COMPLETED);
-        assertThat(getOrderSagaUseCase.getSaga(order.id()).state()).isEqualTo(SagaState.COMPLETED);
+        assertThat(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), order.userId())).state()).isEqualTo(SagaState.COMPLETED);
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(outboxCount(order.id())).isZero());
     }
 
@@ -146,7 +146,7 @@ class OrderFlowIntegrationTest {
         OrderCancelled cancelled = expect(order, Topics.ORDER_EVENTS, OrderCancelled.TYPE, OrderCancelled.class);
         assertThat(cancelled.reason()).isEqualTo("card declined");
         awaitStatus(order, OrderStatus.CANCELLED);
-        assertThat(getOrderSagaUseCase.getSaga(order.id()).history()).extracting(SagaHistoryEntry::state)
+        assertThat(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), order.userId())).history()).extracting(SagaHistoryEntry::state)
                 .containsExactly(SagaState.RESERVING_STOCK, SagaState.USING_POINT, SagaState.PAYING,
                         SagaState.REFUNDING_POINT, SagaState.RELEASING_STOCK, SagaState.CANCELLED);
     }

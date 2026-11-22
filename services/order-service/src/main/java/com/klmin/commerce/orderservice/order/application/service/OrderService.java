@@ -104,8 +104,10 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
 
     @Override
     @Transactional(readOnly = true)
-    public OrderSaga getSaga(UUID orderId) {
-        return sagaPort.findByOrderId(orderId).orElseThrow(() -> new SagaNotFoundException(orderId));
+    public OrderSaga getSaga(GetOrderQuery query) {
+        return sagaPort.findByOrderId(query.orderId())
+                .filter(saga -> saga.userId() == query.userId())
+                .orElseThrow(() -> new SagaNotFoundException(query.orderId()));
     }
 
     private void execute(SagaAction action, OrderSaga saga, Instant now) {

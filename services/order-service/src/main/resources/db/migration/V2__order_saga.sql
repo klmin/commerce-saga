@@ -32,3 +32,17 @@ create table order_saga_history (
     occurred_at timestamptz  not null,
     primary key (order_id, seq)
 );
+
+-- 업그레이드 시점에 진행 중(PENDING)이던 1단계 주문을 Saga 로 이관한다.
+-- 1단계 주문은 ReserveStock 만 보낸 상태라 RESERVING_STOCK 에서 시작하고, 포인트는 쓰지 않았다(전액 결제).
+-- 이렇게 해야 이관 후 도착하는 StockReserved/StockReservationFailed 응답이 버려지지 않고 이어서 진행된다
+insert into order_sagas (order_id, user_id, point_amount, paid_amount, state, point_used, failure_reason,
+                         created_at, updated_at, version)
+select id, user_id, 0, total_amount, 'RESERVING_STOCK', false, null, created_at, now(), 0
+from orders
+where status = 'PENDING';
+
+insert into order_saga_history (order_id, seq, event, state, reason, occurred_at)
+select id, 0, 'STARTED', 'RESERVING_STOCK', 'migrated from phase 1', created_at
+from orders
+where status = 'PENDING';

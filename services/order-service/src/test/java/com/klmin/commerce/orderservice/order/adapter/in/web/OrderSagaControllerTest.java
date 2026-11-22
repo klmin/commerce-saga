@@ -1,6 +1,7 @@
 package com.klmin.commerce.orderservice.order.adapter.in.web;
 
 import com.klmin.commerce.orderservice.order.application.SagaNotFoundException;
+import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderSagaUseCase;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
@@ -37,9 +38,9 @@ class OrderSagaControllerTest {
         OrderSaga saga = OrderSaga.start(order, t0);
         saga.handle(SagaEventType.STOCK_RESERVED, null, t0.plusSeconds(1));
         saga.handle(SagaEventType.PAYMENT_FAILED, "declined", t0.plusSeconds(2));
-        given(getOrderSagaUseCase.getSaga(order.id())).willReturn(saga);
+        given(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), 1L))).willReturn(saga);
 
-        mvc.perform(get("/admin/orders/{id}/saga", order.id()))
+        mvc.perform(get("/orders/{id}/saga", order.id()).header("X-User-Id", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.state").value("RELEASING_STOCK"))
                 .andExpect(jsonPath("$.compensating").value(true))
@@ -49,10 +50,15 @@ class OrderSagaControllerTest {
     }
 
     @Test
-    void getSaga_notFound_returns404() throws Exception {
+    void getSaga_notFoundOrNotOwned_returns404() throws Exception {
         UUID id = UUID.randomUUID();
-        given(getOrderSagaUseCase.getSaga(id)).willThrow(new SagaNotFoundException(id));
+        given(getOrderSagaUseCase.getSaga(new GetOrderQuery(id, 2L))).willThrow(new SagaNotFoundException(id));
 
-        mvc.perform(get("/admin/orders/{id}/saga", id)).andExpect(status().isNotFound());
+        mvc.perform(get("/orders/{id}/saga", id).header("X-User-Id", "2")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getSaga_withoutUserId_returns400() throws Exception {
+        mvc.perform(get("/orders/{id}/saga", UUID.randomUUID())).andExpect(status().isBadRequest());
     }
 }

@@ -34,7 +34,7 @@ now_ms() {
 
 stock() { curl -sf "$INVENTORY_URL/stocks/$1"; }
 points() { curl -sf "$POINT_URL/points/me" -H "X-User-Id: $1" | field balance; }
-saga() { curl -sf "$ORDER_URL/admin/orders/$1/saga"; }
+saga() { curl -sf "$ORDER_URL/orders/$2/saga" -H "X-User-Id: $1"; }  # userId orderId
 
 place_order() { # userId body
   curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $1" -d "$2"
@@ -94,7 +94,7 @@ expect_eq "결제 상태" APPROVED "$(curl -sf "$PAYMENT_URL/payments/orders/$or
 # OrderCompleted 이벤트(코레오그래피)로 예약 재고가 판매 확정되어 reserved 가 원래대로
 wait_until "stock confirmed" reserved_is 1 "$reserved_before"
 expect_eq "상품 1 available" $(( avail_before - 2 )) "$(stock 1 | field available)"
-expect_eq "Saga 단계" COMPLETED "$(saga "$order_id" | field state)"
+expect_eq "Saga 단계" COMPLETED "$(saga 1 "$order_id" | field state)"
 
 echo "== 2. 품절 상품 포함 주문 -> CANCELLED, 아무 재고도 잡지 않음"
 avail2_before=$(stock 2 | field available)
@@ -117,13 +117,14 @@ expect_eq "cancelReason" "declined by PG (fault injection)" "$(get_order 2 "$fai
 expect_eq "포인트 잔액(환불)" "$points3_before" "$(points 2)"
 expect_eq "상품 3 available(해제)" "$avail3_before" "$(stock 3 | field available)"
 expect_eq "상품 3 reserved(해제)" "$reserved3_before" "$(stock 3 | field reserved)"
-history=$(saga "$fail_id")
+history=$(saga 2 "$fail_id")
 # 보상 순서: PAYMENT_FAILED -> REFUNDING_POINT, POINT_REFUNDED -> RELEASING_STOCK, STOCK_RELEASED -> CANCELLED
 order_of_steps=$(echo "$history" | sed 's/.*"history"://' | grep -oE '"state":"(PAYING|REFUNDING_POINT|RELEASING_STOCK|CANCELLED)"' | tr -d '"' | sed 's/state://' | tr '\n' ' ')
 expect_eq "Saga 보상 순서" "PAYING REFUNDING_POINT RELEASING_STOCK CANCELLED " "$order_of_steps"
 
-echo "== 4. 다른 사용자의 주문·결제 조회 -> 404"
+echo "== 4. 다른 사용자의 주문·Saga·결제 조회 -> 404"
 expect_eq "user 2 -> user 1 주문" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$ORDER_URL/orders/$order_id" -H 'X-User-Id: 2')"
+expect_eq "user 2 -> user 1 Saga" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$ORDER_URL/orders/$order_id/saga" -H 'X-User-Id: 2')"
 expect_eq "user 2 -> user 1 결제" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$PAYMENT_URL/payments/orders/$order_id" -H 'X-User-Id: 2')"
 
 echo "PASS (정상 주문 생성 -> COMPLETED ${elapsed}ms)"

@@ -1,6 +1,7 @@
 package com.klmin.commerce.orderservice.order.application.service;
 
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
+import com.klmin.commerce.orderservice.order.application.SagaNotFoundException;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
 import com.klmin.commerce.orderservice.order.application.port.in.SagaReplyCommand;
@@ -131,6 +132,15 @@ class OrderServiceTest {
         service.handle(SagaReplyCommand.of(UUID.randomUUID(), STOCK_RESERVED));
 
         assertThat(sent.log).isEmpty();
+    }
+
+    @Test
+    void getSaga_onlyOwner() {
+        Order order = place(1L, 0L);
+
+        assertThat(service.getSaga(new GetOrderQuery(order.id(), 1L)).state()).isEqualTo(SagaState.RESERVING_STOCK);
+        assertThatThrownBy(() -> service.getSaga(new GetOrderQuery(order.id(), 2L)))
+                .isInstanceOf(SagaNotFoundException.class);
     }
 
     @Test
