@@ -1,11 +1,14 @@
 package com.klmin.commerce.inventoryservice.stock.domain;
 
+import com.klmin.commerce.inventoryservice.common.error.InvariantViolationException;
+
 import java.time.Instant;
 import java.util.Objects;
 
 /**
  * 상품별 재고 애그리거트.
- * available: 주문 가능한 수량, reserved: 주문에 잡혀 있는 수량 (결제 완료 후 확정, 실패 시 해제는 2단계)
+ * available: 주문 가능한 수량, reserved: 주문에 잡혀 있는 수량.
+ * 주문이 완료되면 reserved 에서 빠지고(판매 확정), 보상이면 available 로 돌아간다.
  */
 public final class Stock {
 
@@ -41,6 +44,29 @@ public final class Stock {
         available -= quantity;
         reserved = Math.addExact(reserved, quantity);
         updatedAt = now;
+    }
+
+    /** 보상: reserved 에서 available 로 되돌린다 */
+    public void release(int quantity, Instant now) {
+        requireReserved(quantity);
+        reserved -= quantity;
+        available = Math.addExact(available, quantity);
+        updatedAt = now;
+    }
+
+    /** 판매 확정: reserved 에서 뺀다 (available 은 예약 때 이미 줄었다) */
+    public void confirm(int quantity, Instant now) {
+        requireReserved(quantity);
+        reserved -= quantity;
+        updatedAt = now;
+    }
+
+    // 예약 기록과 재고가 어긋난 경우. 조용히 음수로 만들지 않고 실패시켜 드러낸다
+    private void requireReserved(int quantity) {
+        if (quantity <= 0 || quantity > reserved) {
+            throw new InvariantViolationException(
+                    "reserved stock mismatch for product " + productId + ": " + quantity + " > reserved " + reserved);
+        }
     }
 
     public long productId() {

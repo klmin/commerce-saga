@@ -1,5 +1,6 @@
 package com.klmin.commerce.inventoryservice.stock.domain;
 
+import com.klmin.commerce.inventoryservice.common.error.InvariantViolationException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -29,6 +30,28 @@ class StockTest {
         assertThat(stock.canReserve(2)).isTrue();
         assertThat(stock.canReserve(3)).isFalse();
         assertThat(stock.canReserve(0)).isFalse();
+    }
+
+    @Test
+    void release_and_confirm() {
+        Stock stock = Stock.restore(1L, 7, 3, T0);
+
+        stock.release(1, T0);
+        assertThat(stock.available()).isEqualTo(8);
+        assertThat(stock.reserved()).isEqualTo(2);
+
+        stock.confirm(2, T0);
+        assertThat(stock.available()).isEqualTo(8);
+        assertThat(stock.reserved()).isZero();
+    }
+
+    @Test
+    void release_or_confirm_moreThanReserved_isInvariantViolation() {
+        Stock stock = Stock.restore(1L, 7, 1, T0);
+
+        assertThatThrownBy(() -> stock.release(2, T0)).isInstanceOf(InvariantViolationException.class);
+        assertThatThrownBy(() -> stock.confirm(2, T0)).isInstanceOf(InvariantViolationException.class);
+        assertThat(stock.reserved()).isEqualTo(1);
     }
 
     @Test

@@ -19,13 +19,25 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # 서비스별 DB·계정 생성 후 종료한다. up 할 때마다 실행되고 멱등이라 서비스가 늘면 기존 볼륨에도 추가된다
+  postgres-init:
+    image: postgres:18-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: postgres
+    volumes:
+      - ./postgres/init:/init:ro
+    command: ["psql", "-h", "postgres", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-f", "/init/01-create-service-databases.sql"]
+    restart: "no"
 
   kafka:
     image: apache/kafka:4.3.2
@@ -65,7 +77,7 @@ services:
     command:
       - |
         # <토픽>.DLT: 재시도해도 처리할 수 없는 원본 메시지 보관 (리스너 에러 핸들러가 옮긴다)
-        for t in inventory.command inventory.reply order.events inventory.command.DLT inventory.reply.DLT; do
+        for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$t" --partitions 3 --replication-factor 1
         done
     restart: "no"
@@ -77,12 +89,14 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     ports:
       - "${KAFKA_UI_PORT:-8989}:8080"
-    # kafka-init 완료를 기다린다. 이렇게 의존해 두면 `up --wait` 가 일회성 kafka-init 의
-    # 종료(exit 0)를 실패로 보지 않고, 토픽이 만들어진 뒤에 UI 가 뜬다
+    # 일회성 init 컨테이너들의 완료를 기다린다. 이렇게 의존해 두면 `up --wait` 가 그 종료(exit 0)를
+    # 실패로 보지 않고, init 이 실패하면 up 도 실패한다 (kafka-ui 가 마지막에 뜨는 서비스 역할)
     depends_on:
       kafka:
         condition: service_healthy
       kafka-init:
+        condition: service_completed_successfully
+      postgres-init:
         condition: service_completed_successfully
 
 volumes:

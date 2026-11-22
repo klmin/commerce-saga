@@ -2,15 +2,21 @@ package com.klmin.commerce.inventoryservice;
 
 import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
+import com.klmin.commerce.contract.inventory.ReleaseStock;
 import com.klmin.commerce.contract.inventory.ReserveStock;
+import com.klmin.commerce.contract.inventory.StockReleased;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
+import com.klmin.commerce.contract.order.OrderCompleted;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ConfirmStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStockUseCase;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +31,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -40,6 +49,12 @@ class ReserveStockIntegrationTest {
 
     @Autowired
     GetStockUseCase getStockUseCase;
+
+    @Autowired
+    ReleaseStockUseCase releaseStockUseCase;
+
+    @Autowired
+    ConfirmStockUseCase confirmStockUseCase;
 
     @Autowired
     ConsumerFactory<String, String> consumerFactory;
@@ -125,11 +140,82 @@ class ReserveStockIntegrationTest {
         }
     }
 
+    @Test
+    void releaseStock_returnsReservedStock_andRepliesStockReleased() {
+        int before = getStockUseCase.getStock(2L).available();
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(2L, 4))));
+        awaitReplies(orderId, 1);
+        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before - 4);
+
+        send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId));
+        send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId)); // 중복 보상
+
+        List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
+        assertThat(replies.subList(1, 3)).allMatch(r -> StockReleased.TYPE.equals(header(r, MessageHeaders.TYPE)));
+        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before);
+    }
+
+    @Test
+    void orderCompletedEvent_confirmsReservedStock() {
+        int reservedBefore = getStockUseCase.getStock(3L).reserved();
+        int availableBefore = getStockUseCase.getStock(3L).available();
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(3L, 2))));
+        awaitReplies(orderId, 1);
+
+        send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId, 1L, 2000L, 0L, 2000L));
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(getStockUseCase.getStock(3L).reserved()).isEqualTo(reservedBefore));
+        assertThat(getStockUseCase.getStock(3L).available()).isEqualTo(availableBefore - 2);
+    }
+
+    // 해제(inventory.command)와 확정(order.events)이 같은 주문에 동시에 와도 하나만 반영되고 둘 다 실패하지 않는다
+    @RepeatedTest(5)
+    void concurrentReleaseAndConfirm_applyExactlyOne() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(1L, 1))));
+        awaitReplies(orderId, 1);
+        int availableAfterReserve = getStockUseCase.getStock(1L).available();
+        int reservedAfterReserve = getStockUseCase.getStock(1L).reserved();
+
+        CountDownLatch start = new CountDownLatch(1);
+        CompletableFuture<Void> release = CompletableFuture.runAsync(() -> {
+            awaitLatch(start);
+            releaseStockUseCase.release(orderId);
+        });
+        CompletableFuture<Void> confirm = CompletableFuture.runAsync(() -> {
+            awaitLatch(start);
+            confirmStockUseCase.confirm(orderId);
+        });
+        start.countDown();
+        CompletableFuture.allOf(release, confirm).get(30, TimeUnit.SECONDS);
+
+        int available = getStockUseCase.getStock(1L).available();
+        assertThat(getStockUseCase.getStock(1L).reserved()).isEqualTo(reservedAfterReserve - 1);
+        // 해제가 이기면 available 이 1 돌아오고, 확정이 이기면 그대로다
+        assertThat(available).isIn(availableAfterReserve, availableAfterReserve + 1);
+    }
+
+    private static void awaitLatch(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
     private void sendCommand(ReserveStock command) {
-        ProducerRecord<String, String> record = new ProducerRecord<>(Topics.INVENTORY_COMMAND,
-                command.orderId().toString(), json.writeValueAsString(command));
+        send(Topics.INVENTORY_COMMAND, command.orderId(), ReserveStock.TYPE, command);
+    }
+
+    private void send(String topic, UUID orderId, String type, Object payload) {
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>(topic, orderId.toString(), json.writeValueAsString(payload));
         record.headers().add(MessageHeaders.ID, UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
-        record.headers().add(MessageHeaders.TYPE, ReserveStock.TYPE.getBytes(StandardCharsets.UTF_8));
+        record.headers().add(MessageHeaders.TYPE, type.getBytes(StandardCharsets.UTF_8));
         kafkaTemplate.send(record).join();
     }
 
