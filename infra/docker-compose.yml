@@ -77,9 +77,13 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     ports:
       - "${KAFKA_UI_PORT:-8989}:8080"
+    # kafka-init 완료를 기다린다. 이렇게 의존해 두면 `up --wait` 가 일회성 kafka-init 의
+    # 종료(exit 0)를 실패로 보지 않고, 토픽이 만들어진 뒤에 UI 가 뜬다
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:

@@ -1,0 +1,41 @@
+# ADR 0005. Kafka 메시지 키 = orderId, 커맨드·응답·이벤트 토픽 분리
+
+- 상태: 채택
+- 날짜: 2026-11-22
+
+## 배경
+
+Kafka는 파이프일 뿐이라 메시지의 방향(누가 누구에게)과 순서는 토픽·키 규칙으로 만들어야 한다. 주문 Saga는 order-service가 오케스트레이션하고(ADR 0003), 후속 처리는 이벤트 코레오그래피다.
+
+## 결정
+
+### 토픽
+
+| 종류 | 이름 | 소유 | 구독 | 예 |
+|---|---|---|---|---|
+| 커맨드 (명령형, 수신자 하나, 응답 기대) | `<수신 서비스>.command` | 수신 서비스 | 그 서비스만 | `inventory.command`: `ReserveStock` |
+| 응답 | `<응답 서비스>.reply` | 응답 서비스 | 오케스트레이터만 | `inventory.reply`: `StockReserved`, `StockReservationFailed` |
+| 이벤트 (과거형 사실, 수신자 0~N) | `<발행 서비스>.events` | 발행 서비스 | 누구나 | `order.events`: `OrderCompleted` (2단계) |
+
+- 토픽 이름은 `libs/messaging-contract`의 `Topics` 상수로만 쓴다
+- 브로커의 토픽 자동 생성은 끄고 `infra/docker-compose.yml`의 `kafka-init`이 만든다 (오타 토픽이 조용히 생기지 않게)
+
+### 메시지 모양
+
+- key: `orderId` (outbox `aggregateid`)
+- value: payload JSON만 (`ReserveStock` 등 record)
+- 헤더: `id`(메시지 UUID, outbox `id`), `type`(메시지 타입, outbox `type`)
+
+Debezium Outbox Event Router가 내보내는 모양과 같게 맞췄다. 3단계에서 relay를 Debezium으로 바꿔도 컨슈머 코드는 그대로다.
+
+### 키 = orderId
+
+- 같은 주문의 커맨드·응답은 같은 파티션으로 가서 **주문 단위로 순서가 보장**된다 (예: 2단계에서 `ReserveStock` 다음 `ReleaseStock`이 앞지르지 않음)
+- 서로 다른 주문은 파티션으로 나뉘어 병렬 처리된다. 파티션 수(현재 3) = 서비스 인스턴스당 최대 병렬도
+- 같은 주문의 중복 커맨드가 동시에 처리되지 않는다 (같은 파티션 = 같은 컨슈머 스레드)
+
+## 결과
+
+- 좋은 점: 커맨드 토픽을 수신 서비스만 구독하므로 "누가 이 명령을 처리하나"가 하나로 정해진다. 이벤트 소비자는 order-service를 고치지 않고 추가할 수 있다
+- 주의: 인기 주문이 아니라 주문마다 키가 달라 핫 파티션 걱정은 적다. 상품 단위 처리(재고 재계산 등)가 생기면 그 토픽은 productId 키를 따로 검토한다
+- 스케줄러 relay는 인스턴스가 여럿이면 같은 키의 순서가 바뀔 수 있다. Debezium으로 바꾸며 해소한다 (ADR 0004)
