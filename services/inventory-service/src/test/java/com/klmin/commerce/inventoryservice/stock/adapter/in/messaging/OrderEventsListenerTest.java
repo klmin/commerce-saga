@@ -36,8 +36,16 @@ class OrderEventsListenerTest {
     void otherOrUnknownEventTypes_areSkipped() {
         listener.onMessage(record(Topics.ORDER_EVENTS, OrderCancelled.TYPE, "{\"orderId\":\"" + UUID.randomUUID() + "\"}"));
         listener.onMessage(record(Topics.ORDER_EVENTS, "SomethingNew", "{}"));
-        listener.onMessage(record(Topics.ORDER_EVENTS, null, "{}"));
 
+        verifyNoInteractions(confirm);
+    }
+
+    @Test
+    void missingTypeHeader_isNonRetryable() {
+        assertThatThrownBy(() -> listener.onMessage(record(Topics.ORDER_EVENTS, null, "{}")))
+                .isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(record(Topics.ORDER_EVENTS, "", "{}")))
+                .isInstanceOf(NonRetryableMessageException.class);
         verifyNoInteractions(confirm);
     }
 

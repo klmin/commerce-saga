@@ -38,6 +38,10 @@ class OrderEventsListener {
     @KafkaListener(topics = Topics.ORDER_EVENTS)
     void onMessage(ConsumerRecord<String, String> record) {
         String type = type(record);
+        // 관심 없는 타입은 건너뛰지만, type 헤더 자체가 없거나 비었으면 메시지 이상이라 DLT 로 보존한다
+        if (type == null || type.isBlank()) {
+            throw new NonRetryableMessageException("type header missing: " + describe(record));
+        }
         if (OrderCompleted.TYPE.equals(type)) {
             OrderCompleted e = read(record, OrderCompleted.class);
             notify(requireOrderId(e.orderId(), record), e.userId(), type,
