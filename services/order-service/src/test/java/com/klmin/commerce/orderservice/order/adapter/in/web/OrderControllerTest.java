@@ -45,7 +45,7 @@ class OrderControllerTest {
     GetOrderUseCase getOrderUseCase;
 
     private static Order order(long userId) {
-        return Order.place(UUID.randomUUID(), userId, List.of(new OrderLine(10L, 2, 1_000L)),
+        return Order.place(UUID.randomUUID(), userId, List.of(new OrderLine(10L, 2, 1_000L)), 0L,
                 Instant.parse("2026-11-22T00:00:00Z"));
     }
 
@@ -53,7 +53,7 @@ class OrderControllerTest {
     void placeOrder_returns201WithLocation() throws Exception {
         Order order = order(7L);
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
-                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L))))).willReturn(order);
+                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L))).willReturn(order);
 
         mvc.perform(post("/orders").header("X-User-Id", "7")
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
@@ -61,7 +61,29 @@ class OrderControllerTest {
                 .andExpect(header().string("Location", "/orders/" + order.id()))
                 .andExpect(jsonPath("$.orderId").value(order.id().toString()))
                 .andExpect(jsonPath("$.status").value("PENDING"))
-                .andExpect(jsonPath("$.totalAmount").value(2000));
+                .andExpect(jsonPath("$.totalAmount").value(2000))
+                .andExpect(jsonPath("$.paidAmount").value(2000));
+    }
+
+    @Test
+    void placeOrder_withPoints_passesPointAmount() throws Exception {
+        Order order = order(7L);
+        given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
+                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 500L))).willReturn(order);
+
+        mvc.perform(post("/orders").header("X-User-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}],"pointAmount":500}
+                                """))
+                .andExpect(status().isCreated());
+
+        mvc.perform(post("/orders").header("X-User-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}],"pointAmount":-1}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

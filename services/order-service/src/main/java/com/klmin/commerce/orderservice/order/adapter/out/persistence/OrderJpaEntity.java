@@ -35,8 +35,11 @@ class OrderJpaEntity {
     @Column(name = "total_amount", nullable = false)
     private long totalAmount;
 
-    @Column(name = "reject_reason", length = 200)
-    private String rejectReason;
+    @Column(name = "point_amount", nullable = false)
+    private long pointAmount;
+
+    @Column(name = "cancel_reason", length = 200)
+    private String cancelReason;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -57,21 +60,22 @@ class OrderJpaEntity {
     protected OrderJpaEntity() {
     }
 
-    OrderJpaEntity(UUID id, long userId, OrderStatus status, long totalAmount, String rejectReason,
-                   Instant createdAt, Instant updatedAt, List<OrderLineEmbeddable> lines) {
+    OrderJpaEntity(UUID id, long userId, OrderStatus status, long totalAmount, long pointAmount,
+                   String cancelReason, Instant createdAt, Instant updatedAt, List<OrderLineEmbeddable> lines) {
         this.id = id;
         this.userId = userId;
         this.status = status;
         this.totalAmount = totalAmount;
-        this.rejectReason = rejectReason;
+        this.pointAmount = pointAmount;
+        this.cancelReason = cancelReason;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.lines = new ArrayList<>(lines);
     }
 
-    void changeStatus(OrderStatus status, String rejectReason, Instant updatedAt) {
+    void changeStatus(OrderStatus status, String cancelReason, Instant updatedAt) {
         this.status = status;
-        this.rejectReason = rejectReason;
+        this.cancelReason = cancelReason;
         this.updatedAt = updatedAt;
     }
 
@@ -91,8 +95,12 @@ class OrderJpaEntity {
         return totalAmount;
     }
 
-    String getRejectReason() {
-        return rejectReason;
+    long getPointAmount() {
+        return pointAmount;
+    }
+
+    String getCancelReason() {
+        return cancelReason;
     }
 
     Instant getCreatedAt() {

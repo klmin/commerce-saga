@@ -1,5 +1,6 @@
 package com.klmin.commerce.orderservice.common.config;
 
+import com.klmin.commerce.orderservice.common.error.InvariantViolationException;
 import com.klmin.commerce.orderservice.common.error.NonRetryableMessageException;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +36,8 @@ class KafkaErrorHandlingConfig {
         ExponentialBackOff backOff = new ExponentialBackOff(500L, 2.0);
         backOff.setMaxInterval(30_000L);
         DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, backOff);
-        handler.addNotRetryableExceptions(JacksonException.class, NonRetryableMessageException.class);
+        handler.addNotRetryableExceptions(JacksonException.class, NonRetryableMessageException.class,
+                InvariantViolationException.class);
         return handler;
     }
 }
