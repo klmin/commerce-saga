@@ -15,8 +15,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * inventory.command 소비 (ReserveStock, ReleaseStock). 처리 중 일시 오류는 복구될 때까지 재시도하고,
  * 재시도해도 같은 오류(본문·헤더 이상)는 NonRetryableMessageException 으로 DLT 에 보존된다 (KafkaErrorHandlingConfig).
- * 중복 커맨드는 주문별 예약 기록(stock_reservations)으로 걸러져 재고가 두 번 잡히거나 풀리지 않는다.
- * (메시지 단위 멱등 이력은 3단계)
+ * 같은 메시지의 재전달은 processed_message(id 헤더)로, 내용이 같은 다른 메시지는 주문별 예약 기록(stock_reservations)으로
+ * 걸러져 재고가 두 번 잡히거나 풀리지 않는다 (ADR 0006).
  */
 @Component
 class InventoryCommandListener {
@@ -40,13 +40,15 @@ class InventoryCommandListener {
             case ReserveStock.TYPE -> {
                 ReserveStock command = Messages.read(json, record, ReserveStock.class);
                 Messages.requireOrderId(command.orderId(), record);
-                reserveStockUseCase.reserve(new ReserveStockCommand(command.orderId(), command.lines().stream()
-                        .map(l -> new ReserveStockCommand.Line(l.productId(), l.quantity()))
-                        .toList()));
+                reserveStockUseCase.reserve(Messages.messageId(record),
+                        new ReserveStockCommand(command.orderId(), command.lines().stream()
+                                .map(l -> new ReserveStockCommand.Line(l.productId(), l.quantity()))
+                                .toList()));
             }
             case ReleaseStock.TYPE -> {
                 ReleaseStock command = Messages.read(json, record, ReleaseStock.class);
-                releaseStockUseCase.release(Messages.requireOrderId(command.orderId(), record));
+                releaseStockUseCase.release(Messages.messageId(record),
+                        Messages.requireOrderId(command.orderId(), record));
             }
             case null -> throw new NonRetryableMessageException("type header missing: " + Messages.describe(record));
             default -> throw new NonRetryableMessageException(

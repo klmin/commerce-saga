@@ -61,7 +61,10 @@ docker compose -f infra/docker-compose.yml up -d
   - 오케스트레이터: Saga 상태 변경 + 커맨드 outbox 저장 = 한 트랜잭션
   - 참여 서비스: 로컬 변경 + 응답 outbox 저장 = 한 트랜잭션
   - outbox 스키마는 Debezium Outbox Event Router 호환(`aggregatetype` = 토픽, `aggregateid` = 키, `type`, `payload`). "넣고 지운다"
-- 전달은 at-least-once. **컨슈머는 멱등이어야 한다** — `processed_message(message_id)`를 비즈니스 처리와 같은 트랜잭션에 INSERT, 중복이면 skip
+- 전달은 at-least-once. **컨슈머는 멱등이어야 한다** (ADR 0006)
+  - 같은 메시지의 재전달: 유스케이스가 `(messageId, 커맨드)`를 받아 트랜잭션 첫 줄에서 `ProcessedMessagePort.markProcessed`(`processed_message` INSERT). 이미 있으면 상태도 응답도 바꾸지 않고 skip. `messageId`는 Kafka 헤더 `id`(= 보낸 쪽 outbox `id`), 없으면 DLT
+  - 내용이 같은 다른 메시지(재요청): 주문별 기록(`order_id` 유니크)으로 걸러 상태는 그대로, 처음 결과를 다시 응답
+- 메시지 스키마(`libs/messaging-contract`)는 필드 추가만 한다. 삭제·이름·타입·의미 변경은 새 타입으로 (ADR 0005)
 - 처리 불가 메시지는 retry 토픽 → DLQ. 예외를 삼키고 오프셋만 커밋하지 않는다
   - 일시 오류(DB 장애 등)는 복구될 때까지 재시도, 재시도해도 같은 오류(본문·헤더 이상, 데이터 불일치)는 `<토픽>.DLT`로 원본 보존 (각 서비스 `KafkaErrorHandlingConfig`)
   - 커맨드·응답 토픽은 계약에 없는 타입이 오면 DLT로 보낸다. 이벤트 토픽(`*.events`)은 소비자가 여럿이라 관심 없는 타입은 건너뛴다. 단 `type` 헤더 자체가 없거나 비면 어느 토픽이든 DLT
@@ -135,6 +138,9 @@ common/error, common/web, common/config
   - relay가 send ack를 기다린 뒤 삭제하는지, 다중 인스턴스에서 `FOR UPDATE SKIP LOCKED` 등으로 같은 행을 중복 처리하지 않는지
 - 멱등 컨슈머
   - 상태를 바꾸는 컨슈머가 `messageId` 중복 검사를 비즈니스 처리와 같은 트랜잭션에서 하는지. 재전송 시 재고·포인트가 두 번 반영되면 P0
+  - 중복 검사가 트랜잭션 밖(커밋 후 기록, 별도 트랜잭션)이면 처리 실패 시 메시지가 기록만 남고 유실되거나, 기록 전 재전달로 두 번 반영된다 (P0)
+- 메시지 스키마 호환
+  - `libs/messaging-contract` record의 필드 삭제·이름·타입·의미 변경은 배포 중인 다른 버전의 서비스를 깨뜨린다 (P1). 필드 추가만 허용
   - 리스너에서 예외를 삼켜 메시지가 유실되지 않는지, 재시도할 수 없는 오류가 무한 재시도되지 않는지(DLQ)
 - 서비스별 DB 분리
   - 다른 서비스의 DB·스키마·테이블을 조회하거나 datasource를 공유하는 코드

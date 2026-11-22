@@ -30,15 +30,16 @@ class PointServiceTest {
     private final InMemoryAccounts accounts = new InMemoryAccounts();
     private final InMemoryUsages usages = new InMemoryUsages();
     private final RecordingReplies replies = new RecordingReplies();
+    private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
     private final PointService service =
-            new PointService(accounts, usages, replies, Clock.fixed(NOW, ZoneOffset.UTC));
+            new PointService(accounts, usages, replies, processed, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void use_deductsAndRepliesUsed() {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
 
-        service.use(new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(700L);
         assertThat(usages.store.get(orderId).status()).isEqualTo(PointUsageStatus.USED);
@@ -50,7 +51,7 @@ class PointServiceTest {
         accounts.put(1L, 100L);
         UUID orderId = UUID.randomUUID();
 
-        service.use(new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(100L);
         assertThat(replies.log).containsExactly("failed:" + orderId + ":insufficient points: userId=1");
@@ -62,8 +63,8 @@ class PointServiceTest {
         UUID b = UUID.randomUUID();
         accounts.put(1L, 100L);
 
-        service.use(new UsePointCommand(a, 99L, 10L));
-        service.use(new UsePointCommand(b, 1L, 0L));
+        service.use(UUID.randomUUID(), new UsePointCommand(a, 99L, 10L));
+        service.use(UUID.randomUUID(), new UsePointCommand(b, 1L, 0L));
 
         assertThat(accounts.balance(1L)).isEqualTo(100L);
         assertThat(replies.log).containsExactly(
@@ -76,21 +77,39 @@ class PointServiceTest {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
 
-        service.use(new UsePointCommand(orderId, 1L, 300L));
-        service.use(new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(700L);
         assertThat(replies.log).containsExactly("used:" + orderId, "used:" + orderId);
     }
 
     @Test
+    void redeliveredMessage_isSkipped_withoutChangingBalanceOrReplying() {
+        accounts.put(1L, 1_000L);
+        UUID orderId = UUID.randomUUID();
+        UUID useId = UUID.randomUUID();
+        UUID refundId = UUID.randomUUID();
+
+        service.use(useId, new UsePointCommand(orderId, 1L, 300L));
+        service.use(useId, new UsePointCommand(orderId, 1L, 300L));
+        service.refund(refundId, orderId);
+        service.refund(refundId, orderId);
+        service.use(useId, new UsePointCommand(orderId, 1L, 300L));   // 보상 뒤 늦게 다시 온 원래 메시지
+
+        assertThat(accounts.balance(1L)).isEqualTo(1_000L);
+        assertThat(replies.log).containsExactly("used:" + orderId, "refunded:" + orderId);
+        assertThat(processed.ids).containsExactlyInAnyOrder(useId, refundId);
+    }
+
+    @Test
     void refund_returnsPoints_once_andRepliesEveryTime() {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
-        service.use(new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
 
-        service.refund(orderId);
-        service.refund(orderId);
+        service.refund(UUID.randomUUID(), orderId);
+        service.refund(UUID.randomUUID(), orderId);
 
         assertThat(accounts.balance(1L)).isEqualTo(1_000L);
         assertThat(usages.store.get(orderId).status()).isEqualTo(PointUsageStatus.REFUNDED);
@@ -101,9 +120,9 @@ class PointServiceTest {
     void refund_ofRejectedUsage_changesNothing() {
         accounts.put(1L, 100L);
         UUID orderId = UUID.randomUUID();
-        service.use(new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
 
-        service.refund(orderId);
+        service.refund(UUID.randomUUID(), orderId);
 
         assertThat(accounts.balance(1L)).isEqualTo(100L);
         assertThat(replies.log).last().isEqualTo("refunded:" + orderId);
@@ -114,8 +133,8 @@ class PointServiceTest {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
 
-        service.refund(orderId);
-        service.use(new UsePointCommand(orderId, 1L, 300L));
+        service.refund(UUID.randomUUID(), orderId);
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(1_000L);
         assertThat(replies.log).containsExactly("refunded:" + orderId,

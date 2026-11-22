@@ -64,6 +64,30 @@ jobs:
           done
           bash scripts/smoke-notification-catchup.sh
 
+      # 서비스를 내리고 각 컨슈머 그룹 오프셋을 처음으로 되감은 뒤 다시 띄워, 이미 처리한 메시지를 전부 다시 받게 한다
+      - name: 오프셋 되감기 후 중복 반영 없음 확인 (시나리오 3)
+        run: |
+          bash scripts/smoke-redelivery.sh snapshot
+          services="inventory-service point-service payment-service order-service"
+          for svc in $services; do pkill -f "$svc-.*\.jar" || true; done
+          for svc in $services; do
+            for i in $(seq 1 30); do pgrep -f "$svc-.*\.jar" > /dev/null || break; sleep 1; done
+          done
+          bash scripts/rewind-offsets.sh inventory-service inventory.command,order.events
+          bash scripts/rewind-offsets.sh point-service point.command
+          bash scripts/rewind-offsets.sh payment-service payment.command
+          bash scripts/rewind-offsets.sh order-service inventory.reply,point.reply,payment.reply
+          for svc in $services; do
+            nohup java -jar services/$svc/build/libs/$svc-*.jar >> logs/$svc.log 2>&1 &
+          done
+          for port in 8081 8082 8083 8084; do
+            for i in $(seq 1 60); do
+              curl -sf http://localhost:$port/actuator/health | grep -q UP && break
+              sleep 2
+            done
+          done
+          LOG_DIR=logs bash scripts/smoke-redelivery.sh verify
+
       - name: Logs
         if: always()
         run: |

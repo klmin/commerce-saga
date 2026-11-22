@@ -15,7 +15,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * point.command 소비 (UsePoint, RefundPoint). 처리 중 일시 오류는 복구될 때까지 재시도하고,
  * 재시도해도 같은 오류(본문·헤더 이상)는 DLT 에 보존된다 (KafkaErrorHandlingConfig).
- * 중복 커맨드는 주문별 사용 기록(point_usages)으로 걸러져 두 번 차감·환불되지 않는다.
+ * 같은 메시지의 재전달은 processed_message(id 헤더)로, 내용이 같은 다른 메시지는 주문별 사용 기록(point_usages)으로
+ * 걸러져 두 번 차감·환불되지 않는다 (ADR 0006).
  */
 @Component
 class PointCommandListener {
@@ -37,12 +38,14 @@ class PointCommandListener {
         switch (type) {
             case UsePoint.TYPE -> {
                 UsePoint command = Messages.read(json, record, UsePoint.class);
-                usePointUseCase.use(new UsePointCommand(Messages.requireOrderId(command.orderId(), record),
-                        command.userId(), command.amount()));
+                usePointUseCase.use(Messages.messageId(record),
+                        new UsePointCommand(Messages.requireOrderId(command.orderId(), record),
+                                command.userId(), command.amount()));
             }
             case RefundPoint.TYPE -> {
                 RefundPoint command = Messages.read(json, record, RefundPoint.class);
-                refundPointUseCase.refund(Messages.requireOrderId(command.orderId(), record));
+                refundPointUseCase.refund(Messages.messageId(record),
+                        Messages.requireOrderId(command.orderId(), record));
             }
             case null -> throw new NonRetryableMessageException("type header missing: " + Messages.describe(record));
             default -> throw new NonRetryableMessageException(

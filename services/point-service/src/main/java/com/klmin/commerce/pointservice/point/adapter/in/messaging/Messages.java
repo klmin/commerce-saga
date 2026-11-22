@@ -21,6 +21,22 @@ final class Messages {
         return header == null || header.value() == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
+    /**
+     * id 헤더(메시지 식별자 = 보낸 쪽 outbox.id). 멱등 처리의 기준이라 없거나 UUID 가 아니면
+     * 재시도해도 같으므로 재시도 불가 오류 (DLT 에 보존)
+     */
+    static UUID messageId(ConsumerRecord<?, ?> record) {
+        Header header = record.headers().lastHeader(MessageHeaders.ID);
+        if (header == null || header.value() == null) {
+            throw new NonRetryableMessageException("id header missing: " + describe(record));
+        }
+        try {
+            return UUID.fromString(new String(header.value(), StandardCharsets.UTF_8));
+        } catch (IllegalArgumentException e) {
+            throw new NonRetryableMessageException("invalid id header: " + describe(record));
+        }
+    }
+
     /** 본문이 비었거나 JSON null 이면 재시도해도 같으므로 재시도 불가 오류 */
     static <T> T read(JsonMapper json, ConsumerRecord<String, String> record, Class<T> type) {
         T value = record.value() == null ? null : json.readValue(record.value(), type);

@@ -16,7 +16,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * inventory.reply 소비. 처리 중 일시 오류는 복구될 때까지 재시도하고,
  * 재시도해도 같은 오류(본문·헤더 이상)는 DLT 에 보존된다 (KafkaErrorHandlingConfig).
- * 중복·늦은 응답은 Saga 상태 머신이 무시한다.
+ * 같은 메시지의 재전달은 processed_message(id 헤더)로 건너뛰고, 중복·늦은 응답은 Saga 상태 머신이 무시한다.
  */
 @Component
 class InventoryReplyListener {
@@ -47,6 +47,6 @@ class InventoryReplyListener {
             default -> throw new NonRetryableMessageException(
                     "unknown type " + type + ": " + Messages.describe(record));
         };
-        handleSagaReplyUseCase.handle(reply);
+        handleSagaReplyUseCase.handle(Messages.messageId(record), reply);
     }
 }

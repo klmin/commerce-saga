@@ -11,14 +11,18 @@ import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGat
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort.GatewayResult;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
+import com.klmin.commerce.paymentservice.payment.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 /**
- * 결제. 흐름: (1) 이미 처리한 주문이면 기록된 결과 재응답 (2) PG 승인 요청 - 트랜잭션 밖
+ * 결제. 흐름: (0) 같은 메시지의 재전달이면 건너뜀 (1) 이미 처리한 주문이면 기록된 결과 재응답
+ * (2) PG 승인 요청 - 트랜잭션 밖
  * (3) 결과 기록 + 응답 outbox - 한 트랜잭션.
  * <p>
  * (2) 후 (3) 전에 죽으면 메시지가 재처리되어 PG 를 다시 부르지만, PG 가 orderId 로 멱등이라 두 번 승인되지 않는다.
@@ -33,27 +37,34 @@ class PaymentService implements PayUseCase, GetPaymentUseCase, PaymentFaultUseCa
     private final PaymentGatewayPort gateway;
     private final PaymentGatewayFaultPort faultPort;
     private final PaymentPort paymentPort;
+    private final ProcessedMessagePort processedMessagePort;
 
     PaymentService(PaymentRecorder recorder, PaymentGatewayPort gateway, PaymentGatewayFaultPort faultPort,
-                   PaymentPort paymentPort) {
+                   PaymentPort paymentPort, ProcessedMessagePort processedMessagePort) {
         this.recorder = recorder;
         this.gateway = gateway;
         this.faultPort = faultPort;
         this.paymentPort = paymentPort;
+        this.processedMessagePort = processedMessagePort;
     }
 
     @Override
-    public void pay(PayCommand command) {
-        if (recorder.replyIfAlreadyProcessed(command.orderId())) {
+    public void pay(UUID messageId, PayCommand command) {
+        // 같은 메시지의 재전달이면 PG 도 부르지 않는다. 최종 판단은 기록 트랜잭션의 markProcessed 가 한다
+        if (processedMessagePort.isProcessed(messageId)) {
+            log.info("이미 처리한 메시지 건너뜀: Pay (messageId={}, orderId={})", messageId, command.orderId());
+            return;
+        }
+        if (recorder.replyIfAlreadyProcessed(messageId, command.orderId())) {
             log.info("중복 결제 커맨드, 이전 결과 재응답 (orderId={})", command.orderId());
             return;
         }
         if (command.amount() <= 0) {
-            recorder.replyInvalid(command.orderId(), "invalid command: amount must be positive");
+            recorder.replyInvalid(messageId, command.orderId(), "invalid command: amount must be positive");
             return;
         }
         GatewayResult result = gateway.approve(command.orderId(), command.userId(), command.amount());
-        recorder.record(command, result);
+        recorder.record(messageId, command, result);
     }
 
     @Override
