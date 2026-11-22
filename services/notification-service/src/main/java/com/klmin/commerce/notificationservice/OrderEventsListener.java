@@ -44,11 +44,11 @@ class OrderEventsListener {
         }
         if (OrderCompleted.TYPE.equals(type)) {
             OrderCompleted e = read(record, OrderCompleted.class);
-            notify(requireOrderId(e.orderId(), record), e.userId(), type,
+            notify(requireOrderId(e.orderId(), record), requireUserId(e.userId(), record), type,
                     "주문이 완료되었습니다. 결제 " + e.paidAmount() + "원, 포인트 " + e.pointAmount() + "P 사용");
         } else if (OrderCancelled.TYPE.equals(type)) {
             OrderCancelled e = read(record, OrderCancelled.class);
-            notify(requireOrderId(e.orderId(), record), e.userId(), type, "주문이 취소되었습니다.");
+            notify(requireOrderId(e.orderId(), record), requireUserId(e.userId(), record), type, "주문이 취소되었습니다.");
         }
     }
 
@@ -74,6 +74,14 @@ class OrderEventsListener {
             throw new NonRetryableMessageException("orderId missing: " + describe(record));
         }
         return orderId;
+    }
+
+    // 사용자 ID 가 잘못된 알림은 조회할 수 없고, (order_id, type) 유니크 때문에 나중에 바로잡을 수도 없다
+    private static long requireUserId(long userId, ConsumerRecord<?, ?> record) {
+        if (userId <= 0) {
+            throw new NonRetryableMessageException("invalid userId " + userId + ": " + describe(record));
+        }
+        return userId;
     }
 
     private static String type(ConsumerRecord<?, ?> record) {

@@ -68,6 +68,9 @@ class OrderEventsListenerTest {
         assertThatThrownBy(() -> listener.onMessage(record(OrderCompleted.TYPE,
                 "{\"userId\":7,\"totalAmount\":1,\"pointAmount\":0,\"paidAmount\":1}")))
                 .isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(record(OrderCompleted.TYPE, "{\"orderId\":\"" + UUID.randomUUID()
+                + "\",\"userId\":0,\"totalAmount\":1,\"pointAmount\":0,\"paidAmount\":1}")))
+                .isInstanceOf(NonRetryableMessageException.class);
         verify(repository, org.mockito.Mockito.never()).insertIfAbsent(org.mockito.ArgumentMatchers.any(), anyLong(),
                 anyString(), anyString());
     }
