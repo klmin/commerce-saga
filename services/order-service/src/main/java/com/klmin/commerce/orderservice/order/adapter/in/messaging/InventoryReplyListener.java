@@ -4,6 +4,7 @@ import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
+import com.klmin.commerce.orderservice.common.error.NonRetryableMessageException;
 import com.klmin.commerce.orderservice.order.application.port.in.HandleStockReplyUseCase;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 /**
  * inventory.reply 소비. 처리 중 예외가 나면 Spring Kafka 기본 에러 핸들러가 재시도한다.
@@ -42,16 +44,37 @@ class InventoryReplyListener {
         }
         switch (type) {
             case StockReserved.TYPE -> {
-                StockReserved reply = json.readValue(record.value(), StockReserved.class);
-                handleStockReplyUseCase.stockReserved(reply.orderId());
+                StockReserved reply = read(record, StockReserved.class);
+                handleStockReplyUseCase.stockReserved(requireOrderId(reply.orderId(), record));
             }
             case StockReservationFailed.TYPE -> {
-                StockReservationFailed reply = json.readValue(record.value(), StockReservationFailed.class);
-                handleStockReplyUseCase.stockReservationFailed(reply.orderId(), reply.reason());
+                StockReservationFailed reply = read(record, StockReservationFailed.class);
+                handleStockReplyUseCase.stockReservationFailed(requireOrderId(reply.orderId(), record),
+                        reply.reason());
             }
             default -> log.warn("알 수 없는 메시지 타입 무시: {} (topic={}, offset={})",
                     type, record.topic(), record.offset());
         }
+    }
+
+    // 본문이 비었거나 JSON null 이면 재시도해도 같으므로 재시도 불가 오류로 분류한다
+    private <T> T read(ConsumerRecord<String, String> record, Class<T> type) {
+        T value = record.value() == null ? null : json.readValue(record.value(), type);
+        if (value == null) {
+            throw new NonRetryableMessageException("empty payload: " + describe(record));
+        }
+        return value;
+    }
+
+    private static UUID requireOrderId(UUID orderId, ConsumerRecord<?, ?> record) {
+        if (orderId == null) {
+            throw new NonRetryableMessageException("orderId missing: " + describe(record));
+        }
+        return orderId;
+    }
+
+    private static String describe(ConsumerRecord<?, ?> record) {
+        return "topic=" + record.topic() + ", partition=" + record.partition() + ", offset=" + record.offset();
     }
 
     private static String header(ConsumerRecord<?, ?> record, String name) {
