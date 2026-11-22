@@ -147,6 +147,19 @@ class DltToolIntegrationTest {
     }
 
     @Test
+    void unknownOption_isRejectedBeforeSending() {
+        putIntoDlt("order-1", UUID.randomUUID().toString(), "{}");
+
+        // --dry-run 오타: 무시하고 보내면 안 된다
+        assertThat(tool.run(new String[]{"replay", dlt, "--all", "--dryrun"})).isEqualTo(DltTool.USAGE);
+        assertThat(tool.run(new String[]{"replay", dlt, "--offset", "0:0", "extra"})).isEqualTo(DltTool.USAGE);
+        assertThat(tool.run(new String[]{"list", dlt, "--all"})).isEqualTo(DltTool.USAGE);
+
+        assertThat(out()).contains("unknown or misplaced argument: --dryrun");
+        assertThat(readOriginal(0)).isEmpty();
+    }
+
+    @Test
     void badUsage() {
         assertThat(tool.run(new String[]{"list"})).isEqualTo(DltTool.USAGE);
         assertThat(tool.run(new String[]{"list", "inventory.command"})).isEqualTo(DltTool.USAGE);

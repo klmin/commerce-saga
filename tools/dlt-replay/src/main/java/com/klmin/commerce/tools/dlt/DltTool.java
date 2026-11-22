@@ -56,6 +56,13 @@ public final class DltTool {
         }
         String topic = args[1];
         List<String> options = Arrays.asList(args).subList(2, args.length);
+        // 오타(--dryrun 등)를 무시하고 실제로 보내면 재고·포인트 처리가 다시 돈다. 모르는 인자는 보내기 전에 거부한다
+        String unknown = unknownOption(args[0], options);
+        if (unknown != null) {
+            out.println("FAIL: unknown or misplaced argument: " + unknown);
+            usage();
+            return USAGE;
+        }
         return switch (args[0]) {
             case "list" -> list(topic);
             case "replay" -> replay(topic, options);
@@ -112,6 +119,22 @@ public final class DltTool {
         }
         out.printf("%d message(s) %s from %s%n", targets.size(), dryRun ? "selected" : "replayed", topic);
         return OK;
+    }
+
+    /** 명령에 허용되지 않은 첫 인자. list 는 옵션이 없고, replay 는 --all, --dry-run, --offset 값 만 받는다 */
+    private static String unknownOption(String command, List<String> options) {
+        if (!command.equals("replay")) {
+            return options.isEmpty() ? null : options.getFirst();
+        }
+        for (int i = 0; i < options.size(); i++) {
+            String option = options.get(i);
+            if (option.equals("--offset")) {
+                i++;   // 다음 인자는 위치 목록 (형식은 offsets() 가 검사)
+            } else if (!option.equals("--all") && !option.equals("--dry-run")) {
+                return option;
+            }
+        }
+        return null;
     }
 
     /** --offset 1:42,0:7 -> {"1:42", "0:7"}. 옵션이 없으면 null */
