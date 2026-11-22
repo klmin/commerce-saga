@@ -1,12 +1,13 @@
 name: backend
 
-# 바뀐 서비스만 빌드한다. libs/, build-logic/, Gradle 설정이 바뀌면 전체를 빌드한다.
+# 바뀐 서비스·도구만 빌드한다. libs/, build-logic/, Gradle 설정이 바뀌면 전체를 빌드한다.
 on:
   push:
     branches: [main]
     paths:
       - 'services/**'
       - 'libs/**'
+      - 'tools/**'
       - 'build-logic/**'
       - 'gradle/**'
       - '*.gradle.kts'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'services/**'
       - 'libs/**'
+      - 'tools/**'
       - 'build-logic/**'
       - 'gradle/**'
       - '*.gradle.kts'
@@ -61,6 +63,11 @@ jobs:
           for svc in $(echo "$changed" | sed -nE 's#^services/([^/]+)/.*#\1#p' | sort -u); do
             if [ -f "services/$svc/build.gradle.kts" ]; then
               tasks="$tasks :services:$svc:build"
+            fi
+          done
+          for tool in $(echo "$changed" | sed -nE 's#^tools/([^/]+)/.*#\1#p' | sort -u); do
+            if [ -f "tools/$tool/build.gradle.kts" ]; then
+              tasks="$tasks :tools:$tool:build"
             fi
           done
           echo "tasks=$tasks" >> "$GITHUB_OUTPUT"

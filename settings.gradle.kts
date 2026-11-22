@@ -10,9 +10,9 @@ plugins {
 
 rootProject.name = "commerce-saga"
 
-// services/*, libs/* 아래에 build.gradle.kts 가 있는 디렉터리를 모두 모듈로 등록한다
+// services/*, libs/*, tools/* 아래에 build.gradle.kts 가 있는 디렉터리를 모두 모듈로 등록한다
 // 예) services/order-service -> :services:order-service
-listOf("services", "libs").forEach { group ->
+listOf("services", "libs", "tools").forEach { group ->
     rootDir.resolve(group).listFiles()
         ?.filter { it.isDirectory && it.resolve("build.gradle.kts").exists() }
         ?.sortedBy { it.name }

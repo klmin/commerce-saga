@@ -4,9 +4,9 @@ name: e2e
 on:
   push:
     branches: [main]
-    paths: ['services/**', 'libs/**', 'build-logic/**', 'infra/**', 'scripts/**', '.github/workflows/e2e.yml']
+    paths: ['services/**', 'libs/**', 'tools/**', 'build-logic/**', 'infra/**', 'scripts/**', '.github/workflows/e2e.yml']
   pull_request:
-    paths: ['services/**', 'libs/**', 'build-logic/**', 'infra/**', 'scripts/**', '.github/workflows/e2e.yml']
+    paths: ['services/**', 'libs/**', 'tools/**', 'build-logic/**', 'infra/**', 'scripts/**', '.github/workflows/e2e.yml']
 
 permissions:
   contents: read
@@ -87,6 +87,9 @@ jobs:
             done
           done
           LOG_DIR=logs bash scripts/smoke-redelivery.sh verify
+
+      - name: poison message 격리 후 DLT 재처리 (시나리오 6)
+        run: bash scripts/smoke-poison.sh
 
       - name: Logs
         if: always()
