@@ -25,15 +25,23 @@ class StockReservationPersistenceAdapter implements StockReservationPort {
     @Override
     public void insert(StockReservation reservation) {
         repository.save(new StockReservationJpaEntity(reservation.orderId(), reservation.status(),
-                reservation.reason(), reservation.createdAt(),
+                reservation.reason(), reservation.createdAt(), reservation.updatedAt(),
                 reservation.lines().stream()
                         .map(l -> new ReservationLineEmbeddable(l.productId(), l.quantity()))
                         .toList()));
     }
 
+    // 같은 트랜잭션에서 조회한 영속 엔티티에 값만 옮긴다. 커밋 때 더티 체킹으로 UPDATE (@Version 으로 동시 변경 감지)
+    @Override
+    public void update(StockReservation reservation) {
+        StockReservationJpaEntity entity = repository.findById(reservation.orderId())
+                .orElseThrow(() -> new IllegalStateException("reservation not found: " + reservation.orderId()));
+        entity.changeStatus(reservation.status(), reservation.updatedAt());
+    }
+
     private static StockReservation toDomain(StockReservationJpaEntity e) {
         return StockReservation.restore(e.getOrderId(), e.getStatus(), e.getReason(),
                 e.getLines().stream().map(l -> new ReservationLine(l.getProductId(), l.getQuantity())).toList(),
-                e.getCreatedAt());
+                e.getCreatedAt(), e.getUpdatedAt());
     }
 }

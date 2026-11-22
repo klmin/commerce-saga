@@ -2,9 +2,12 @@ package com.klmin.commerce.inventoryservice;
 
 import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
+import com.klmin.commerce.contract.inventory.ReleaseStock;
 import com.klmin.commerce.contract.inventory.ReserveStock;
+import com.klmin.commerce.contract.inventory.StockReleased;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
+import com.klmin.commerce.contract.order.OrderCompleted;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -125,11 +128,46 @@ class ReserveStockIntegrationTest {
         }
     }
 
+    @Test
+    void releaseStock_returnsReservedStock_andRepliesStockReleased() {
+        int before = getStockUseCase.getStock(2L).available();
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(2L, 4))));
+        awaitReplies(orderId, 1);
+        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before - 4);
+
+        send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId));
+        send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId)); // 중복 보상
+
+        List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
+        assertThat(replies.subList(1, 3)).allMatch(r -> StockReleased.TYPE.equals(header(r, MessageHeaders.TYPE)));
+        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before);
+    }
+
+    @Test
+    void orderCompletedEvent_confirmsReservedStock() {
+        int reservedBefore = getStockUseCase.getStock(3L).reserved();
+        int availableBefore = getStockUseCase.getStock(3L).available();
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(3L, 2))));
+        awaitReplies(orderId, 1);
+
+        send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId, 1L, 2000L, 0L, 2000L));
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(getStockUseCase.getStock(3L).reserved()).isEqualTo(reservedBefore));
+        assertThat(getStockUseCase.getStock(3L).available()).isEqualTo(availableBefore - 2);
+    }
+
     private void sendCommand(ReserveStock command) {
-        ProducerRecord<String, String> record = new ProducerRecord<>(Topics.INVENTORY_COMMAND,
-                command.orderId().toString(), json.writeValueAsString(command));
+        send(Topics.INVENTORY_COMMAND, command.orderId(), ReserveStock.TYPE, command);
+    }
+
+    private void send(String topic, UUID orderId, String type, Object payload) {
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>(topic, orderId.toString(), json.writeValueAsString(payload));
         record.headers().add(MessageHeaders.ID, UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
-        record.headers().add(MessageHeaders.TYPE, ReserveStock.TYPE.getBytes(StandardCharsets.UTF_8));
+        record.headers().add(MessageHeaders.TYPE, type.getBytes(StandardCharsets.UTF_8));
         kafkaTemplate.send(record).join();
     }
 

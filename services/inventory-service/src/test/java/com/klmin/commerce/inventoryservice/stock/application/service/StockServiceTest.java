@@ -127,6 +127,103 @@ class StockServiceTest {
     }
 
     @Test
+    void release_returnsReservedStock_andRepliesReleased() {
+        stocks.put(1L, 10);
+        stocks.put(2L, 5);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(command(orderId, line(1L, 3), line(2L, 2)));
+
+        service.release(orderId);
+
+        assertThat(stocks.available(1L)).isEqualTo(10);
+        assertThat(stocks.reserved(1L)).isZero();
+        assertThat(stocks.available(2L)).isEqualTo(5);
+        assertThat(reservations.store.get(orderId).status()).isEqualTo(ReservationStatus.RELEASED);
+        assertThat(replies.log).containsExactly("reserved:" + orderId, "released:" + orderId);
+    }
+
+    @Test
+    void duplicateRelease_returnsStockOnce_butRepliesEveryTime() {
+        stocks.put(1L, 10);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(command(orderId, line(1L, 3)));
+
+        service.release(orderId);
+        service.release(orderId);
+
+        assertThat(stocks.available(1L)).isEqualTo(10);
+        assertThat(replies.log).containsExactly("reserved:" + orderId, "released:" + orderId, "released:" + orderId);
+    }
+
+    @Test
+    void release_ofRejectedReservation_changesNothing_andRepliesReleased() {
+        stocks.put(1L, 1);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(command(orderId, line(1L, 5)));
+
+        service.release(orderId);
+
+        assertThat(stocks.available(1L)).isEqualTo(1);
+        assertThat(reservations.store.get(orderId).status()).isEqualTo(ReservationStatus.REJECTED);
+        assertThat(replies.log).last().isEqualTo("released:" + orderId);
+    }
+
+    @Test
+    void release_withoutReservation_blocksLateReserve() {
+        stocks.put(1L, 10);
+        UUID orderId = UUID.randomUUID();
+
+        service.release(orderId);
+        service.reserve(command(orderId, line(1L, 3)));
+
+        assertThat(stocks.available(1L)).isEqualTo(10);
+        assertThat(replies.log).containsExactly("released:" + orderId,
+                "failed:" + orderId + ":reservation already released");
+    }
+
+    @Test
+    void confirm_movesReservedToSold_once() {
+        stocks.put(1L, 10);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(command(orderId, line(1L, 3)));
+
+        service.confirm(orderId);
+        service.confirm(orderId);
+
+        assertThat(stocks.available(1L)).isEqualTo(7);
+        assertThat(stocks.reserved(1L)).isZero();
+        assertThat(reservations.store.get(orderId).status()).isEqualTo(ReservationStatus.CONFIRMED);
+        // 확정 후 재전송된 ReserveStock 에는 성공으로 응답 (재고는 그대로)
+        service.reserve(command(orderId, line(1L, 3)));
+        assertThat(stocks.available(1L)).isEqualTo(7);
+        assertThat(replies.log).last().isEqualTo("reserved:" + orderId);
+    }
+
+    @Test
+    void confirmAndReleaseAreExclusive() {
+        stocks.put(1L, 10);
+        UUID confirmed = UUID.randomUUID();
+        UUID released = UUID.randomUUID();
+        service.reserve(command(confirmed, line(1L, 2)));
+        service.reserve(command(released, line(1L, 3)));
+
+        service.confirm(confirmed);
+        service.release(confirmed);   // 완료된 주문에 늦은 보상: 재고 그대로
+        service.release(released);
+        service.confirm(released);    // 보상된 주문에 늦은 완료: 재고 그대로
+
+        assertThat(stocks.available(1L)).isEqualTo(8);
+        assertThat(stocks.reserved(1L)).isZero();
+    }
+
+    @Test
+    void confirm_withoutReservation_isIgnored() {
+        service.confirm(UUID.randomUUID());
+
+        assertThat(replies.log).isEmpty();
+    }
+
+    @Test
     void getStock() {
         stocks.put(1L, 10);
 
@@ -176,16 +273,30 @@ class StockServiceTest {
 
         final Map<UUID, StockReservation> store = new HashMap<>();
 
+        // 저장소처럼 매번 새 객체를 돌려준다 (서비스가 update 없이 객체만 바꾸면 반영되지 않게)
         @Override
         public Optional<StockReservation> findByOrderId(UUID orderId) {
-            return Optional.ofNullable(store.get(orderId));
+            return Optional.ofNullable(store.get(orderId)).map(InMemoryReservations::copy);
         }
 
         @Override
         public void insert(StockReservation reservation) {
-            if (store.putIfAbsent(reservation.orderId(), reservation) != null) {
+            if (store.putIfAbsent(reservation.orderId(), copy(reservation)) != null) {
                 throw new IllegalStateException("duplicate reservation");
             }
+        }
+
+        @Override
+        public void update(StockReservation reservation) {
+            if (!store.containsKey(reservation.orderId())) {
+                throw new IllegalStateException("not found");
+            }
+            store.put(reservation.orderId(), copy(reservation));
+        }
+
+        private static StockReservation copy(StockReservation r) {
+            return StockReservation.restore(r.orderId(), r.status(), r.reason(), r.lines(), r.createdAt(),
+                    r.updatedAt());
         }
     }
 
@@ -201,6 +312,11 @@ class StockServiceTest {
         @Override
         public void stockReservationFailed(UUID orderId, String reason) {
             log.add("failed:" + orderId + ":" + reason);
+        }
+
+        @Override
+        public void stockReleased(UUID orderId) {
+            log.add("released:" + orderId);
         }
     }
 }

@@ -36,6 +36,9 @@ class StockReservationJpaEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
     // null 이면 새 엔티티로 보고 persist 한다 (같은 orderId 가 이미 있으면 PK 위반으로 실패)
     @Version
     private Long version;
@@ -49,12 +52,18 @@ class StockReservationJpaEntity {
     }
 
     StockReservationJpaEntity(UUID orderId, ReservationStatus status, String reason, Instant createdAt,
-                              List<ReservationLineEmbeddable> lines) {
+                              Instant updatedAt, List<ReservationLineEmbeddable> lines) {
         this.orderId = orderId;
         this.status = status;
         this.reason = reason;
         this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
         this.lines = new ArrayList<>(lines);
+    }
+
+    void changeStatus(ReservationStatus status, Instant updatedAt) {
+        this.status = status;
+        this.updatedAt = updatedAt;
     }
 
     UUID getOrderId() {
@@ -71,6 +80,10 @@ class StockReservationJpaEntity {
 
     Instant getCreatedAt() {
         return createdAt;
+    }
+
+    Instant getUpdatedAt() {
+        return updatedAt;
     }
 
     List<ReservationLineEmbeddable> getLines() {
