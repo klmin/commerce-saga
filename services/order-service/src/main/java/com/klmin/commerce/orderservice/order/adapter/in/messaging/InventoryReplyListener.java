@@ -8,8 +8,6 @@ import com.klmin.commerce.orderservice.common.error.NonRetryableMessageException
 import com.klmin.commerce.orderservice.order.application.port.in.HandleStockReplyUseCase;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,13 +16,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
- * inventory.reply 소비. 처리 중 예외가 나면 Spring Kafka 기본 에러 핸들러가 재시도한다.
- * (멱등 처리 이력 테이블, retry 토픽·DLQ 는 3단계. 지금은 도메인 상태 전이가 PENDING 에서만 일어나서 중복 응답이 무해하다)
+ * inventory.reply 소비. 처리 중 일시 오류는 복구될 때까지 재시도한다.
+ * 재시도해도 같은 오류(본문·헤더 이상)는 NonRetryableMessageException 으로 DLT 에 보존된다 (KafkaErrorHandlingConfig).
+ * 멱등 처리 이력 테이블은 3단계. 지금은 도메인 상태 전이가 PENDING 에서만 일어나서 중복 응답이 무해하다
  */
 @Component
 class InventoryReplyListener {
-
-    private static final Logger log = LoggerFactory.getLogger(InventoryReplyListener.class);
 
     private final HandleStockReplyUseCase handleStockReplyUseCase;
     private final JsonMapper json;
@@ -37,10 +34,9 @@ class InventoryReplyListener {
     @KafkaListener(topics = Topics.INVENTORY_REPLY)
     void onMessage(ConsumerRecord<String, String> record) {
         String type = header(record, MessageHeaders.TYPE);
+        // 응답 토픽에는 계약에 정한 타입만 온다. 헤더가 없거나 모르는 타입이면 DLT 로 보존한다
         if (type == null) {
-            log.warn("type 헤더 없는 메시지 무시 (topic={}, partition={}, offset={})",
-                    record.topic(), record.partition(), record.offset());
-            return;
+            throw new NonRetryableMessageException("type header missing: " + describe(record));
         }
         switch (type) {
             case StockReserved.TYPE -> {
@@ -52,8 +48,7 @@ class InventoryReplyListener {
                 handleStockReplyUseCase.stockReservationFailed(requireOrderId(reply.orderId(), record),
                         reply.reason());
             }
-            default -> log.warn("알 수 없는 메시지 타입 무시: {} (topic={}, offset={})",
-                    type, record.topic(), record.offset());
+            default -> throw new NonRetryableMessageException("unknown type " + type + ": " + describe(record));
         }
     }
 

@@ -60,10 +60,13 @@ class InventoryReplyListenerTest {
     }
 
     @Test
-    void unknownOrMissingType_isIgnored() {
-        listener.onMessage(record("Something", "{}"));
-        listener.onMessage(record(null, "{}"));
+    void unknownOrMissingType_isNonRetryable() {
+        String body = "{\"orderId\":\"" + UUID.randomUUID() + "\"}";
 
+        assertThatThrownBy(() -> listener.onMessage(record("Something", body)))
+                .isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(record(null, body)))
+                .isInstanceOf(NonRetryableMessageException.class);
         verifyNoInteractions(useCase);
     }
 }
