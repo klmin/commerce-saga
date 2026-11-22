@@ -6,7 +6,7 @@
 - DB 저장과 메시지 발행의 이중 쓰기 → **Transactional Outbox** + relay (스케줄러 → **Debezium CDC**)
 - at-least-once 전달로 같은 메시지가 여러 번 온다 → **멱등 처리**, 늦은 응답에 단계가 되돌아가지 않는 상태 머신
 
-> 진행 중: 2단계(Saga 완성) 완료. 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md).
+> 진행 중: 3단계(신뢰성). 멱등 컨슈머·DLT 재처리 완료, 다음은 Debezium relay 교체. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md).
 
 ## 아키텍처 (2단계)
 
