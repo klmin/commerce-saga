@@ -63,6 +63,9 @@ docker compose -f infra/docker-compose.yml up -d
   - outbox 스키마는 Debezium Outbox Event Router 호환(`aggregatetype` = 토픽, `aggregateid` = 키, `type`, `payload`). "넣고 지운다"
 - 전달은 at-least-once. **컨슈머는 멱등이어야 한다** — `processed_message(message_id)`를 비즈니스 처리와 같은 트랜잭션에 INSERT, 중복이면 skip
 - 처리 불가 메시지는 retry 토픽 → DLQ. 예외를 삼키고 오프셋만 커밋하지 않는다
+  - 일시 오류(DB 장애 등)는 복구될 때까지 재시도, 재시도해도 같은 오류(본문·헤더 이상, 데이터 불일치)는 `<토픽>.DLT`로 원본 보존 (각 서비스 `KafkaErrorHandlingConfig`)
+  - 커맨드·응답 토픽은 계약에 없는 타입이 오면 DLT로 보낸다. 이벤트 토픽(`*.events`)은 소비자가 여럿이라 관심 없는 타입은 건너뛴다
+- 보상 커맨드(`ReleaseStock`, `RefundPoint`)는 여러 번 와도, 앞 단계가 없었어도 안전하고 항상 같은 응답을 보낸다. Saga는 현재 단계에서 기다리는 응답이 아니면 무시한다 (ADR 0003)
 
 ## 서비스 내부 구조 (헥사고날 + DDD)
 

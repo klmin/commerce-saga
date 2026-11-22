@@ -2,6 +2,9 @@
 
 주문 → 재고 예약 → 주문 확정이 outbox + Kafka로 서비스 사이를 오가는지, 품절이면 아무 재고도 잡지 않고 거절되는지, 남의 주문은 조회되지 않는지 확인한다.
 
+> 이 문서의 흐름·결과는 1단계(`v0.1-basic-flow`, order + inventory만 있던 때) 기록이다. 그때 성공 상태는 `CONFIRMED`, 실패는 `REJECTED`였다.
+> 2단계부터는 같은 내용을 Saga 전체(포인트·결제 포함)로 `scripts/smoke-saga.sh` 1·2·4번이 확인하고, 상태는 `COMPLETED` / `CANCELLED`다.
+
 ## 흐름
 
 ```mermaid
@@ -27,13 +30,14 @@ sequenceDiagram
 ## 재현
 
 ```bash
+# 1단계 당시 (v0.1-basic-flow 태그에서)
 docker compose -f infra/docker-compose.yml up -d --wait
 ./gradlew :services:order-service:bootRun
 ./gradlew :services:inventory-service:bootRun
-scripts/smoke-saga.sh
+scripts/smoke-basic-flow.sh
 ```
 
-CI에서는 `.github/workflows/e2e.yml`이 같은 순서로 jar를 띄워 매 PR마다 돌린다.
+지금은 `.github/workflows/e2e.yml`이 네 서비스를 띄워 `scripts/smoke-saga.sh`를 매 PR마다 돌린다.
 
 ## 기대 결과
 
