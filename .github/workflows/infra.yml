@@ -31,13 +31,16 @@ jobs:
           docker compose -f infra/docker-compose.yml run --rm --no-deps kafka-init
           topics=$(docker compose -f infra/docker-compose.yml exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list)
           echo "$topics"
-          for t in inventory.command inventory.reply order.events; do echo "$topics" | grep -qx "$t"; done
+          for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT; do echo "$topics" | grep -qx "$t"; done
 
       - name: 서비스 DB 분리 확인
         run: |
           pg() { docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD="$2" postgres psql -h localhost -U "$1" -d "$3" -tAc 'select 1'; }
           pg order_svc order_svc order_db
           pg inventory_svc inventory_svc inventory_db
+          pg point_svc point_svc point_db
+          pg payment_svc payment_svc payment_db
+          pg notification_svc notification_svc notification_db
           # 다른 서비스 DB 에는 접속할 수 없어야 한다
           if pg order_svc order_svc inventory_db; then echo "order_svc 가 inventory_db 에 접속됨"; exit 1; fi
 
