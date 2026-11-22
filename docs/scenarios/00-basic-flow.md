@@ -45,11 +45,23 @@ CI에서는 `.github/workflows/e2e.yml`이 같은 순서로 jar를 띄워 매 PR
 
 ## 실제 결과
 
-CI `e2e` 실행 로그 (GitHub Actions, ubuntu-latest, 스케줄러 relay 주기 200ms):
+CI `e2e` 실행 로그 ([2026-11-22 실행](https://github.com/klmin/commerce-saga/actions/runs/45023168936), GitHub Actions ubuntu-latest, 스케줄러 relay 주기 200ms):
 
 ```
-RESULT_PLACEHOLDER
+== 1. 재고 있는 상품 주문 -> CONFIRMED
+  ok  생성 직후 status = PENDING
+  ok  orderId=86fcd0bc-39d8-4441-9674-d36c59b279e4 CONFIRMED (1277ms)
+  ok  상품 1 available = 98
+  ok  상품 1 reserved = 2
+== 2. 품절 상품 포함 주문 -> REJECTED, 아무 재고도 잡지 않음
+  ok  rejectReason = insufficient stock: productId=5
+  ok  상품 2 available = 100
+== 3. 다른 사용자의 주문 조회 -> 404
+  ok  user 2 -> user 1 주문 = 404
+PASS (주문 생성 -> CONFIRMED 1277ms)
 ```
+
+세 항목 모두 기대 결과와 같다.
 
 ## 관련 테스트
 
@@ -59,4 +71,5 @@ RESULT_PLACEHOLDER
 
 ## 알게 된 점
 
-- 생성 → 확정 지연의 대부분은 relay 폴링 주기(200ms)가 두 번(order → inventory, inventory → order) 더해진 값이다. 2단계에서 Saga 단계가 4개로 늘면 이 지연이 단계마다 누적된다. 3단계 Debezium 전환의 측정 기준선으로 쓴다 (시나리오 7)
+- 생성 → 확정 1277ms는 서비스 기동 직후 첫 주문 한 건이라 JIT·커넥션·컨슈머 첫 poll 같은 워밍업이 섞인 값이다. 구조적으로는 relay 폴링 주기(최대 200ms)가 두 번(order → inventory, inventory → order) 더해진다
+- 2단계에서 Saga 단계가 4개로 늘면 폴링 지연이 단계마다 누적된다. 워밍업을 뺀 반복 측정(k6)은 3단계 Debezium 전환과 비교하는 시나리오 7에서 한다
