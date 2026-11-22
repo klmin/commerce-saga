@@ -1,0 +1,43 @@
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  application:
+    name: payment-service
+  # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
+  datasource:
+    url: ${PAYMENT_DB_URL:jdbc:postgresql://localhost:5432/payment_db}
+    username: ${PAYMENT_DB_USERNAME:payment_svc}
+    password: ${PAYMENT_DB_PASSWORD:payment_svc}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+
+# 스케줄러 outbox relay (libs/outbox)
+outbox:
+  relay:
+    fixed-delay: 200ms
+    batch-size: 100
+
+# 가짜 PG 장애 주입 초기값 (실행 중에는 PUT /admin/payment-faults 로 바꾼다)
+#   mode: APPROVE(승인) | DECLINE(거절) | DELAY(delay-millis 만큼 지연 후 승인)
+fake-pg:
+  mode: ${FAKE_PG_MODE:APPROVE}
+  delay-millis: ${FAKE_PG_DELAY_MILLIS:0}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
