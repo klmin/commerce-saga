@@ -8,12 +8,15 @@ import com.klmin.commerce.contract.inventory.StockReleased;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
 import com.klmin.commerce.contract.order.OrderCompleted;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ConfirmStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStockUseCase;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,6 +31,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -43,6 +49,12 @@ class ReserveStockIntegrationTest {
 
     @Autowired
     GetStockUseCase getStockUseCase;
+
+    @Autowired
+    ReleaseStockUseCase releaseStockUseCase;
+
+    @Autowired
+    ConfirmStockUseCase confirmStockUseCase;
 
     @Autowired
     ConsumerFactory<String, String> consumerFactory;
@@ -157,6 +169,42 @@ class ReserveStockIntegrationTest {
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(getStockUseCase.getStock(3L).reserved()).isEqualTo(reservedBefore));
         assertThat(getStockUseCase.getStock(3L).available()).isEqualTo(availableBefore - 2);
+    }
+
+    // 해제(inventory.command)와 확정(order.events)이 같은 주문에 동시에 와도 하나만 반영되고 둘 다 실패하지 않는다
+    @RepeatedTest(5)
+    void concurrentReleaseAndConfirm_applyExactlyOne() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(1L, 1))));
+        awaitReplies(orderId, 1);
+        int availableAfterReserve = getStockUseCase.getStock(1L).available();
+        int reservedAfterReserve = getStockUseCase.getStock(1L).reserved();
+
+        CountDownLatch start = new CountDownLatch(1);
+        CompletableFuture<Void> release = CompletableFuture.runAsync(() -> {
+            awaitLatch(start);
+            releaseStockUseCase.release(orderId);
+        });
+        CompletableFuture<Void> confirm = CompletableFuture.runAsync(() -> {
+            awaitLatch(start);
+            confirmStockUseCase.confirm(orderId);
+        });
+        start.countDown();
+        CompletableFuture.allOf(release, confirm).get(30, TimeUnit.SECONDS);
+
+        int available = getStockUseCase.getStock(1L).available();
+        assertThat(getStockUseCase.getStock(1L).reserved()).isEqualTo(reservedAfterReserve - 1);
+        // 해제가 이기면 available 이 1 돌아오고, 확정이 이기면 그대로다
+        assertThat(available).isIn(availableAfterReserve, availableAfterReserve + 1);
+    }
+
+    private static void awaitLatch(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 
     private void sendCommand(ReserveStock command) {

@@ -9,6 +9,13 @@ public interface StockReservationPort {
 
     Optional<StockReservation> findByOrderId(UUID orderId);
 
+    /**
+     * 예약 기록을 비관적 락(SELECT ... FOR UPDATE)으로 잠가 가져온다.
+     * 해제(inventory.command)와 확정(order.events)은 다른 리스너에서 동시에 올 수 있어서,
+     * 상태 전이를 이 락으로 줄 세운다. 뒤에 온 쪽은 앞쪽 커밋 후의 상태를 읽는다.
+     */
+    Optional<StockReservation> findByOrderIdForUpdate(UUID orderId);
+
     /** 같은 orderId 가 이미 있으면 예외 (동시에 들어온 중복 커맨드 중 하나만 커밋된다) */
     void insert(StockReservation reservation);
 

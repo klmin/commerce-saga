@@ -106,7 +106,7 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     @Transactional
     public void release(UUID orderId) {
         Instant now = clock.instant();
-        Optional<StockReservation> found = reservationPort.findByOrderId(orderId);
+        Optional<StockReservation> found = reservationPort.findByOrderIdForUpdate(orderId);
         if (found.isEmpty()) {
             // 예약 전에 해제가 온 경우: 되돌릴 것은 없지만 기록을 남겨 늦게 온 ReserveStock 이 재고를 잡지 않게 한다
             log.warn("예약 기록 없는 재고 해제 요청 (orderId={})", orderId);
@@ -128,7 +128,7 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     @Transactional
     public void confirm(UUID orderId) {
         Instant now = clock.instant();
-        Optional<StockReservation> found = reservationPort.findByOrderId(orderId);
+        Optional<StockReservation> found = reservationPort.findByOrderIdForUpdate(orderId);
         if (found.isEmpty()) {
             log.warn("예약 기록 없는 주문 완료 이벤트 (orderId={})", orderId);
             return;

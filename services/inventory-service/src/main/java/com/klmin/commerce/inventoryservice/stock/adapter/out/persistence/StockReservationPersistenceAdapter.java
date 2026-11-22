@@ -23,6 +23,11 @@ class StockReservationPersistenceAdapter implements StockReservationPort {
     }
 
     @Override
+    public Optional<StockReservation> findByOrderIdForUpdate(UUID orderId) {
+        return repository.findByIdForUpdate(orderId).map(StockReservationPersistenceAdapter::toDomain);
+    }
+
+    @Override
     public void insert(StockReservation reservation) {
         repository.save(new StockReservationJpaEntity(reservation.orderId(), reservation.status(),
                 reservation.reason(), reservation.createdAt(), reservation.updatedAt(),

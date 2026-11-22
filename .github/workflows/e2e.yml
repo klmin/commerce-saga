@@ -32,10 +32,9 @@ jobs:
       - name: bootJar
         run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar
 
+      # README 의 기동 명령 그대로. postgres-init(서비스 DB·계정), kafka-init(토픽)까지 끝나야 성공한다
       - name: 인프라 기동
-        run: |
-          docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180 postgres kafka
-          docker compose -f infra/docker-compose.yml run --rm --no-deps kafka-init
+        run: docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
 
       - name: 서비스 기동
         run: |

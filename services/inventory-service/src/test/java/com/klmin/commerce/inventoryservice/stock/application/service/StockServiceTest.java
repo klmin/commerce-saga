@@ -280,6 +280,11 @@ class StockServiceTest {
         }
 
         @Override
+        public Optional<StockReservation> findByOrderIdForUpdate(UUID orderId) {
+            return findByOrderId(orderId);
+        }
+
+        @Override
         public void insert(StockReservation reservation) {
             if (store.putIfAbsent(reservation.orderId(), copy(reservation)) != null) {
                 throw new IllegalStateException("duplicate reservation");
