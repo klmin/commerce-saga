@@ -67,6 +67,12 @@ class InventoryReplyListenerTest {
                 .isInstanceOf(NonRetryableMessageException.class);
         assertThatThrownBy(() -> listener.onMessage(record(null, body)))
                 .isInstanceOf(NonRetryableMessageException.class);
+
+        // 헤더는 있지만 값이 null
+        ConsumerRecord<String, String> nullValueHeader = record(null, body);
+        nullValueHeader.headers().add(MessageHeaders.TYPE, null);
+        assertThatThrownBy(() -> listener.onMessage(nullValueHeader))
+                .isInstanceOf(NonRetryableMessageException.class);
         verifyNoInteractions(useCase);
     }
 }

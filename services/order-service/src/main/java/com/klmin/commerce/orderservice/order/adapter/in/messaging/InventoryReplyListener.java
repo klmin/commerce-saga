@@ -74,6 +74,6 @@ class InventoryReplyListener {
 
     private static String header(ConsumerRecord<?, ?> record, String name) {
         Header header = record.headers().lastHeader(name);
-        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
+        return header == null || header.value() == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 }
