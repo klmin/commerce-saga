@@ -92,6 +92,14 @@ class OrderControllerTest {
         mvc.perform(post("/orders").header("X-User-Id", "7")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"lines\":[]}"))
                 .andExpect(status().isBadRequest());
+
+        // 금액 오버플로가 나는 단가는 500 이 아니라 400
+        mvc.perform(post("/orders").header("X-User-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"lines":[{"productId":10,"quantity":2,"unitPrice":9223372036854775807}]}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

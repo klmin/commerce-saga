@@ -19,7 +19,7 @@ record PlaceOrderRequest(
     record LineRequest(
             @NotNull @Positive Long productId,
             @NotNull @Positive @Max(OrderLine.MAX_QUANTITY) Integer quantity,
-            @NotNull @PositiveOrZero Long unitPrice) {
+            @NotNull @PositiveOrZero @Max(OrderLine.MAX_UNIT_PRICE) Long unitPrice) {
     }
 
     PlaceOrderCommand toCommand(long userId) {

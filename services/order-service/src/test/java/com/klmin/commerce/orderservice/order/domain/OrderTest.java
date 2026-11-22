@@ -53,6 +53,22 @@ class OrderTest {
         assertThatThrownBy(() -> new OrderLine(1L, OrderLine.MAX_QUANTITY + 1, 100L))
                 .isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> new OrderLine(1L, 1, -1L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> new OrderLine(1L, 2, Long.MAX_VALUE)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> new OrderLine(1L, 1, OrderLine.MAX_UNIT_PRICE + 1))
+                .isInstanceOf(DomainValidationException.class);
+    }
+
+    @Test
+    void maximumOrder_totalFitsInLong() {
+        List<OrderLine> lines = new java.util.ArrayList<>();
+        for (int i = 1; i <= Order.MAX_LINES; i++) {
+            lines.add(new OrderLine(i, OrderLine.MAX_QUANTITY, OrderLine.MAX_UNIT_PRICE));
+        }
+
+        Order order = Order.place(UUID.randomUUID(), 1L, lines, T0);
+
+        assertThat(order.totalAmount())
+                .isEqualTo((long) Order.MAX_LINES * OrderLine.MAX_QUANTITY * OrderLine.MAX_UNIT_PRICE);
     }
 
     @Test
