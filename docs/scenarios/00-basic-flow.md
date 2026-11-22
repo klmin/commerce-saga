@@ -30,7 +30,7 @@ sequenceDiagram
 docker compose -f infra/docker-compose.yml up -d --wait
 ./gradlew :services:order-service:bootRun
 ./gradlew :services:inventory-service:bootRun
-scripts/smoke-basic-flow.sh
+scripts/smoke-saga.sh
 ```
 
 CI에서는 `.github/workflows/e2e.yml`이 같은 순서로 jar를 띄워 매 PR마다 돌린다.

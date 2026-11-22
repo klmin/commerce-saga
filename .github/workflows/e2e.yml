@@ -1,6 +1,6 @@
 name: e2e
 
-# 인프라(docker-compose) + order-service + inventory-service 를 실제로 띄우고 스모크 테스트를 돌린다
+# 인프라(docker-compose) + 네 서비스(inventory, point, payment, order)를 실제로 띄우고 Saga 스모크 테스트를 돌린다
 on:
   push:
     branches: [main]
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  basic-flow:
+  saga:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -30,7 +30,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: bootJar
-        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar
 
       # README 의 기동 명령 그대로. postgres-init(서비스 DB·계정), kafka-init(토픽)까지 끝나야 성공한다
       - name: 인프라 기동
@@ -39,9 +39,11 @@ jobs:
       - name: 서비스 기동
         run: |
           mkdir -p logs
-          nohup java -jar services/order-service/build/libs/order-service-*.jar > logs/order-service.log 2>&1 &
-          nohup java -jar services/inventory-service/build/libs/inventory-service-*.jar > logs/inventory-service.log 2>&1 &
-          for url in http://localhost:8081/actuator/health http://localhost:8082/actuator/health; do
+          for svc in inventory-service point-service payment-service order-service; do
+            nohup java -jar services/$svc/build/libs/$svc-*.jar > logs/$svc.log 2>&1 &
+          done
+          for port in 8081 8082 8083 8084; do
+            url=http://localhost:$port/actuator/health
             for i in $(seq 1 60); do
               curl -sf "$url" | grep -q UP && break
               sleep 2
@@ -50,10 +52,12 @@ jobs:
           done
 
       - name: 스모크 테스트
-        run: bash scripts/smoke-basic-flow.sh
+        run: bash scripts/smoke-saga.sh
 
       - name: Logs
         if: always()
         run: |
-          tail -n 200 logs/order-service.log || true
-          tail -n 200 logs/inventory-service.log || true
+          for svc in inventory-service point-service payment-service order-service; do
+            echo "===== $svc"
+            tail -n 150 logs/$svc.log || true
+          done
