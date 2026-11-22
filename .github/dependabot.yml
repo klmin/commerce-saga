@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # 루트 멀티모듈 + build-logic 의 플러그인 버전
+  - package-ecosystem: gradle
+    directories: ['/', '/build-logic']
+    schedule:
+      interval: weekly
+    groups:
+      spring:
+        patterns: ['org.springframework*', 'io.spring*']
+      others:
+        patterns: ['*']
+        exclude-patterns: ['org.springframework*', 'io.spring*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
