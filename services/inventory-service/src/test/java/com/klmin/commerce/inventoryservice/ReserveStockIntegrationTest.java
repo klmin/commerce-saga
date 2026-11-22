@@ -11,6 +11,8 @@ import com.klmin.commerce.contract.order.OrderCompleted;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ConfirmStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockCommand;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.ProcessedMessagePort;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -54,6 +56,9 @@ class ReserveStockIntegrationTest {
 
     @Autowired
     GetStockUseCase getStockUseCase;
+
+    @Autowired
+    ReserveStockUseCase reserveStockUseCase;
 
     @Autowired
     ReleaseStockUseCase releaseStockUseCase;
@@ -243,6 +248,74 @@ class ReserveStockIntegrationTest {
         assertThat(getStockUseCase.getStock(1L).reserved()).isEqualTo(reservedAfterReserve - 1);
         // 해제가 이기면 available 이 1 돌아오고, 확정이 이기면 그대로다
         assertThat(available).isIn(availableAfterReserve, availableAfterReserve + 1);
+    }
+
+    // 같은 메시지가 동시에 두 번 처리될 때 (리밸런스 직후, relay 의 짧은 간격 재전송).
+    // 먼저 들어온 A 가 커밋하면 늦은 B 는 processed_message PK 에서 기다렸다가 0건이 되어 건너뛴다
+    @Test
+    void sameMessageConcurrently_firstCommits_laterWaitsThenSkips() throws Exception {
+        int availableBefore = getStockUseCase.getStock(2L).available();
+        UUID orderId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(2L, 1)));
+
+        raceSameMessage(() -> reserveStockUseCase.reserve(messageId, command), true);
+
+        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(availableBefore - 1);
+        assertExactlyOneReply(orderId, StockReserved.TYPE);
+    }
+
+    // 먼저 들어온 A 가 처리 중 실패해 롤백하면, 기다리던 B 가 기록에 성공해 이어받아 처리한다 (유실 없음)
+    @Test
+    void sameMessageConcurrently_firstRollsBack_laterTakesOver() throws Exception {
+        int availableBefore = getStockUseCase.getStock(2L).available();
+        UUID orderId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(2L, 1)));
+
+        raceSameMessage(() -> reserveStockUseCase.reserve(messageId, command), false);
+
+        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(availableBefore - 1);
+        assertExactlyOneReply(orderId, StockReserved.TYPE);
+    }
+
+    /**
+     * A 가 같은 메시지를 처리하고 커밋 직전에 멈춘 사이 B 가 같은 메시지를 처리하게 한다.
+     * B 가 A 가 끝날 때까지 끝나지 않는 것(= PK 에서 기다림)을 확인한 뒤 A 를 커밋 또는 롤백한다.
+     */
+    private void raceSameMessage(Runnable process, boolean firstCommits) throws Exception {
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        CountDownLatch firstProcessed = new CountDownLatch(1);
+        CountDownLatch finishFirst = new CountDownLatch(1);
+        CompletableFuture<Void> first = CompletableFuture.runAsync(() -> tx.executeWithoutResult(status -> {
+            process.run();   // processed_message INSERT + 재고 변경 + 응답 outbox, 아직 커밋 전
+            if (!firstCommits) {
+                status.setRollbackOnly();
+            }
+            firstProcessed.countDown();
+            awaitLatch(finishFirst);
+        }));
+        CompletableFuture<Void> second = null;
+        try {
+            assertThat(firstProcessed.await(30, TimeUnit.SECONDS)).isTrue();
+            second = CompletableFuture.runAsync(process);
+            Thread.sleep(1_000);
+            assertThat(second).as("늦은 쪽은 앞 트랜잭션이 끝날 때까지 기다려야 한다").isNotDone();
+        } finally {
+            // 검증이 실패해도 앞 트랜잭션(재고 락 보유)을 반드시 끝내 다른 테스트가 막히지 않게 한다
+            finishFirst.countDown();
+        }
+        CompletableFuture.allOf(first, second).get(30, TimeUnit.SECONDS);
+    }
+
+    /** 응답이 한 건 오고, 잠시 더 기다려도 더 오지 않는다 */
+    private void assertExactlyOneReply(UUID orderId, String type) {
+        assertThat(header(awaitReplies(orderId, 1).getFirst(), MessageHeaders.TYPE)).isEqualTo(type);
+        long until = System.currentTimeMillis() + 2_000;
+        while (System.currentTimeMillis() < until) {
+            replyConsumer.poll(Duration.ofMillis(200)).forEach(received::add);
+        }
+        assertThat(received.stream().filter(r -> orderId.toString().equals(r.key()))).hasSize(1);
     }
 
     private static void awaitLatch(CountDownLatch latch) {
