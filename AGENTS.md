@@ -66,7 +66,7 @@ docker compose -f infra/docker-compose.yml up -d
 
 ## 서비스 내부 구조 (헥사고날 + DDD)
 
-패키지 루트는 `com.klmin.commerce.<service>`. (notification-service처럼 로직이 거의 없는 서비스는 단순 구조 허용)
+패키지 루트는 `com.klmin.commerce.<서비스명에서 -를 뺀 것>` (예: `com.klmin.commerce.orderservice`), 그 아래 기능(feature) 패키지(예: `order`). notification-service처럼 로직이 거의 없는 서비스는 단순 구조 허용.
 
 ```
 <feature>/domain/                    애그리거트, 도메인 규칙. Spring/JPA/Kafka/Validation 의존 금지

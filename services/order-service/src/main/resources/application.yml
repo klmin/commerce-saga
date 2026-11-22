@@ -1,0 +1,37 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: order-service
+  # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5432/order_db}
+    username: ${ORDER_DB_USERNAME:order_svc}
+    password: ${ORDER_DB_PASSWORD:order_svc}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+
+# 스케줄러 outbox relay (libs/outbox)
+outbox:
+  relay:
+    fixed-delay: 200ms
+    batch-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
