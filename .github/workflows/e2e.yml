@@ -1,0 +1,60 @@
+name: e2e
+
+# 인프라(docker-compose) + order-service + inventory-service 를 실제로 띄우고 스모크 테스트를 돌린다
+on:
+  push:
+    branches: [main]
+    paths: ['services/**', 'libs/**', 'build-logic/**', 'infra/**', 'scripts/**', '.github/workflows/e2e.yml']
+  pull_request:
+    paths: ['services/**', 'libs/**', 'build-logic/**', 'infra/**', 'scripts/**', '.github/workflows/e2e.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  basic-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar
+
+      - name: 인프라 기동
+        run: |
+          docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180 postgres kafka
+          docker compose -f infra/docker-compose.yml up --exit-code-from kafka-init kafka-init
+
+      - name: 서비스 기동
+        run: |
+          mkdir -p logs
+          nohup java -jar services/order-service/build/libs/order-service-*.jar > logs/order-service.log 2>&1 &
+          nohup java -jar services/inventory-service/build/libs/inventory-service-*.jar > logs/inventory-service.log 2>&1 &
+          for url in http://localhost:8081/actuator/health http://localhost:8082/actuator/health; do
+            for i in $(seq 1 60); do
+              curl -sf "$url" | grep -q UP && break
+              sleep 2
+            done
+            curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }
+          done
+
+      - name: 스모크 테스트
+        run: bash scripts/smoke-basic-flow.sh
+
+      - name: Logs
+        if: always()
+        run: |
+          tail -n 200 logs/order-service.log || true
+          tail -n 200 logs/inventory-service.log || true
