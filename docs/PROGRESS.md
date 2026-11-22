@@ -2,8 +2,37 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #14 머지 후, 3-A 보강 PR)
-- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B 완료, 다음은 3-C(Debezium relay)**
+- 마지막 갱신: 2026-11-23 (PR #15 머지 후)
+- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B 완료, 다음은 3-C-1(Debezium relay 교체)**
+
+## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
+
+이 저장소만 받으면 이어서 할 수 있게 정리해 둔 절이다. 이전 대화 기록은 넘어가지 않으므로 여기 적힌 것이 전부다.
+
+**시작 순서**
+1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
+2. 다음 작업은 아래 4절 **3-C-1**. main에서 `feat/debezium-relay` 같은 브랜치를 만든다
+
+**꼭 지킬 규칙 (사용자 지시)**
+- 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
+- 커밋 메시지·PR 본문·문서·리뷰 답변은 한국어. Conventional Commits (`feat(order): ...`)
+- `main`은 ruleset으로 보호. 직접 push 금지, 브랜치 → PR → squash 머지
+- 머지 조건: **Codex 리뷰 지적 없음 + CI 전부 통과**. 하나라도 아니면 고쳐서 push하고 다시 확인
+- 설정·테스트에 실제 키·비밀번호 금지 (로컬 개발용 값만)
+- 범위 밖 결정(단계 순서 변경, 새 인프라 도입 등)은 사용자에게 먼저 묻는다
+
+**PR 확인하는 법**
+- Codex 리뷰: PR을 열면 Codex가 자동 리뷰한다. 이후 push마다 `codex-review-on-push.yml`이 `@codex review` 댓글을 달아 재리뷰를 요청한다. 결과는 `chatgpt-codex-connector[bot]`의 리뷰·댓글로 온다. 지적 없으면 "Didn't find any major issues" 류, 지적이 있으면 P1/P2 배지가 달린 인라인 코멘트
+  - `gh pr view <번호> --comments`, `gh api repos/klmin/commerce-saga/pulls/<번호>/comments`, `gh api repos/klmin/commerce-saga/pulls/<번호>/reviews`
+  - 반드시 **마지막 커밋에 대한** 리뷰인지 확인한다 (리뷰의 `commit_id`)
+- CI: `gh pr checks <번호>` → backend, saga(e2e), analyze(CodeQL), request-review 전부 pass. e2e는 4~5분
+- 머지: `gh pr merge <번호> --squash --delete-branch`
+- 머지 후 이 문서 3절 PR 표와 맨 위 "마지막 갱신·현재 위치"를 다음 PR에서 갱신한다
+
+**환경 메모**
+- Docker가 없는 환경이면 Testcontainers 테스트는 skip된다. 그때는 CI(backend, e2e)가 통합 검증을 대신하므로 CI 결과를 꼭 확인한다
+- JDK 25는 Gradle 툴체인이 받는다. `java -jar`로 직접 띄울 때만 JDK 25 경로 필요 (7절)
+- python3이 없을 수 있다. 스크립트는 bash + 기본 도구로 쓴다 (기존 `scripts/*.sh` 참고)
 
 ## 1. 목표와 범위 (합의된 것)
 
@@ -61,7 +90,8 @@ flowchart LR
 | #12 | 3-A 멱등 컨슈머 (`processed_message`), 오프셋 되감기 스크립트, 시나리오 3, ADR 0006, 스키마 호환 규칙(ADR 0005) |
 | #13 | 3-B DLT 조회·재처리 CLI(`tools/dlt-replay`, `scripts/dlt.sh`), 시나리오 6, ADR 0012 |
 | #14 | 이 문서 |
-| (이번 PR) | 3-A 보강: 같은 메시지 동시 처리 통합 테스트 (inventory 커밋·롤백, point 커밋) |
+| #15 | 3-A 보강: 같은 메시지 동시 처리 통합 테스트 (inventory 커밋·롤백, point 커밋) |
+| (이번 PR) | 이 문서에 새 세션 이어받기 안내(0절), 3-C를 두 PR로 나눔 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 자동으로 돈다.
 
@@ -70,7 +100,14 @@ CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오
 ## 4. 남은 일 (3단계)
 
 ### 3-C. Debezium relay (다음 작업)
-- 시작할 때 Kafka 이미지 4.3.2 → 4.4.0(Dependabot PR #3)을 compose·Testcontainers·Kafka Connect 버전과 함께 맞춘다
+
+PR 두 개로 나눈다. 예상 3-C-1 3~4시간, 3-C-2 2~3시간(리뷰·CI 포함). 가장 불확실한 부분은 Debezium 설정(replication 권한, slot, 헤더 형식)을 로컬과 CI에서 맞추는 것.
+
+- **3-C-1 relay 교체**: 아래 목록 중 Kafka 버전 맞추기 ~ e2e matrix까지. 끝나면 e2e가 scheduler/debezium 두 모드 모두 시나리오 0·1·3·6·8 통과
+- **3-C-2 시나리오·ADR**: 시나리오 5·7, ADR 0004
+
+세부:
+- 시작할 때 Kafka 이미지 4.3.2 → 4.4.0(Dependabot PR #3, 브랜치 `dependabot/docker_compose/infra/apache/kafka-4.4.0`)을 compose·Testcontainers·Kafka Connect 버전과 함께 맞춘다. 3-C-1 PR에 포함하고 Dependabot PR #3은 그 뒤 닫는다
 - compose에 Kafka Connect + Debezium Postgres 커넥터 추가 (Postgres는 이미 `wal_level=logical`)
 - 서비스별 outbox 커넥터 JSON(`infra/connect/`) + 등록 스크립트(`scripts/register-connectors.sh`)
   - Outbox Event Router: `route.by.field=aggregatetype`(토픽), `aggregateid`가 key, `id`·`type`을 헤더로, `table.expand.json.payload=true`
