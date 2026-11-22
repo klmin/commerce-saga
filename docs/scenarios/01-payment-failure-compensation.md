@@ -52,7 +52,19 @@ curl -X PUT localhost:8084/admin/payment-faults -H 'Content-Type: application/js
 
 ## 실제 결과
 
-RESULT_PLACEHOLDER
+CI `e2e` 실행 로그 ([2026-11-22 실행](https://github.com/klmin/commerce-saga/actions/runs/45028247212), GitHub Actions ubuntu-latest, `scripts/smoke-saga.sh` 3번):
+
+```
+== 3. 결제 실패 -> 포인트 환불 -> 재고 해제 -> CANCELLED
+  ok  cancelReason = declined by PG (fault injection)
+  ok  포인트 잔액(환불) = 10000
+  ok  상품 3 available(해제) = 100
+  ok  상품 3 reserved(해제) = 0
+  ok  Saga 보상 순서 = PAYING REFUNDING_POINT RELEASING_STOCK CANCELLED
+```
+
+모든 항목이 기대 결과와 같다. 포인트·재고 누수 0, 보상은 포인트 환불 → 재고 해제 순서로 진행됐다.
+
 
 ## 관련 테스트
 

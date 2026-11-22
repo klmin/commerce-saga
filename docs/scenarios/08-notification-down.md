@@ -21,7 +21,22 @@ CI `e2e`가 이 순서 그대로 돈다.
 
 ## 실제 결과
 
-RESULT_PLACEHOLDER
+CI `e2e` 실행 로그 ([2026-11-22 실행](https://github.com/klmin/commerce-saga/actions/runs/45028247212), GitHub Actions ubuntu-latest):
+
+```
+# 2. notification-service 없이 smoke-saga.sh
+PASS (정상 주문 생성 -> COMPLETED 2354ms)      # 1 COMPLETED, 2·3 CANCELLED
+
+# 3~4. notification-service 기동 후 smoke-notification-catchup.sh
+== 8. 알림 서비스가 내려가 있던 동안의 주문 결과를 다시 뜬 뒤 알림으로 남김
+  ok  user 1 알림 OrderCompleted 1건
+  ok  user 1 알림 OrderCancelled 1건
+  ok  user 2 알림 OrderCancelled 1건
+PASS
+```
+
+알림 서비스가 없는 동안에도 주문 3건이 모두 결론까지 갔고, 서비스가 뜬 뒤 밀린 이벤트 3건이 각각 알림 1건씩으로 처리됐다.
+
 
 ## 왜 이렇게 되나
 
