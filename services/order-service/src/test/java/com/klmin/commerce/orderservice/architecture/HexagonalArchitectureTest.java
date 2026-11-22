@@ -86,10 +86,13 @@ class HexagonalArchitectureTest {
             .that().resideOutsideOfPackage("..adapter.out..")
             .should().dependOnClassesThat().resideInAPackage("com.klmin.commerce.outbox..");
 
-    // KafkaTemplate 직접 발행 금지. 모든 메시지는 outbox 를 거친다
+    // KafkaTemplate 직접 발행 금지. 모든 메시지는 outbox 를 거친다.
+    // 예외: common.config 의 리스너 에러 핸들러가 처리 불가 원본 메시지를 DLT 로 옮기는 것 (비즈니스 발행 아님)
     @ArchTest
     static final ArchRule noDirectKafkaPublishing = noClasses()
-            .should().dependOnClassesThat().haveFullyQualifiedName("org.springframework.kafka.core.KafkaTemplate");
+            .that().resideOutsideOfPackage(ROOT + ".common.config..")
+            .should().dependOnClassesThat().haveFullyQualifiedName("org.springframework.kafka.core.KafkaTemplate")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("org.springframework.kafka.core.KafkaOperations");
 
     @ArchTest
     static final ArchRule commonDoesNotDependOnFeatures = classes()

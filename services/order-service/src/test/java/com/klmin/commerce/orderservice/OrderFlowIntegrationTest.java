@@ -117,6 +117,38 @@ class OrderFlowIntegrationTest {
                 .isEqualTo("insufficient stock: productId=20");
     }
 
+    @Test
+    void invalidReply_goesToDlt_andDoesNotBlockLaterReplies() {
+        Order order = placeOrderUseCase.placeOrder(new PlaceOrderCommand(3L, List.of(
+                new PlaceOrderCommand.Line(30L, 1, 100L))));
+        awaitCommand(order.id());
+
+        try (Consumer<String, String> dltConsumer =
+                     consumerFactory.createConsumer("test-dlt-" + UUID.randomUUID(), "test")) {
+            dltConsumer.subscribe(List.of(Topics.INVENTORY_REPLY + ".DLT"));
+
+            // 본문이 JSON null 인 응답: 재시도하지 않고 DLT 로 옮겨진다
+            ProducerRecord<String, String> poison =
+                    new ProducerRecord<>(Topics.INVENTORY_REPLY, order.id().toString(), "null");
+            poison.headers().add(MessageHeaders.TYPE, StockReserved.TYPE.getBytes(StandardCharsets.UTF_8));
+            kafkaTemplate.send(poison).join();
+
+            // 같은 키(같은 파티션)의 다음 정상 응답이 막히지 않는다
+            sendReply(order.id(), StockReserved.TYPE, new StockReserved(order.id()));
+            awaitStatus(order, OrderStatus.CONFIRMED);
+
+            List<ConsumerRecord<String, String>> dlt = new ArrayList<>();
+            await().atMost(Duration.ofSeconds(30)).until(() -> {
+                dltConsumer.poll(Duration.ofMillis(200)).forEach(dlt::add);
+                return dlt.stream().anyMatch(r -> order.id().toString().equals(r.key()));
+            });
+            ConsumerRecord<String, String> parked = dlt.stream()
+                    .filter(r -> order.id().toString().equals(r.key())).findFirst().orElseThrow();
+            assertThat(parked.value()).isEqualTo("null");
+            assertThat(header(parked, MessageHeaders.TYPE)).isEqualTo(StockReserved.TYPE);
+        }
+    }
+
     private ConsumerRecord<String, String> awaitCommand(UUID orderId) {
         List<ConsumerRecord<String, String>> found = new ArrayList<>();
         await().atMost(Duration.ofSeconds(30)).until(() -> {

@@ -64,7 +64,8 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        for t in inventory.command inventory.reply order.events; do
+        # <토픽>.DLT: 재시도해도 처리할 수 없는 원본 메시지 보관 (리스너 에러 핸들러가 옮긴다)
+        for t in inventory.command inventory.reply order.events inventory.command.DLT inventory.reply.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$t" --partitions 3 --replication-factor 1
         done
     restart: "no"
