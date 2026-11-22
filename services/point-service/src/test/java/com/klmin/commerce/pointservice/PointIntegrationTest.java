@@ -130,11 +130,16 @@ class PointIntegrationTest {
                 throw new IllegalStateException(e);
             }
         }));
-        assertThat(firstProcessed.await(30, TimeUnit.SECONDS)).isTrue();
-        CompletableFuture<Void> second = CompletableFuture.runAsync(() -> usePointUseCase.use(messageId, command));
-        Thread.sleep(1_000);
-        assertThat(second).as("늦은 쪽은 앞 트랜잭션이 끝날 때까지 기다려야 한다").isNotDone();
-        finishFirst.countDown();
+        CompletableFuture<Void> second = null;
+        try {
+            assertThat(firstProcessed.await(30, TimeUnit.SECONDS)).isTrue();
+            second = CompletableFuture.runAsync(() -> usePointUseCase.use(messageId, command));
+            Thread.sleep(1_000);
+            assertThat(second).as("늦은 쪽은 앞 트랜잭션이 끝날 때까지 기다려야 한다").isNotDone();
+        } finally {
+            // 검증이 실패해도 앞 트랜잭션(계정 락 보유)을 반드시 끝내 다른 테스트가 막히지 않게 한다
+            finishFirst.countDown();
+        }
         CompletableFuture.allOf(first, second).get(30, TimeUnit.SECONDS);
 
         assertThat(getPointBalanceUseCase.getBalance(2L).balance()).isEqualTo(before - 700L);
