@@ -11,6 +11,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.UUID;
 
+import static com.klmin.commerce.inventoryservice.stock.adapter.in.messaging.InventoryCommandListenerTest.MESSAGE_ID;
 import static com.klmin.commerce.inventoryservice.stock.adapter.in.messaging.InventoryCommandListenerTest.record;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -29,7 +30,7 @@ class OrderEventsListenerTest {
         listener.onMessage(record(Topics.ORDER_EVENTS, OrderCompleted.TYPE,
                 "{\"orderId\":\"" + orderId + "\",\"userId\":1,\"totalAmount\":100,\"pointAmount\":0,\"paidAmount\":100}"));
 
-        verify(confirm).confirm(orderId);
+        verify(confirm).confirm(MESSAGE_ID, orderId);
     }
 
     @Test

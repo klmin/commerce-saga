@@ -29,6 +29,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class SagaReplyListenersTest {
 
+    static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+
     private final HandleSagaReplyUseCase useCase = mock(HandleSagaReplyUseCase.class);
     private final JsonMapper json = new JsonMapper();
     private final InventoryReplyListener inventory = new InventoryReplyListener(useCase, json);
@@ -38,6 +40,7 @@ class SagaReplyListenersTest {
 
     private static ConsumerRecord<String, String> record(String topic, String type, String value) {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(topic, 0, 0L, "k", value);
+        record.headers().add(MessageHeaders.ID, MESSAGE_ID.toString().getBytes(StandardCharsets.UTF_8));
         if (type != null) {
             record.headers().add(MessageHeaders.TYPE, type.getBytes(StandardCharsets.UTF_8));
         }
@@ -58,9 +61,9 @@ class SagaReplyListenersTest {
         inventory.onMessage(record(Topics.INVENTORY_REPLY, StockReservationFailed.TYPE, failed("out")));
         inventory.onMessage(record(Topics.INVENTORY_REPLY, StockReleased.TYPE, ok()));
 
-        verify(useCase).handle(SagaReplyCommand.of(orderId, SagaEventType.STOCK_RESERVED));
-        verify(useCase).handle(new SagaReplyCommand(orderId, SagaEventType.STOCK_RESERVATION_FAILED, "out"));
-        verify(useCase).handle(SagaReplyCommand.of(orderId, SagaEventType.STOCK_RELEASED));
+        verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.STOCK_RESERVED));
+        verify(useCase).handle(MESSAGE_ID, new SagaReplyCommand(orderId, SagaEventType.STOCK_RESERVATION_FAILED, "out"));
+        verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.STOCK_RELEASED));
     }
 
     @Test
@@ -69,9 +72,9 @@ class SagaReplyListenersTest {
         point.onMessage(record(Topics.POINT_REPLY, PointUseFailed.TYPE, failed("insufficient")));
         point.onMessage(record(Topics.POINT_REPLY, PointRefunded.TYPE, ok()));
 
-        verify(useCase).handle(SagaReplyCommand.of(orderId, SagaEventType.POINT_USED));
-        verify(useCase).handle(new SagaReplyCommand(orderId, SagaEventType.POINT_USE_FAILED, "insufficient"));
-        verify(useCase).handle(SagaReplyCommand.of(orderId, SagaEventType.POINT_REFUNDED));
+        verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.POINT_USED));
+        verify(useCase).handle(MESSAGE_ID, new SagaReplyCommand(orderId, SagaEventType.POINT_USE_FAILED, "insufficient"));
+        verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.POINT_REFUNDED));
     }
 
     @Test
@@ -80,8 +83,8 @@ class SagaReplyListenersTest {
                 "{\"orderId\":\"" + orderId + "\",\"paymentId\":\"" + UUID.randomUUID() + "\"}"));
         payment.onMessage(record(Topics.PAYMENT_REPLY, PaymentFailed.TYPE, failed("declined")));
 
-        verify(useCase).handle(SagaReplyCommand.of(orderId, SagaEventType.PAYMENT_APPROVED));
-        verify(useCase).handle(new SagaReplyCommand(orderId, SagaEventType.PAYMENT_FAILED, "declined"));
+        verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.PAYMENT_APPROVED));
+        verify(useCase).handle(MESSAGE_ID, new SagaReplyCommand(orderId, SagaEventType.PAYMENT_FAILED, "declined"));
     }
 
     @Test
@@ -89,6 +92,18 @@ class SagaReplyListenersTest {
         assertNonRetryable(inventory::onMessage, Topics.INVENTORY_REPLY, StockReserved.TYPE);
         assertNonRetryable(point::onMessage, Topics.POINT_REPLY, PointUsed.TYPE);
         assertNonRetryable(payment::onMessage, Topics.PAYMENT_REPLY, PaymentFailed.TYPE);
+        verifyNoInteractions(useCase);
+    }
+
+    @Test
+    void missingOrInvalidIdHeader_isNonRetryable() {
+        ConsumerRecord<String, String> missing = new ConsumerRecord<>(Topics.POINT_REPLY, 0, 0L, "k", ok());
+        missing.headers().add(MessageHeaders.TYPE, PointUsed.TYPE.getBytes(StandardCharsets.UTF_8));
+        ConsumerRecord<String, String> invalid = record(Topics.POINT_REPLY, PointUsed.TYPE, ok());
+        invalid.headers().add(MessageHeaders.ID, "not-a-uuid".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> point.onMessage(missing)).isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> point.onMessage(invalid)).isInstanceOf(NonRetryableMessageException.class);
         verifyNoInteractions(useCase);
     }
 

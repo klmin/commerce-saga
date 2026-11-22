@@ -11,6 +11,7 @@ import com.klmin.commerce.contract.order.OrderCompleted;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ConfirmStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.out.ProcessedMessagePort;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -23,6 +24,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.transaction.IllegalTransactionStateException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -36,6 +40,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -55,6 +60,12 @@ class ReserveStockIntegrationTest {
 
     @Autowired
     ConfirmStockUseCase confirmStockUseCase;
+
+    @Autowired
+    ProcessedMessagePort processedMessagePort;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @Autowired
     ConsumerFactory<String, String> consumerFactory;
@@ -140,6 +151,42 @@ class ReserveStockIntegrationTest {
         }
     }
 
+    // 시나리오 3: relay 재전송·오프셋 되감기로 같은 메시지(같은 id 헤더)가 다시 오면 재고도 응답도 바뀌지 않는다
+    @Test
+    void redeliveredMessage_isSkipped_withoutSecondReply() {
+        int before = getStockUseCase.getStock(1L).available();
+        UUID orderId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(1L, 1)));
+
+        send(Topics.INVENTORY_COMMAND, orderId, ReserveStock.TYPE, command, messageId);
+        send(Topics.INVENTORY_COMMAND, orderId, ReserveStock.TYPE, command, messageId);
+        // 같은 파티션(key = orderId)이라 이 메시지가 처리됐으면 앞의 재전달도 이미 처리된 것이다
+        send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId));
+
+        List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 2);
+        assertThat(replies).extracting(r -> header(r, MessageHeaders.TYPE))
+                .containsExactly(StockReserved.TYPE, StockReleased.TYPE);
+        assertThat(getStockUseCase.getStock(1L).available()).isEqualTo(before);
+    }
+
+    @Test
+    void processedMessage_requiresTransaction_andRollsBackWithIt() {
+        UUID messageId = UUID.randomUUID();
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+        assertThatThrownBy(() -> processedMessagePort.markProcessed(messageId))
+                .isInstanceOf(IllegalTransactionStateException.class);
+
+        tx.executeWithoutResult(status -> {
+            assertThat(processedMessagePort.markProcessed(messageId)).isTrue();
+            status.setRollbackOnly();   // 비즈니스 처리 실패
+        });
+        // 롤백됐으므로 재전달 때 다시 처리된다. 커밋된 뒤에는 중복으로 걸러진다
+        assertThat(tx.<Boolean>execute(status -> processedMessagePort.markProcessed(messageId))).isTrue();
+        assertThat(tx.<Boolean>execute(status -> processedMessagePort.markProcessed(messageId))).isFalse();
+    }
+
     @Test
     void releaseStock_returnsReservedStock_andRepliesStockReleased() {
         int before = getStockUseCase.getStock(2L).available();
@@ -183,11 +230,11 @@ class ReserveStockIntegrationTest {
         CountDownLatch start = new CountDownLatch(1);
         CompletableFuture<Void> release = CompletableFuture.runAsync(() -> {
             awaitLatch(start);
-            releaseStockUseCase.release(orderId);
+            releaseStockUseCase.release(UUID.randomUUID(), orderId);
         });
         CompletableFuture<Void> confirm = CompletableFuture.runAsync(() -> {
             awaitLatch(start);
-            confirmStockUseCase.confirm(orderId);
+            confirmStockUseCase.confirm(UUID.randomUUID(), orderId);
         });
         start.countDown();
         CompletableFuture.allOf(release, confirm).get(30, TimeUnit.SECONDS);
@@ -212,9 +259,13 @@ class ReserveStockIntegrationTest {
     }
 
     private void send(String topic, UUID orderId, String type, Object payload) {
+        send(topic, orderId, type, payload, UUID.randomUUID());
+    }
+
+    private void send(String topic, UUID orderId, String type, Object payload, UUID messageId) {
         ProducerRecord<String, String> record =
                 new ProducerRecord<>(topic, orderId.toString(), json.writeValueAsString(payload));
-        record.headers().add(MessageHeaders.ID, UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8));
+        record.headers().add(MessageHeaders.ID, messageId.toString().getBytes(StandardCharsets.UTF_8));
         record.headers().add(MessageHeaders.TYPE, type.getBytes(StandardCharsets.UTF_8));
         kafkaTemplate.send(record).join();
     }

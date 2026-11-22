@@ -23,12 +23,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class InventoryCommandListenerTest {
 
+    static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+
     private final ReserveStockUseCase reserve = mock(ReserveStockUseCase.class);
     private final ReleaseStockUseCase release = mock(ReleaseStockUseCase.class);
     private final InventoryCommandListener listener = new InventoryCommandListener(reserve, release, new JsonMapper());
 
     static ConsumerRecord<String, String> record(String topic, String type, String value) {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(topic, 0, 0L, "k", value);
+        record.headers().add(MessageHeaders.ID, MESSAGE_ID.toString().getBytes(StandardCharsets.UTF_8));
         if (type != null) {
             record.headers().add(MessageHeaders.TYPE, type.getBytes(StandardCharsets.UTF_8));
         }
@@ -46,7 +49,7 @@ class InventoryCommandListenerTest {
         listener.onMessage(record(ReserveStock.TYPE,
                 "{\"orderId\":\"" + orderId + "\",\"lines\":[{\"productId\":1,\"quantity\":2}]}"));
 
-        verify(reserve).reserve(new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(1L, 2))));
+        verify(reserve).reserve(MESSAGE_ID, new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(1L, 2))));
     }
 
     @Test
@@ -55,7 +58,20 @@ class InventoryCommandListenerTest {
 
         listener.onMessage(record(ReleaseStock.TYPE, "{\"orderId\":\"" + orderId + "\"}"));
 
-        verify(release).release(orderId);
+        verify(release).release(MESSAGE_ID, orderId);
+    }
+
+    @Test
+    void missingOrInvalidIdHeader_isNonRetryable() {
+        String body = "{\"orderId\":\"" + UUID.randomUUID() + "\"}";
+        ConsumerRecord<String, String> missing = new ConsumerRecord<>(Topics.INVENTORY_COMMAND, 0, 0L, "k", body);
+        missing.headers().add(MessageHeaders.TYPE, ReleaseStock.TYPE.getBytes(StandardCharsets.UTF_8));
+        ConsumerRecord<String, String> invalid = record(ReleaseStock.TYPE, body);
+        invalid.headers().add(MessageHeaders.ID, "not-a-uuid".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> listener.onMessage(missing)).isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(invalid)).isInstanceOf(NonRetryableMessageException.class);
+        verifyNoInteractions(reserve, release);
     }
 
     @Test

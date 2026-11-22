@@ -13,6 +13,7 @@ import com.klmin.commerce.orderservice.order.application.port.in.SagaReplyComman
 import com.klmin.commerce.orderservice.order.application.port.out.LoadOrderPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderEventPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
+import com.klmin.commerce.orderservice.order.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPort;
 import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
 import com.klmin.commerce.orderservice.order.domain.Order;
@@ -46,15 +47,18 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     private final OrderSagaPort sagaPort;
     private final SagaCommandPort commandPort;
     private final OrderEventPort eventPort;
+    private final ProcessedMessagePort processedMessagePort;
     private final Clock clock;
 
     OrderService(LoadOrderPort loadOrderPort, SaveOrderPort saveOrderPort, OrderSagaPort sagaPort,
-                 SagaCommandPort commandPort, OrderEventPort eventPort, Clock clock) {
+                 SagaCommandPort commandPort, OrderEventPort eventPort, ProcessedMessagePort processedMessagePort,
+                 Clock clock) {
         this.loadOrderPort = loadOrderPort;
         this.saveOrderPort = saveOrderPort;
         this.sagaPort = sagaPort;
         this.commandPort = commandPort;
         this.eventPort = eventPort;
+        this.processedMessagePort = processedMessagePort;
         this.clock = clock;
     }
 
@@ -84,7 +88,12 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     // Saga 전이 + 다음 커맨드/이벤트(outbox) + 주문 상태 = 한 트랜잭션
     @Override
     @Transactional
-    public void handle(SagaReplyCommand reply) {
+    public void handle(UUID messageId, SagaReplyCommand reply) {
+        // 같은 메시지의 재전달은 건너뛴다. 내용이 같은 다른 메시지(중복·늦은 응답)는 아래 상태 머신이 무시한다
+        if (!processedMessagePort.markProcessed(messageId)) {
+            log.info("이미 처리한 응답 건너뜀: {} (messageId={}, orderId={})", reply.type(), messageId, reply.orderId());
+            return;
+        }
         Optional<OrderSaga> found = sagaPort.findByOrderIdForUpdate(reply.orderId());
         if (found.isEmpty()) {
             log.warn("Saga 없는 주문의 응답 무시: {} (orderId={})", reply.type(), reply.orderId());

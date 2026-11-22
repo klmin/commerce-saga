@@ -44,8 +44,9 @@ class OrderServiceTest {
     private final InMemoryOrders orders = new InMemoryOrders();
     private final InMemorySagas sagas = new InMemorySagas();
     private final Recording sent = new Recording();
+    private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
     private final OrderService service =
-            new OrderService(orders, orders, sagas, sent, sent, Clock.fixed(NOW, ZoneOffset.UTC));
+            new OrderService(orders, orders, sagas, sent, sent, processed, Clock.fixed(NOW, ZoneOffset.UTC));
 
     /** 합계 2,500 */
     private Order place(long userId, long pointAmount) {
@@ -55,7 +56,7 @@ class OrderServiceTest {
     }
 
     private void reply(Order order, SagaEventType type) {
-        service.handle(new SagaReplyCommand(order.id(), type, type.name().endsWith("FAILED") ? "why" : null));
+        service.handle(UUID.randomUUID(), new SagaReplyCommand(order.id(), type, type.name().endsWith("FAILED") ? "why" : null));
     }
 
     @Test
@@ -114,6 +115,21 @@ class OrderServiceTest {
     }
 
     @Test
+    void redeliveredReply_isSkippedBeforeTouchingSaga() {
+        Order order = place(1L, 0L);
+        UUID messageId = UUID.randomUUID();
+        SagaReplyCommand reserved = SagaReplyCommand.of(order.id(), STOCK_RESERVED);
+
+        service.handle(messageId, reserved);
+        int before = sent.log.size();
+        service.handle(messageId, reserved);
+
+        assertThat(sent.log).hasSize(before);
+        assertThat(sagas.updates).isEqualTo(1);
+        assertThat(processed.ids).containsExactly(messageId);
+    }
+
+    @Test
     void duplicateAndLateReplies_doNotSendAnything() {
         Order order = place(1L, 0L);
         reply(order, STOCK_RESERVED);
@@ -129,7 +145,7 @@ class OrderServiceTest {
 
     @Test
     void replyForUnknownOrder_isIgnored() {
-        service.handle(SagaReplyCommand.of(UUID.randomUUID(), STOCK_RESERVED));
+        service.handle(UUID.randomUUID(), SagaReplyCommand.of(UUID.randomUUID(), STOCK_RESERVED));
 
         assertThat(sent.log).isEmpty();
     }

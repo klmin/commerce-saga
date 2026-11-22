@@ -8,6 +8,7 @@ import com.klmin.commerce.pointservice.point.application.port.in.UsePointCommand
 import com.klmin.commerce.pointservice.point.application.port.in.UsePointUseCase;
 import com.klmin.commerce.pointservice.point.application.port.out.PointAccountPort;
 import com.klmin.commerce.pointservice.point.application.port.out.PointUsagePort;
+import com.klmin.commerce.pointservice.point.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.pointservice.point.application.port.out.SendPointReplyPort;
 import com.klmin.commerce.pointservice.point.domain.PointAccount;
 import com.klmin.commerce.pointservice.point.domain.PointUsage;
@@ -31,18 +32,24 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
     private final PointAccountPort accountPort;
     private final PointUsagePort usagePort;
     private final SendPointReplyPort replyPort;
+    private final ProcessedMessagePort processedMessagePort;
     private final Clock clock;
 
-    PointService(PointAccountPort accountPort, PointUsagePort usagePort, SendPointReplyPort replyPort, Clock clock) {
+    PointService(PointAccountPort accountPort, PointUsagePort usagePort, SendPointReplyPort replyPort,
+                 ProcessedMessagePort processedMessagePort, Clock clock) {
         this.accountPort = accountPort;
         this.usagePort = usagePort;
         this.replyPort = replyPort;
+        this.processedMessagePort = processedMessagePort;
         this.clock = clock;
     }
 
     @Override
     @Transactional
-    public void use(UsePointCommand command) {
+    public void use(UUID messageId, UsePointCommand command) {
+        if (alreadyProcessed(messageId, "UsePoint", command.orderId())) {
+            return;
+        }
         Optional<PointUsage> existing = usagePort.findByOrderId(command.orderId());
         if (existing.isPresent()) {
             log.info("중복 포인트 사용 커맨드, 이전 결과 재응답 (orderId={}, status={})",
@@ -77,7 +84,10 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
 
     @Override
     @Transactional
-    public void refund(UUID orderId) {
+    public void refund(UUID messageId, UUID orderId) {
+        if (alreadyProcessed(messageId, "RefundPoint", orderId)) {
+            return;
+        }
         Instant now = clock.instant();
         Optional<PointUsage> found = usagePort.findByOrderId(orderId);
         if (found.isEmpty()) {
@@ -105,6 +115,16 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
     @Transactional(readOnly = true)
     public PointAccount getBalance(long userId) {
         return accountPort.findById(userId).orElseThrow(() -> new PointAccountNotFoundException(userId));
+    }
+
+    // 같은 메시지의 재전달(relay 재전송, 오프셋 되감기)은 아무것도 바꾸지 않고 응답도 다시 보내지 않는다.
+    // 내용이 같은 다른 메시지(예: 오케스트레이터의 재요청)는 ID 가 달라 여기를 지나고 주문별 기록으로 걸러진다
+    private boolean alreadyProcessed(UUID messageId, String type, UUID orderId) {
+        if (processedMessagePort.markProcessed(messageId)) {
+            return false;
+        }
+        log.info("이미 처리한 메시지 건너뜀: {} (messageId={}, orderId={})", type, messageId, orderId);
+        return true;
     }
 
     private void reject(UsePointCommand command, String reason, Instant now) {

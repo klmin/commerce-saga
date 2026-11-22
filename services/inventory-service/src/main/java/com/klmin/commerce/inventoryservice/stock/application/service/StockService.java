@@ -7,6 +7,7 @@ import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStoc
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockCommand;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.SendStockReplyPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockReservationPort;
@@ -43,20 +44,25 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     private final StockPort stockPort;
     private final StockReservationPort reservationPort;
     private final SendStockReplyPort replyPort;
+    private final ProcessedMessagePort processedMessagePort;
     private final Clock clock;
 
     StockService(StockPort stockPort, StockReservationPort reservationPort, SendStockReplyPort replyPort,
-                 Clock clock) {
+                 ProcessedMessagePort processedMessagePort, Clock clock) {
         this.stockPort = stockPort;
         this.reservationPort = reservationPort;
         this.replyPort = replyPort;
+        this.processedMessagePort = processedMessagePort;
         this.clock = clock;
     }
 
     // 재고 변경 + 예약 기록 + 응답(outbox) = 한 트랜잭션
     @Override
     @Transactional
-    public void reserve(ReserveStockCommand command) {
+    public void reserve(UUID messageId, ReserveStockCommand command) {
+        if (alreadyProcessed(messageId, "ReserveStock", command.orderId())) {
+            return;
+        }
         Optional<StockReservation> existing = reservationPort.findByOrderId(command.orderId());
         if (existing.isPresent()) {
             // 중복 커맨드: 재고는 다시 잡지 않고 처음 결과를 다시 응답한다 (오케스트레이터는 중복 응답을 무시)
@@ -104,7 +110,10 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     // 재고 되돌림 + 예약 기록 변경 + 응답(outbox) = 한 트랜잭션
     @Override
     @Transactional
-    public void release(UUID orderId) {
+    public void release(UUID messageId, UUID orderId) {
+        if (alreadyProcessed(messageId, "ReleaseStock", orderId)) {
+            return;
+        }
         Instant now = clock.instant();
         Optional<StockReservation> found = reservationPort.findByOrderIdForUpdate(orderId);
         if (found.isEmpty()) {
@@ -126,7 +135,10 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
 
     @Override
     @Transactional
-    public void confirm(UUID orderId) {
+    public void confirm(UUID messageId, UUID orderId) {
+        if (alreadyProcessed(messageId, "OrderCompleted", orderId)) {
+            return;
+        }
         Instant now = clock.instant();
         Optional<StockReservation> found = reservationPort.findByOrderIdForUpdate(orderId);
         if (found.isEmpty()) {
@@ -140,6 +152,16 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
         } else {
             log.info("판매 확정할 것 없음: 예약 상태 {} (orderId={})", reservation.status(), orderId);
         }
+    }
+
+    // 같은 메시지의 재전달(relay 재전송, 오프셋 되감기)은 아무것도 바꾸지 않고 응답도 다시 보내지 않는다.
+    // 내용이 같은 다른 메시지(예: 오케스트레이터의 재요청)는 ID 가 달라 여기를 지나고 주문별 기록으로 걸러진다
+    private boolean alreadyProcessed(UUID messageId, String type, UUID orderId) {
+        if (processedMessagePort.markProcessed(messageId)) {
+            return false;
+        }
+        log.info("이미 처리한 메시지 건너뜀: {} (messageId={}, orderId={})", type, messageId, orderId);
+        return true;
     }
 
     private void applyToStocks(StockReservation reservation, BiConsumer<Stock, Integer> change) {

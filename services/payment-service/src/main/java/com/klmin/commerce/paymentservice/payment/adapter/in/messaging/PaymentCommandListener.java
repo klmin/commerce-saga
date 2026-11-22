@@ -13,7 +13,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * payment.command 소비 (Pay). 처리 중 일시 오류는 복구될 때까지 재시도하고,
  * 재시도해도 같은 오류(본문·헤더 이상)는 DLT 에 보존된다 (KafkaErrorHandlingConfig).
- * 중복 커맨드는 주문별 결제 기록(payments.order_id 유니크)과 PG 멱등 키로 걸러져 두 번 결제되지 않는다.
+ * 같은 메시지의 재전달은 processed_message(id 헤더)로, 내용이 같은 다른 메시지는 주문별 결제 기록
+ * (payments.order_id 유니크)과 PG 멱등 키로 걸러져 두 번 결제되지 않는다 (ADR 0006).
  */
 @Component
 class PaymentCommandListener {
@@ -34,7 +35,7 @@ class PaymentCommandListener {
             throw new NonRetryableMessageException("unknown type " + type + ": " + Messages.describe(record));
         }
         Pay command = Messages.read(json, record, Pay.class);
-        payUseCase.pay(new PayCommand(Messages.requireOrderId(command.orderId(), record),
+        payUseCase.pay(Messages.messageId(record), new PayCommand(Messages.requireOrderId(command.orderId(), record),
                 command.userId(), command.amount()));
     }
 }

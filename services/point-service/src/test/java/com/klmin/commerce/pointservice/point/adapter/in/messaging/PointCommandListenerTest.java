@@ -22,12 +22,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class PointCommandListenerTest {
 
+    static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+
     private final UsePointUseCase use = mock(UsePointUseCase.class);
     private final RefundPointUseCase refund = mock(RefundPointUseCase.class);
     private final PointCommandListener listener = new PointCommandListener(use, refund, new JsonMapper());
 
     private static ConsumerRecord<String, String> record(String type, String value) {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(Topics.POINT_COMMAND, 0, 0L, "k", value);
+        record.headers().add(MessageHeaders.ID, MESSAGE_ID.toString().getBytes(StandardCharsets.UTF_8));
         if (type != null) {
             record.headers().add(MessageHeaders.TYPE, type.getBytes(StandardCharsets.UTF_8));
         }
@@ -41,8 +44,8 @@ class PointCommandListenerTest {
         listener.onMessage(record(UsePoint.TYPE, "{\"orderId\":\"" + orderId + "\",\"userId\":1,\"amount\":300}"));
         listener.onMessage(record(RefundPoint.TYPE, "{\"orderId\":\"" + orderId + "\"}"));
 
-        verify(use).use(new UsePointCommand(orderId, 1L, 300L));
-        verify(refund).refund(orderId);
+        verify(use).use(MESSAGE_ID, new UsePointCommand(orderId, 1L, 300L));
+        verify(refund).refund(MESSAGE_ID, orderId);
     }
 
     @Test
@@ -55,6 +58,19 @@ class PointCommandListenerTest {
                 .isInstanceOf(NonRetryableMessageException.class);
         assertThatThrownBy(() -> listener.onMessage(record(null, "{}")))
                 .isInstanceOf(NonRetryableMessageException.class);
+        verifyNoInteractions(use, refund);
+    }
+
+    @Test
+    void missingOrInvalidIdHeader_isNonRetryable() {
+        String body = "{\"orderId\":\"" + UUID.randomUUID() + "\"}";
+        ConsumerRecord<String, String> missing = new ConsumerRecord<>(Topics.POINT_COMMAND, 0, 0L, "k", body);
+        missing.headers().add(MessageHeaders.TYPE, RefundPoint.TYPE.getBytes(StandardCharsets.UTF_8));
+        ConsumerRecord<String, String> invalid = record(RefundPoint.TYPE, body);
+        invalid.headers().add(MessageHeaders.ID, "not-a-uuid".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> listener.onMessage(missing)).isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(invalid)).isInstanceOf(NonRetryableMessageException.class);
         verifyNoInteractions(use, refund);
     }
 }

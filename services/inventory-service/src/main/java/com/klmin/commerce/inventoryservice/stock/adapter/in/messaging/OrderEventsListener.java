@@ -37,6 +37,6 @@ class OrderEventsListener {
             return;
         }
         OrderCompleted event = Messages.read(json, record, OrderCompleted.class);
-        confirmStockUseCase.confirm(Messages.requireOrderId(event.orderId(), record));
+        confirmStockUseCase.confirm(Messages.messageId(record), Messages.requireOrderId(event.orderId(), record));
     }
 }

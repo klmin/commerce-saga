@@ -33,14 +33,16 @@ class PaymentServiceTest {
     private final InMemoryPayments payments = new InMemoryPayments();
     private final RecordingReplies replies = new RecordingReplies();
     private final StubGateway gateway = new StubGateway();
+    private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
     private final PaymentService service = new PaymentService(
-            new PaymentRecorder(payments, replies, Clock.fixed(NOW, ZoneOffset.UTC)), gateway, gateway, payments);
+            new PaymentRecorder(payments, replies, processed, Clock.fixed(NOW, ZoneOffset.UTC)), gateway, gateway, payments,
+            processed);
 
     @Test
     void pay_approved_recordsAndRepliesApproved() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
         Payment payment = payments.store.get(orderId);
         assertThat(payment.status()).isEqualTo(PaymentStatus.APPROVED);
@@ -52,7 +54,7 @@ class PaymentServiceTest {
         gateway.change(new Settings(Mode.DECLINE, 0));
         UUID orderId = UUID.randomUUID();
 
-        service.pay(new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
         assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
         assertThat(replies.log).containsExactly("failed:" + orderId + ":declined");
@@ -62,19 +64,43 @@ class PaymentServiceTest {
     void duplicatePay_doesNotCallGatewayAgain_andRepliesSameResult() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
         gateway.change(new Settings(Mode.DECLINE, 0));
-        service.pay(new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
         assertThat(gateway.calls).isEqualTo(1);
         assertThat(replies.log).hasSize(2).allMatch(s -> s.startsWith("approved:"));
     }
 
     @Test
+    void redeliveredMessage_isSkipped_withoutCallingGatewayOrReplying() {
+        UUID orderId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+
+        service.pay(messageId, new PayCommand(orderId, 1L, 5_000L));
+        service.pay(messageId, new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isEqualTo(1);
+        assertThat(replies.log).hasSize(1);
+        assertThat(processed.ids).containsExactly(messageId);
+    }
+
+    @Test
+    void redeliveredInvalidCommand_repliesOnce() {
+        UUID orderId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+
+        service.pay(messageId, new PayCommand(orderId, 1L, 0L));
+        service.pay(messageId, new PayCommand(orderId, 1L, 0L));
+
+        assertThat(replies.log).hasSize(1);
+    }
+
+    @Test
     void invalidAmount_repliesFailedWithoutCallingGateway() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(new PayCommand(orderId, 1L, 0L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 0L));
 
         assertThat(gateway.calls).isZero();
         assertThat(payments.store).isEmpty();
@@ -84,7 +110,7 @@ class PaymentServiceTest {
     @Test
     void getPayment_onlyOwner() {
         UUID orderId = UUID.randomUUID();
-        service.pay(new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
         assertThat(service.getPayment(new GetPaymentQuery(orderId, 1L)).amount()).isEqualTo(5_000L);
         assertThatThrownBy(() -> service.getPayment(new GetPaymentQuery(orderId, 2L)))

@@ -40,6 +40,6 @@ class PaymentReplyListener {
             default -> throw new NonRetryableMessageException(
                     "unknown type " + type + ": " + Messages.describe(record));
         };
-        handleSagaReplyUseCase.handle(reply);
+        handleSagaReplyUseCase.handle(Messages.messageId(record), reply);
     }
 }
