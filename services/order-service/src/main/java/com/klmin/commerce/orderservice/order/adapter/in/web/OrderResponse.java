@@ -11,7 +11,9 @@ record OrderResponse(
         long userId,
         String status,
         long totalAmount,
-        String rejectReason,
+        long pointAmount,
+        long paidAmount,
+        String cancelReason,
         List<Line> lines,
         Instant createdAt,
         Instant updatedAt) {
@@ -21,7 +23,7 @@ record OrderResponse(
 
     static OrderResponse from(Order order) {
         return new OrderResponse(order.id(), order.userId(), order.status().name(), order.totalAmount(),
-                order.rejectReason(),
+                order.pointAmount(), order.paidAmount(), order.cancelReason(),
                 order.lines().stream().map(l -> new Line(l.productId(), l.quantity(), l.unitPrice())).toList(),
                 order.createdAt(), order.updatedAt());
     }

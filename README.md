@@ -47,7 +47,7 @@ docker compose -f infra/docker-compose.yml up -d --wait      # Postgres, Kafka, 
 curl -X POST localhost:8081/orders -H 'X-User-Id: 1' -H 'Content-Type: application/json' \
   -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":1000}]}'
 curl localhost:8081/orders/<orderId> -H 'X-User-Id: 1'      # PENDING -> CONFIRMED
-scripts/smoke-basic-flow.sh                                  # 정상·품절·소유권 검사 한 번에
+scripts/smoke-saga.sh                                  # 정상·품절·소유권 검사 한 번에
 ```
 
 JDK 25는 Gradle 툴체인이 자동으로 받는다. 시드 재고: 상품 1~3은 100개, 4는 1개, 5는 품절.

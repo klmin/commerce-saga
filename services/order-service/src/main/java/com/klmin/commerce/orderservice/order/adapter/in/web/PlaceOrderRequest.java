@@ -13,8 +13,10 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
+/** @param pointAmount 사용할 포인트 (생략하면 0). 합계보다 크면 400 */
 record PlaceOrderRequest(
-        @NotEmpty @Size(max = Order.MAX_LINES) List<@Valid @NotNull LineRequest> lines) {
+        @NotEmpty @Size(max = Order.MAX_LINES) List<@Valid @NotNull LineRequest> lines,
+        @PositiveOrZero Long pointAmount) {
 
     record LineRequest(
             @NotNull @Positive Long productId,
@@ -25,6 +27,7 @@ record PlaceOrderRequest(
     PlaceOrderCommand toCommand(long userId) {
         return new PlaceOrderCommand(userId, lines.stream()
                 .map(l -> new PlaceOrderCommand.Line(l.productId(), l.quantity(), l.unitPrice()))
-                .toList());
+                .toList(),
+                pointAmount == null ? 0L : pointAmount);
     }
 }
