@@ -8,6 +8,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaul
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Settings;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -17,6 +18,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -26,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@Import(com.klmin.commerce.paymentservice.common.config.SecurityConfig.class)
 @WebMvcTest({PaymentController.class, PaymentFaultController.class})
 class PaymentControllerTest {
 
@@ -44,7 +49,7 @@ class PaymentControllerTest {
         Payment payment = Payment.approved(UUID.randomUUID(), orderId, 1L, 5_000L, "tx", Instant.now());
         given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 1L))).willReturn(payment);
 
-        mvc.perform(get("/payments/orders/{id}", orderId).header("X-User-Id", "1"))
+        mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject("1"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("APPROVED"))
                 .andExpect(jsonPath("$.amount").value(5000));
@@ -56,7 +61,7 @@ class PaymentControllerTest {
         given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 2L)))
                 .willThrow(new PaymentNotFoundException(orderId));
 
-        mvc.perform(get("/payments/orders/{id}", orderId).header("X-User-Id", "2"))
+        mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject("2"))))
                 .andExpect(status().isNotFound());
     }
 
@@ -64,7 +69,7 @@ class PaymentControllerTest {
     void changeFaults() throws Exception {
         given(paymentFaultUseCase.current()).willReturn(new Settings(Mode.DECLINE, 0));
 
-        mvc.perform(put("/admin/payment-faults").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/admin/payment-faults").with(admin()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mode\":\"DECLINE\",\"delayMillis\":0}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mode").value("DECLINE"));
@@ -73,12 +78,27 @@ class PaymentControllerTest {
 
     @Test
     void changeFaults_invalid_returns400() throws Exception {
-        mvc.perform(put("/admin/payment-faults").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/admin/payment-faults").with(admin()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mode\":\"DELAY\",\"delayMillis\":600000}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(put("/admin/payment-faults").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/admin/payment-faults").with(admin()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"delayMillis\":0}"))
                 .andExpect(status().isBadRequest());
         verify(paymentFaultUseCase, never()).change(any());
+    }
+
+    @Test
+    void changeFaults_requiresAdminRole() throws Exception {
+        String body = "{\"mode\":\"DECLINE\",\"delayMillis\":0}";
+        mvc.perform(put("/admin/payment-faults").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put("/admin/payment-faults").with(jwt().jwt(j -> j.subject("1")).authorities(new SimpleGrantedAuthority("ROLE_USER")))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        verify(paymentFaultUseCase, never()).change(any());
+    }
+
+    private static JwtRequestPostProcessor admin() {
+        return jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
     }
 }

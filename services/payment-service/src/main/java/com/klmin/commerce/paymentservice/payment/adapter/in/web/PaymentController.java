@@ -1,13 +1,11 @@
 package com.klmin.commerce.paymentservice.payment.adapter.in.web;
 
-import com.klmin.commerce.paymentservice.common.web.UserIdHeader;
+import com.klmin.commerce.paymentservice.common.web.CurrentUserId;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentQuery;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentUseCase;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
-import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,7 +24,7 @@ class PaymentController {
 
     /** 주문의 결제 결과. 본인 결제가 아니면 404 */
     @GetMapping("/orders/{orderId}")
-    PaymentResponse getByOrder(@RequestHeader(UserIdHeader.NAME) @Positive long userId,
+    PaymentResponse getByOrder(@CurrentUserId long userId,
                                @PathVariable UUID orderId) {
         Payment p = getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, userId));
         return new PaymentResponse(p.id(), p.orderId(), p.amount(), p.status().name(), p.reason(), p.createdAt());

@@ -1,0 +1,92 @@
+server:
+  port: ${SERVER_PORT:8000}
+
+spring:
+  application:
+    name: gateway
+  # rate limit 토큰 버킷 (auth-service 와 같은 Redis, 키 접두사가 달라 섞이지 않는다)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+  # access token 1차 검증 (ADR 0008). 서비스도 같은 설정으로 다시 검증한다
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8086/.well-known/jwks.json}
+          issuer-uri: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # 1~3단계의 사용자 헤더로 다른 사용자 행세를 못 하게 지운다 (서비스는 이제 JWT sub 만 본다)
+          default-filters:
+            - RemoveRequestHeader=X-User-Id
+          # /api/<자원>/** → 서비스의 /<자원>/** (StripPrefix=1). Authorization 헤더는 그대로 넘겨 서비스가 다시 검증한다
+          routes:
+            - id: auth
+              uri: ${AUTH_SERVICE_URL:http://localhost:8086}
+              predicates:
+                - Path=/auth/**,/.well-known/jwks.json
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientIpKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${GATEWAY_AUTH_RATE:5}
+                    redis-rate-limiter.burstCapacity: ${GATEWAY_AUTH_BURST:20}
+            - id: orders
+              uri: ${ORDER_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/orders,/api/orders/**
+              filters: &user-api
+                - StripPrefix=1
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${GATEWAY_USER_RATE:20}
+                    redis-rate-limiter.burstCapacity: ${GATEWAY_USER_BURST:40}
+            - id: stocks
+              uri: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/stocks/**
+              filters: *user-api
+            - id: points
+              uri: ${POINT_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/points/**
+              filters: *user-api
+            - id: payments
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/payments/**
+              filters: *user-api
+            - id: notifications
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/notifications/**
+              filters: *user-api
+            # 관리자: /api/admin/payment-faults → payment-service /admin/payment-faults (ADMIN 역할은 GatewaySecurityConfig)
+            - id: admin-payment-faults
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/admin/payment-faults
+              filters: *user-api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4328/v1/traces}
+  otlp:
+    metrics:
+      export:
+        enabled: false

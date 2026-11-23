@@ -1,6 +1,6 @@
 name: e2e
 
-# 인프라(docker-compose) + 서비스(inventory, point, payment, order, notification, auth)를 실제로 띄우고 Saga 스모크 테스트를 돌린다.
+# 인프라(docker-compose) + 서비스(inventory, point, payment, order, notification, auth, gateway)를 실제로 띄우고 Saga 스모크 테스트를 돌린다.
 # outbox relay 두 모드(scheduler: libs/outbox 스케줄러, debezium: Kafka Connect + Outbox Event Router)에서 같은 시나리오를 돌린다
 on:
   push:
@@ -38,6 +38,9 @@ jobs:
       SAGA_TIMEOUT_SCAN_INTERVAL: 1s
       # auth-service 동시 refresh 유예(ADR 0008). 시나리오 9 가 재사용 탐지까지 몇 초 안에 보이도록 (기본 20s)
       AUTH_REFRESH_GRACE: 2s
+      # Gateway 사용자별 rate limit 을 낮춰 시나리오 9 가 429 를 볼 수 있게 (기본 초당 20, 버스트 40)
+      GATEWAY_USER_RATE: 5
+      GATEWAY_USER_BURST: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -49,7 +52,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: bootJar
-        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:gateway:bootJar
 
       # README 의 기동 명령 그대로. postgres-init(서비스 DB·계정), kafka-init(토픽)까지 끝나야 성공한다
       - name: 인프라 기동
@@ -62,10 +65,10 @@ jobs:
       - name: 서비스 기동
         run: |
           mkdir -p logs
-          for svc in inventory-service point-service payment-service order-service auth-service; do
+          for svc in auth-service inventory-service point-service payment-service order-service gateway; do
             nohup java -jar services/$svc/build/libs/$svc-*.jar > logs/$svc.log 2>&1 &
           done
-          for port in 8081 8082 8083 8084 8086; do
+          for port in 8086 8081 8082 8083 8084 8000; do
             url=http://localhost:$port/actuator/health
             for i in $(seq 1 60); do
               curl -sf "$url" | grep -q UP && break
@@ -79,13 +82,17 @@ jobs:
         if: matrix.relay == 'debezium'
         run: bash scripts/register-connectors.sh
 
-      # 가입·로그인·refresh 회전·재사용 탐지·로그아웃·로그인 잠금 (Gateway·서비스 JWT 검증은 후속 2 다음 PR)
+      # 가입·로그인·refresh 회전·재사용 탐지·로그아웃·로그인 잠금
       - name: 인증, refresh token 재사용 탐지 (시나리오 9)
         run: GRACE_WAIT=3 bash scripts/smoke-auth.sh
 
       # notification-service 는 일부러 띄우지 않는다 (알림 장애 중에도 주문이 완료되는지)
       - name: 스모크 테스트
         run: bash scripts/smoke-saga.sh
+
+      # JWT 로 바꾼 뒤의 소유권 검사(IDOR), Gateway·서비스 각각의 토큰 검증, 관리자 역할, 사용자별 rate limit
+      - name: Gateway·소유권 검사 (시나리오 9)
+        run: bash scripts/smoke-gateway.sh
 
       - name: 알림 서비스 기동 후 밀린 이벤트 처리 확인 (시나리오 8)
         run: |
@@ -165,7 +172,7 @@ jobs:
       - name: Logs
         if: always()
         run: |
-          for svc in inventory-service point-service payment-service order-service notification-service auth-service; do
+          for svc in inventory-service point-service payment-service order-service notification-service auth-service gateway; do
             echo "===== $svc"
             tail -n 150 logs/$svc.log || true
           done

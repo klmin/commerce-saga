@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -59,19 +60,19 @@ class NotificationIntegrationTest {
         await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 assertThat(repository.findByUser(userId, null, 10)).hasSize(2));
 
-        mvc.perform(get("/notifications/me").header("X-User-Id", String.valueOf(userId)))
+        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject(String.valueOf(userId)))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].type").value(OrderCancelled.TYPE))
                 .andExpect(jsonPath("$[1].type").value(OrderCompleted.TYPE));
-        mvc.perform(get("/notifications/me").header("X-User-Id", String.valueOf(userId + 1)))
+        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject(String.valueOf(userId + 1)))))
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
     void myNotifications_validatesInput() throws Exception {
-        mvc.perform(get("/notifications/me")).andExpect(status().isBadRequest());
-        mvc.perform(get("/notifications/me").header("X-User-Id", "1").param("size", "500"))
+        mvc.perform(get("/notifications/me")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject("1"))).param("size", "500"))
                 .andExpect(status().isBadRequest());
     }
 

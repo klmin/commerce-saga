@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #29 머지 후, 후속 2 A-1 auth-service PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2 업그레이드(PR #29), A-1 auth-service(이번 PR). 다음은 A-2 Gateway + 서비스 JWT 검증**
+- 마지막 갱신: 2026-11-23 (PR #30 머지 후, 후속 2 A-2 Gateway·서비스 JWT 검증 PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(이번 PR). 다음은 F-1 Next.js 기본 + 로그인·주문 화면**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 **후속 2의 A-2 (Spring Cloud Gateway + 서비스 JWT 검증)**. 아래 "후속 2 진행" 절의 PR 순서와 "후속 2 설계 메모"대로 한다. 인증 설계는 [ADR 0008](adr/0008-auth-self-issued-jwt.md)에 남겼다. 프론트(F-1)를 시작할 때 템플릿 위치를 사용자에게 묻는다(이 PC에 없음). main에서 `feat/gateway` 같은 브랜치를 만든다
+2. 다음 작업은 **후속 2의 F-1 (Next.js 기본 구성 + 로그인·회원가입·주문 화면)**. 아래 "후속 2 진행" 절의 PR 순서와 "후속 2 설계 메모"(프론트엔드)대로 하고, 시작할 때 ADR 0011(프론트엔드)을 남긴다. **템플릿(`hexagonal-spring-next-template/frontend`) 위치를 먼저 사용자에게 묻는다(이 PC에 없음).** 백엔드 API 는 Gateway(:8000)의 `/auth/**`·`/api/**`, 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md). main에서 `feat/frontend` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -45,7 +45,7 @@
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
-| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 auth-service) |
+| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 auth-service PR #30, A-2 Gateway·JWT) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
@@ -107,9 +107,10 @@ flowchart LR
 | #27 | 후속 1 O-1 분산 트레이싱: OTel(OTLP) → Tempo + Grafana, outbox `traceparent` 컬럼 → Kafka 헤더 → 리스너 observation(relay 두 모드 같은 방식), 리스너 span 에 orderId·메시지 타입, 시나리오 11, ADR 0013 |
 | #28 | 후속 1 O-2 메트릭·경보: 서비스 `/actuator/prometheus`(Saga·결제·outbox·slot 메트릭, 자기 DB 기준), kafka-exporter(lag·DLT), Prometheus 경보 규칙 10개, Grafana 대시보드, 시나리오 12, ADR 0013 메트릭·경보 부분 |
 | #29 | Spring Boot 4.1.2 → 4.2.0 (Kafka 클라이언트 4.4.0 = 브로커와 같은 버전, spring-kafka 4.2), Gradle 9.9.2. 후속 2 Gateway에 쓸 Spring Cloud 2026.0(Gateway 5.1)이 Boot 4.2 기준이라 먼저 올림. 시나리오 12 CI 결과 |
-| (이번 PR) | 후속 2 A-1 auth-service: 회원가입·로그인(BCrypt, 아이디별 5회 실패 잠금), access token JWT RS256 + JWKS, refresh token `familyId.secret` 회전(Redis Lua compare-and-set)·동시 refresh 유예·재사용 탐지 시 family 폐기, 로그아웃·전체 로그아웃·로그인 기기 관리, Redis(6380), 시나리오 9(인증 부분), ADR 0008 |
+| #30 | 후속 2 A-1 auth-service: 회원가입·로그인(BCrypt, 아이디별 5회 실패 잠금), access token JWT RS256 + JWKS, refresh token `familyId.secret` 회전(Redis Lua compare-and-set)·동시 refresh 유예·재사용 탐지 시 family 폐기, 로그아웃·전체 로그아웃·로그인 기기 관리, Redis(6380), 시나리오 9(인증 부분), ADR 0008 |
+| (이번 PR) | 후속 2 A-2: Spring Cloud Gateway(:8000, WebFlux, 라우팅·JWT 1차 검증·`/api/admin/**` ADMIN·사용자별 rate limit), 다섯 서비스 resource server(`X-User-Id` → JWT `sub`, `@CurrentUserId`), auth-service 개발용 시드 사용자, 스크립트 토큰화(`scripts/lib/auth.sh`), 시나리오 9 Gateway·소유권 부분(`smoke-gateway.sh`), 빌드 설정 분리(`boot-app-conventions`) |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증)·11·12와 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·11·12를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -199,21 +200,33 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | 순서 | PR | 상태 |
 |---|---|---|
 | 0 | Spring Boot 4.1.2 → 4.2.0 (Spring Cloud 2026.0 = Gateway 5.1 이 Boot 4.2 기준, 4.1 에 맞는 릴리스 없음) | 완료 PR #29 |
-| A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 이번 PR |
-| A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 다음 |
-| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-2 다음. 템플릿 위치를 사용자에게 묻는다 |
+| A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 완료 PR #30 |
+| A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 이번 PR |
+| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | 다음. 템플릿 위치를 사용자에게 묻는다 |
 | F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
 
-**A-1 auth-service 에서 한 것 (결정·확인 사항)**
+**A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
 - 새 서비스 `services/auth-service` (8086, `auth_db`/`auth_svc`, Redis 6380). 헥사고날 그대로, 기능 패키지 `auth` 하나. Kafka·outbox 없음(다른 서비스와 메시지를 주고받지 않음)
 - API: `POST /auth/signup`·`login`·`refresh`·`logout`·`logout-all`, `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `GET /.well-known/jwks.json`. 기기 관리·전체 로그아웃은 auth-service 자신의 공개키로 access token 을 검증(Spring Security resource server)
 - access token: RS256 15분, `iss`·`sub`·`roles`·`kid`. 서명 키 `AUTH_JWT_PRIVATE_KEY_LOCATION`(PKCS#8 PEM) + `AUTH_JWT_KEY_ID`, 비우면 기동 때 임시 키(로컬·CI). 키 교체는 `auth.jwt.retired-keys` 로 이전 공개키를 JWKS 에 남김
 - refresh token: `familyId.secret`(UUIDv4 + 32바이트 base64url), httpOnly·Secure·SameSite=Lax·Path=/auth 쿠키로만. Redis 에는 secret SHA-256 해시만. 회전은 Lua compare-and-set, 동시 refresh 유예(기본 20s)는 **access token 만 주고 쿠키는 그대로**(메모의 "같은 새 토큰 다시 주기"는 새 secret 원문을 서버에 둬야 해서 바꿈). 유예 뒤 옛 secret 은 재사용 탐지 → 그 family 삭제(브리프의 "전체 세션 폐기"를 그 기기로 좁힘, ADR 0008)
 - 수명: sliding 14일(쓸 때마다 연장), 절대 30일. 역할·정지 여부는 refresh 마다 DB 에서 다시 읽음
 - 로그인: BCrypt, 비밀번호 8~64자·72바이트 이하, 아이디 영문 소문자·숫자·밑줄 4~30자(대소문자 무시). 없는 아이디도 더미 해시 비교. 아이디별 15분 안 5회 실패 → 15분 `429` + `Retry-After`
-- 시드 사용자는 두지 않았다. 가입하면 id 1 부터 나와 포인트 시드(사용자 1~4)와 맞는다. 관리자(ADMIN) 계정 만드는 법과 e2e 의 로그인 사용자는 A-2 에서 정한다
+- (A-1 당시) 시드 사용자는 두지 않았다 → A-2 에서 개발용 시드를 더함. 가입하면 id 1 부터 나와 포인트 시드(사용자 1~4)와 맞는다. 관리자(ADMIN) 계정 만드는 법과 e2e 의 로그인 사용자는 A-2 에서 정한다
 - 테스트 68개: `RefreshFamilyTest`, `RefreshTokenTest`, `UserTest`, `AuthServiceTest`(인메모리 포트), `AuthControllerTest`(쿠키 속성), `AuthIntegrationTest`(Postgres + Redis, JWKS 서명 검증, 동시 refresh 8개 → 회전 1번), ArchUnit
 - 시나리오 9 인증 부분 `scripts/smoke-auth.sh` (CI 두 모드, 서비스 기동 직후, `AUTH_REFRESH_GRACE=2s`). 로컬 PASS. Prometheus 가 auth-service(8086)도 긁는다(`ServiceDown` 대상)
+
+**A-2 Gateway·서비스 JWT 검증 (이번 PR) 에서 한 것 (결정·확인 사항)**
+- `services/gateway` (8000, 이 PC는 8080을 다른 앱이 씀): Spring Cloud Gateway 2026.0(Gateway 5.1) **WebFlux**. `RedisRateLimiter`가 리액티브 쪽이라 이렇게 했다. 빌드 설정은 `commerce.boot-app-conventions`(관측성·JWT 검증·테스트 공통)와 `commerce.service-conventions`(서블릿 + validation)로 나눴다
+- 라우팅: `/auth/**`·JWKS → auth-service(토큰 없이), `/api/{orders,stocks,points,payments,notifications}/**` → 각 서비스(`StripPrefix=1`), `/api/admin/payment-faults` → payment `/admin/payment-faults`(ADMIN). 나머지 경로는 거부. 들어온 `X-User-Id`는 지운다
+- rate limit: `/api/**`는 사용자(sub)별 초당 20·버스트 40, `/auth/**`는 IP별 초당 5·버스트 20(`GATEWAY_*` 환경 변수). IP는 TCP 주소(XFF 안 믿음)
+- 서비스 다섯 개 모두 resource server(같은 JWKS·issuer, `roles` → `ROLE_*`). `@CurrentUserId long userId` = `@AuthenticationPrincipal`의 `sub`. `UserIdHeader` 삭제. 서비스마다 `SecurityConfig`(actuator만 열고, inventory는 `GET /stocks/**`도 열고, `/admin/**` = ADMIN). 공유 모듈로 빼지 않음(서비스 간 모듈 공유 금지)
+- CSRF: 끄지 않고 "쿠키가 실린 상태 변경 요청"에만 검사(Gateway는 `/auth/**` 제외, auth-service가 직접 막음). CodeQL의 CSRF 경고를 피하려는 것이 아니라 Bearer 전용 API의 실제 위협 모델
+- 개발용 시드 사용자: auth-service `db/dev-seed/R__dev_seed_users.sql`(repeatable). `user1`~`user4` = id 1~4(포인트 시드와 같은 id), `admin` = 100, 비밀번호 `local-dev-pass`. 가입 id는 1000부터. 운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`. 로컬 `auth_db`에 A-1 때 가입한 사용자가 있으면 id가 겹쳐 시드가 건너뛰어지므로 `drop database auth_db` 후 다시 띄운다
+- 스크립트: `scripts/lib/auth.sh`(`-H "$(auth 1)"`, 관리자 `auth 100`, 토큰 10분 파일 캐시 `TOKEN_CACHE_DIR`). 기존 시나리오 스크립트 9개를 모두 토큰으로 바꿨다(서비스 URL 직접 호출은 그대로). auth-service를 다시 띄우면(임시 키) 캐시를 지운다
+- 시나리오 9f~9i `scripts/smoke-gateway.sh`(CI 두 모드, smoke-saga 다음, `GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10`). 로컬 Debezium 모드에서 smoke-gateway·smoke-saga·smoke-auth·smoke-tracing PASS
+- 테스트: `GatewayRoutingTest` 6개(JDK HttpServer가 서비스·JWKS 흉내, Redis Testcontainers), 서비스 `@WebMvcTest`는 `@Import(SecurityConfig)` + `jwt()`로 바꾸고 토큰 없으면 401, 결제 장애 주입 ADMIN 확인 추가
+- 한계: 가입한 사용자는 포인트 계정이 없다(포인트 시드 1~4만). 가입을 알리는 이벤트(`UserRegistered`)는 필요해지면 auth-service에 outbox를 붙여서 (ADR 0008)
 
 ### 후속 2 설계 메모 (2026-11-23 사용자와 정리. 인증 부분은 ADR 0008 로 남김)
 
@@ -252,7 +265,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 `ReplicationSlotLag`. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
-- 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 후속 2(인증) A-2 Gateway 역할 검사(`/api/admin/**`)
+- 결제 장애 주입 API 는 ADMIN 역할만 (Gateway `/api/admin/payment-faults` + payment-service `/admin/**`, A-2)
 - 인증: 이미 나간 access token 은 최대 15분 유효(즉시 차단 없음). 로그인 잠금은 아이디 기준이라 남이 내 계정을 15분 잠글 수 있음(IP 제한은 Gateway rate limit). 동시 refresh 유예(20초) 안의 옛 refresh token 은 access token 을 받을 수 있음(회전은 못 함) (ADR 0008)
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). `ConsumerLagHigh` 경보로 잡는다
 - trace: 단계 타임아웃 재전송·결제 보정 후 응답은 원래 trace 에 잇지 못하고 새 trace 로 시작한다(주문 id 검색으로 모임). 이으려면 Saga 행에 처음 traceparent 를 저장 (ADR 0013)
@@ -272,7 +285,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 ```bash
 docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Prometheus(9091)·Grafana(3000), Redis(6380)
 ./gradlew build                                             # 전체 빌드·테스트
-./gradlew :services:inventory-service:bootRun               # 8082 (point 8083, payment 8084, order 8081, notification 8085, auth 8086)
+./gradlew :services:inventory-service:bootRun               # 8082 (point 8083, payment 8084, order 8081, notification 8085, auth 8086, gateway 8000)
 scripts/smoke-saga.sh                                       # 시나리오 0·1 + IDOR
 scripts/smoke-redelivery.sh snapshot|verify                 # 시나리오 3 (순서는 스크립트 머리말)
 scripts/smoke-poison.sh                                     # 시나리오 6
@@ -285,6 +298,7 @@ scripts/smoke-tracing.sh                                    # 시나리오 11 (t
 scripts/smoke-alerts.sh                                     # 시나리오 12 (경보는 http://localhost:9091/alerts, 대시보드는 Grafana commerce-saga)
 AUTH_REFRESH_GRACE=2s ./gradlew :services:auth-service:bootRun   # 동시 refresh 유예를 짧게 (기본 20s)
 GRACE_WAIT=3 scripts/smoke-auth.sh                          # 시나리오 9 인증 (가입·로그인·회전·재사용 탐지·잠금)
+scripts/smoke-gateway.sh                                    # 시나리오 9 Gateway·소유권 (gateway 를 GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10 으로 띄우면 429 확인)
 ```
 
 Debezium relay 모드로 돌리기 (infra 는 위와 같이 띄우면 connect 도 뜬다):

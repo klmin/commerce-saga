@@ -9,6 +9,9 @@ spring:
     url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
     username: ${AUTH_DB_USERNAME:auth_svc}
     password: ${AUTH_DB_PASSWORD:auth_svc}
+  # 개발용 시드 사용자(db/dev-seed) 포함이 기본. 운영은 AUTH_FLYWAY_LOCATIONS=classpath:db/migration
+  flyway:
+    locations: ${AUTH_FLYWAY_LOCATIONS:classpath:db/migration,classpath:db/dev-seed}
   jpa:
     open-in-view: false
     hibernate:

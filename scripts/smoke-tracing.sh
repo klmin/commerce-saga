@@ -10,6 +10,8 @@
 #   11b. 결제 실패 주문: 보상(RefundPoint, ReleaseStock)까지 같은 trace 에 이어지는지
 # 메시지는 outbox 를 거치므로 trace 문맥은 outbox.traceparent → Kafka 헤더 traceparent → 리스너 observation 으로 넘어간다 (ADR 0013)
 set -euo pipefail
+# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+source "$(dirname "$0")/lib/auth.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
@@ -33,20 +35,20 @@ wait_until() { # description timeout-seconds command...
 }
 
 fault() { # mode
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":0}" > /dev/null
 }
 trap 'fault APPROVE || true' EXIT
 
 # 요청에 traceparent 를 직접 넣어 trace id 를 알고 시작한다 (W3C: 00-<trace 32hex>-<span 16hex>-01)
 place_order() { # trace-id
-  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $USER_ID" \
+  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
     -H "traceparent: 00-$1-$(hex 8)-01" \
     -d "{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":1000}],\"pointAmount\":100}" \
     | field orderId
 }
 
-order_status_is() { [ "$(curl -sf "$ORDER_URL/orders/$1" -H "X-User-Id: $USER_ID" | field status)" = "$2" ]; }
+order_status_is() { [ "$(curl -sf "$ORDER_URL/orders/$1" -H "$(auth $USER_ID)" | field status)" = "$2" ]; }
 
 trace_json() { curl -sf "$TEMPO_URL/api/traces/$1" || true; }
 services_in() { grep -oE '"service.name","value":\{"stringValue":"[^"]+"' | sed -E 's/.*"stringValue":"//; s/"$//' | sort -u | tr '\n' ' '; }

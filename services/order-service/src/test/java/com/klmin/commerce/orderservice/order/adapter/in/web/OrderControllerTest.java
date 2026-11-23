@@ -8,6 +8,7 @@ import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderUseCa
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -28,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@Import(com.klmin.commerce.orderservice.common.config.SecurityConfig.class)
 @WebMvcTest(OrderController.class)
 class OrderControllerTest {
 
@@ -55,7 +58,7 @@ class OrderControllerTest {
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
                 List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L))).willReturn(order);
 
-        mvc.perform(post("/orders").header("X-User-Id", "7")
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/orders/" + order.id()))
@@ -71,14 +74,14 @@ class OrderControllerTest {
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
                 List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 500L))).willReturn(order);
 
-        mvc.perform(post("/orders").header("X-User-Id", "7")
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}],"pointAmount":500}
                                 """))
                 .andExpect(status().isCreated());
 
-        mvc.perform(post("/orders").header("X-User-Id", "7")
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}],"pointAmount":-1}
@@ -87,23 +90,16 @@ class OrderControllerTest {
     }
 
     @Test
-    void placeOrder_withoutUserIdHeader_returns400() throws Exception {
+    void placeOrder_withoutToken_returns401() throws Exception {
         mvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
 
         verify(placeOrderUseCase, never()).placeOrder(any());
     }
 
     @Test
-    void placeOrder_withInvalidUserId_returns400() throws Exception {
-        mvc.perform(post("/orders").header("X-User-Id", "0")
-                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
     void placeOrder_withInvalidBody_returns400ProblemDetail() throws Exception {
-        mvc.perform(post("/orders").header("X-User-Id", "7")
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"lines":[{"productId":10,"quantity":0,"unitPrice":1000}]}
@@ -111,12 +107,12 @@ class OrderControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors").isArray());
 
-        mvc.perform(post("/orders").header("X-User-Id", "7")
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"lines\":[]}"))
                 .andExpect(status().isBadRequest());
 
         // 금액 오버플로가 나는 단가는 500 이 아니라 400
-        mvc.perform(post("/orders").header("X-User-Id", "7")
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"lines":[{"productId":10,"quantity":2,"unitPrice":9223372036854775807}]}
@@ -129,7 +125,7 @@ class OrderControllerTest {
         Order order = order(7L);
         given(getOrderUseCase.getOrder(new GetOrderQuery(order.id(), 7L))).willReturn(order);
 
-        mvc.perform(get("/orders/{id}", order.id()).header("X-User-Id", "7"))
+        mvc.perform(get("/orders/{id}", order.id()).with(jwt().jwt(j -> j.subject("7"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.orderId").value(order.id().toString()))
                 .andExpect(jsonPath("$.userId").value(7));
@@ -140,7 +136,7 @@ class OrderControllerTest {
         UUID id = UUID.randomUUID();
         given(getOrderUseCase.getOrder(new GetOrderQuery(id, 8L))).willThrow(new OrderNotFoundException(id));
 
-        mvc.perform(get("/orders/{id}", id).header("X-User-Id", "8"))
+        mvc.perform(get("/orders/{id}", id).with(jwt().jwt(j -> j.subject("8"))))
                 .andExpect(status().isNotFound());
     }
 }

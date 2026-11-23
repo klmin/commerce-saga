@@ -13,6 +13,8 @@
 #        Saga 가 결제를 포기하면 SagaTimeoutGiveUp 이 firing (메트릭 출처: payment·order-service /actuator/prometheus).
 #        PG 가 늦게 승인해 환불까지 끝나면 PaymentResultUnknown 이 풀린다
 set -euo pipefail
+# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+source "$(dirname "$0")/lib/auth.sh"
 export MSYS_NO_PATHCONV=1
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
@@ -39,7 +41,7 @@ wait_until() { # description timeout-seconds command...
 }
 
 fault() { # mode delayMillis
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":$2}" > /dev/null
 }
 trap 'fault APPROVE 0 || true' EXIT
@@ -78,11 +80,11 @@ echo "== 12b. PG 지연 45초 → PaymentResultUnknown, SagaTimeoutGiveUp firing
 give_up_query='sum(commerce_saga_timeout_give_ups_total)'
 give_ups_before=$(metric "$give_up_query")
 fault DELAY 45000
-id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $USER_ID" \
+id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
   -d '{"lines":[{"productId":1,"quantity":1,"unitPrice":1000}],"pointAmount":100}' \
   | sed -nE 's/.*"orderId":"([^"]+)".*/\1/p')
 echo "  주문 …${id: -8}"
-payment_status() { curl -s "$PAYMENT_URL/payments/orders/$id" -H "X-User-Id: $USER_ID" | sed -nE 's/.*"status":"([A-Z]+)".*/\1/p'; }
+payment_status() { curl -s "$PAYMENT_URL/payments/orders/$id" -H "$(auth $USER_ID)" | sed -nE 's/.*"status":"([A-Z]+)".*/\1/p'; }
 payment_is() { [ "$(payment_status)" = "$1" ]; }
 wait_until "결제 UNKNOWN" 30 payment_is UNKNOWN
 fault APPROVE 0   # 이미 PG 에서 처리 중인 요청은 지연 그대로 진행된다
