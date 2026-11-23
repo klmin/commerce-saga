@@ -129,6 +129,10 @@ jobs:
       - name: 분산 트레이싱, Saga 한 건 = trace 하나 (시나리오 11)
         run: bash scripts/smoke-tracing.sh
 
+      # 장애를 넣고 경보가 실제로 firing 되는지 (Prometheus 가 호스트의 서비스와 kafka-exporter 를 긁는다)
+      - name: 메트릭·경보, 장애 → 경보 firing (시나리오 12)
+        run: bash scripts/smoke-alerts.sh
+
       # 커넥터를 멈춘 동안 낸 주문이 재개 후 모두 완료되는지(유실 0), 그동안 slot 이 WAL 을 붙잡는지, heartbeat 로 다시 줄어드는지
       - name: 커넥터 중단 후 재개, 유실 0 (시나리오 5)
         if: matrix.relay == 'debezium'

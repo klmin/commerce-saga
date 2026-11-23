@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #26 머지·`v0.3-reliability` 태그 후, 후속 1 O-1 트레이싱 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 진행 중: O-1 분산 트레이싱(이번 PR), 다음은 O-2 메트릭·경보**
+- 마지막 갱신: 2026-11-23 (PR #27 머지 후, 후속 1 O-2 메트릭·경보 PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료: O-1 분산 트레이싱(PR #27), O-2 메트릭·경보(이번 PR). 다음은 후속 2(인증 + 프론트엔드)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 4절 **후속 1의 O-2(메트릭·경보)**. main에서 `feat/observability-metrics` 같은 브랜치를 만든다
+2. 다음 작업은 1절 표의 **후속 2(인증 + 프론트엔드)**. 아래 "후속 2 설계 메모"대로 시작하고(ADR 0008 인증, 0011 프론트엔드를 먼저 남김), 메모에 없는 결정(PR 나누는 법, Spring Cloud 릴리스 등)은 사용자에게 먼저 묻는다. main에서 `feat/auth-service` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -44,7 +44,7 @@
 | 1 | 기본 흐름 (모노레포, outbox + 스케줄러 relay, order → inventory) | 완료, 태그 `v0.1-basic-flow` |
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
-| 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | **진행 중** (O-1 트레이싱, O-2 메트릭·경보) |
+| 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보) |
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 관측성 다음 |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
@@ -104,9 +104,10 @@ flowchart LR
 | #24 | 3-D-1: 멈춘 Saga 정리(단계 타임아웃 → 새 메시지 id로 재전송 → 정방향은 포기 후 역순 보상, 결제·보상은 계속 재전송), 시나리오 4(참여 서비스 다운), ADR 0007 |
 | #25 | 3-D-2: 결제 타임아웃 보정(PG 타임아웃 → `UNKNOWN` → PG 조회로 확정), 결제 단계 포기 시 `CancelPayment`(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`), 취소된 주문의 승인 결제 PG 환불(늦은 승인 자동 환불), 시나리오 2, ADR 0007 결제 부분 |
 | #26 | 3-E 정리: 브리프 5절 진행 순서(1~3단계 = 완성, 후속 1~4), ADR 0000(왜 MSA인가, 메인 Saga 방식 대안 비교), 시나리오 3·6 CI 결과, README 아키텍처 3단계 기준 |
-| (이번 PR) | 후속 1 O-1 분산 트레이싱: OTel(OTLP) → Tempo + Grafana, outbox `traceparent` 컬럼 → Kafka 헤더 → 리스너 observation(relay 두 모드 같은 방식), 리스너 span 에 orderId·메시지 타입, 시나리오 11, ADR 0013 |
+| #27 | 후속 1 O-1 분산 트레이싱: OTel(OTLP) → Tempo + Grafana, outbox `traceparent` 컬럼 → Kafka 헤더 → 리스너 observation(relay 두 모드 같은 방식), 리스너 span 에 orderId·메시지 타입, 시나리오 11, ADR 0013 |
+| (이번 PR) | 후속 1 O-2 메트릭·경보: 서비스 `/actuator/prometheus`(Saga·결제·outbox·slot 메트릭, 자기 DB 기준), kafka-exporter(lag·DLT), Prometheus 경보 규칙 10개, Grafana 대시보드, 시나리오 12, ADR 0013 메트릭·경보 부분 |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·11과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·11·12와 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -132,7 +133,7 @@ PR 두 개로 나눴다. 3-C-1(relay 교체, PR #20), 3-C-2(시나리오·ADR) �
 - 시나리오 7 (`scripts/measure-relay.sh`, CI 두 모드): k6 대신 bash + curl. 지연은 서버 시각 `orders.updated_at − created_at`. 진행 중 Saga 최대 5건으로 묶음 단위 투입, 통계 반영 대기 11초(Codex 지적 반영). 로컬 p50/p95 스케줄러 776/1271ms, Debezium(poll 100ms) 811/922ms, Debezium(poll 500ms 기본) 2449/3656ms. 유휴 커밋 19.6/s vs 0.8/s, 유휴 outbox 스캔 574 vs 0 (30초), 주문당 커밋은 같음(CI 16.2 vs 16.1). CI p50/p95 스케줄러 1106/2277ms vs Debezium 821/1115ms. 핵심 차이는 지연이 아니라 유휴 폴링 비용과 꼬리 지연
 - 커넥터 `poll.interval.ms=100`: 기본 500ms로는 Debezium이 스케줄러보다 느렸다
 - ADR 0004: **운영 기준은 Debezium, 코드 기본값(`outbox.relay.enabled=true`)은 스케줄러 유지**. Debezium 모드는 넣고 바로 지우므로 Connect 없이 그 모드로 뜨면 조용히 발행이 안 되기 때문. 배포 설정에서 `OUTBOX_RELAY_ENABLED=false`를 명시한다
-- 로컬에서 겪은 것: 3-C-1 테스트로 넣은 `aggregatetype='x'` 행 하나 때문에 order 커넥터가 약 2.5시간 동안 아무것도 발행하지 못했는데 상태는 `RUNNING`이었다(Connect 프로듀서 `max.block.ms` 무한, 브로커 자동 생성 꺼짐). ADR 0004 위험 2. slot 적체 경보로 잡는다(후속 관측성)
+- 로컬에서 겪은 것: 3-C-1 테스트로 넣은 `aggregatetype='x'` 행 하나 때문에 order 커넥터가 약 2.5시간 동안 아무것도 발행하지 못했는데 상태는 `RUNNING`이었다(Connect 프로듀서 `max.block.ms` 무한, 브로커 자동 생성 꺼짐). ADR 0004 위험 2. slot 적체 경보(`ReplicationSlotLag`, 후속 1 O-2)로 잡는다
 - UUIDv7 주문 id는 앞 8자리(시각)가 같다. 로그에서 주문을 구분할 때는 뒤쪽을 본다
 
 ### 3-D. 타임아웃·장애 복구
@@ -166,11 +167,11 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - README 아키텍처를 3단계 기준으로(relay 두 모드, 단계 타임아웃, `CancelPayment`·결제 보정, DLT), ADR 목록에 0000
 - PR #26 머지 커밋(`a7ed503`)에 `v0.3-reliability` 태그를 붙였다
 
-## 4-1. 후속 1. 관측성 (진행 중)
+## 4-1. 후속 1. 관측성 (완료)
 
 범위는 2026-11-23 사용자와 정했다: **트레이싱 + 메트릭·경보 둘 다**. PR은 둘로 나눈다. 작업은 한 곳(이 세션 또는 이어받은 한 PC)에서만 한다(같은 브랜치·이 문서를 두 곳에서 고치면 충돌).
 
-**O-1 분산 트레이싱 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**O-1 분산 트레이싱 (PR #27) 에서 한 것 (결정·확인 사항)**
 - 서비스 공통: `spring-boot-starter-opentelemetry`(build-logic service-conventions). OTLP HTTP로 Tempo에 보낸다(`OTLP_TRACING_ENDPOINT`, 기본 `http://localhost:4328/v1/traces`), 샘플링 1.0(`TRACING_SAMPLING_PROBABILITY`). starter가 가져오는 OTLP 메트릭 export는 끔(O-2는 Prometheus가 긁는 방식)
 - **outbox를 거쳐도 trace가 이어지게**: `outbox.traceparent` 컬럼(Flyway order·inventory·payment V5, point V4) ← `OutboxWriter`가 넣는 시점의 현재 span(`OutboxTraceContext`, Micrometer Tracing 있을 때만) → 스케줄러 relay가 헤더 `traceparent`로, Debezium은 Event Router `additional.placement`에 `traceparent:header:traceparent` → 받는 쪽 `spring.kafka.listener.observation-enabled=true`가 이어받음. relay는 span을 만들지 않는다
 - **KafkaTemplate observation은 켜지 않는다**(켜면 relay 문맥으로 `traceparent`를 덮어써 끊김)
@@ -180,17 +181,16 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 배포 순서: 서비스(마이그레이션) 먼저, 커넥터 설정 나중(`table.field.additional.missing=error`라 컬럼이 없으면 커넥터 실패). 로컬에서 커넥터 재등록 직후 첫 주문은 재시작 때문에 10초 넘게 걸려 타임아웃 재전송이 한 번 났다
 - 한계: 단계 타임아웃 재전송·결제 보정 후 응답·traceparent 없는 예전 메시지는 새 trace로 시작(주문 id 검색으로는 모임). JDBC span 없음
 
-**O-2 메트릭·경보 (다음 PR) 계획**
-- 서비스: `micrometer-registry-prometheus` + actuator `prometheus` 노출. compose에 Prometheus(서비스 scrape, 경보 규칙)와 Grafana Prometheus 데이터 소스·대시보드 프로비저닝
-- 볼 것과 경보 후보 (PROGRESS 5절 "경보는 후속 관측성 작업" 항목들)
-  - consumer lag(서비스·토픽별), `*.DLT` 메시지 수 증가 → kafka-exporter 같은 exporter 또는 서비스 측 메트릭 (시작할 때 정함)
-  - 진행 중 Saga 수·오래 멈춘 Saga 수, 보상 중 Saga 수, 재전송 횟수 많은 Saga (order-service 게이지/카운터)
-  - 결제 `UNKNOWN` 수·오래된 `UNKNOWN`, 환불 대기(취소 요청 + 승인) 수 (payment-service)
-  - outbox 적체(스케줄러 모드 행 수·가장 오래된 행 나이), Debezium slot WAL 적체 (서비스가 자기 DB slot 만 조회 → DB 경계 유지)
-  - relay 지연(시나리오 7의 `updated_at − created_at`를 히스토그램으로)
-- 시나리오: 장애를 넣고 경보가 실제로 firing 되는지 Prometheus API로 확인 (예: poison message → DLT 경보, 커넥터 stop → slot 적체 경보). 문서 번호는 12
-- 경보 전달(Alertmanager → 메일·슬랙)은 범위 밖으로 두고 Prometheus/Grafana에서 firing 확인까지. 필요하면 사용자에게 묻는다
-- ADR 0013에 메트릭·경보 결정을 덧붙인다
+**O-2 메트릭·경보 (이번 PR) 에서 한 것 (결정·확인 사항)**
+- 서비스: `micrometer-registry-prometheus`(service-conventions) + actuator `prometheus` 노출. 서비스 메트릭은 이름 앞에 `commerce_`
+  - order-service `SagaMetrics`: `commerce_saga_active{state,phase}`, `commerce_saga_oldest_active_age_seconds{state,phase}`(시작 후 나이), `commerce_saga_timeout_resends_total`, `commerce_saga_timeout_give_ups_total`
+  - payment-service `PaymentMetrics`: `commerce_payment_unknown`, `..._oldest_unknown_age_seconds`(**`created_at`부터**: `updated_at`부터 재면 `CancelPayment`가 나이를 0으로 되돌려 경보가 안 울렸다, 시나리오 12에서 발견), `commerce_payment_refund_pending`, `..._oldest_refund_pending_age_seconds`(취소 요청 시각부터)
+  - libs/outbox `OutboxMetrics`(자동 설정, 네 서비스): `commerce_outbox_pending_rows`, `..._oldest_pending_age_seconds`, `commerce_outbox_replication_slot_lag_bytes`(자기 DB slot만)
+  - 헥사고날 그대로: `adapter.in.metrics`(MeterBinder) → `port.in` `Get*StatsUseCase` → `port.out` `Load*StatsPort` → 영속성 어댑터(JdbcClient 집계, 부분 인덱스와 같은 조건). 스크레이프마다 조회, 2초 캐시
+- 인프라: `prom/prometheus:v3.15.1`(호스트 **9091**, 이 PC에 다른 Prometheus가 9090), `danielqsj/kafka-exporter:v1.11.0`(lag·DLT 끝 오프셋, Connect 그룹은 해석 못 해 오류 로그만), Grafana에 Prometheus 데이터 소스 + 대시보드 `commerce-saga` 프로비저닝. 서비스는 `host.docker.internal`(`extra_hosts: host-gateway`)로 긁음. relay 지연 히스토그램은 하지 않음(시나리오 7 측정으로 충분)
+- 경보 규칙 10개(`infra/prometheus/rules/commerce.yml`, `promtool check rules` 통과): ServiceDown, SagaStuck, SagaCompensationStuck, SagaTimeoutGiveUp, PaymentResultUnknown, PaymentRefundPending, DeadLetterMessage, ConsumerLagHigh, OutboxBacklog, ReplicationSlotLag. 문턱값은 시연용으로 짧고 운영 값은 ADR 0013 표. Alertmanager(전달)는 두지 않음
+- 시나리오 12 (`scripts/smoke-alerts.sh`, CI 두 모드, 시나리오 11 다음): 12a 깨진 메시지 → `payment.command.DLT` → `DeadLetterMessage`, 12b PG 지연 45초 → `SagaTimeoutGiveUp`·`PaymentResultUnknown` firing → 환불 후 해제. 경보가 이미 firing 중일 수 있어 메트릭 값 증가도 함께 확인. 로컬 Debezium 모드 PASS
+- 테스트: `SagaStatsPersistenceAdapterTest`, `PaymentStatsPersistenceAdapterTest`, `OutboxWriterIntegrationTest`(OutboxMetrics)
 
 ### 후속 2 설계 메모 (2026-11-23 사용자와 정리, 시작할 때 ADR로 남긴다)
 
@@ -224,14 +224,15 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 
 ## 5. 알려진 한계·나중 일
 
-- 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그만 남는다. `UNKNOWN`·환불 대기 경보는 후속 관측성 작업
-- 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그만 남긴다. 경보는 후속 관측성 작업
+- 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
+- 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그와 경보(`SagaCompensationStuck`)
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
-- Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 후속 관측성 작업. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
+- Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 `ReplicationSlotLag`. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
 - 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 후속 2(인증)
-- 분류되지 않은 영구 오류는 파티션을 막는다 (의도). lag 경보는 후속 관측성 작업에서
+- 분류되지 않은 영구 오류는 파티션을 막는다 (의도). `ConsumerLagHigh` 경보로 잡는다
 - trace: 단계 타임아웃 재전송·결제 보정 후 응답은 원래 trace 에 잇지 못하고 새 trace 로 시작한다(주문 id 검색으로 모임). 이으려면 Saga 행에 처음 traceparent 를 저장 (ADR 0013)
+- 경보 문턱값은 시연용(짧음), 경보 전달(Alertmanager)은 없음. 운영 값은 ADR 0013 표
 
 ## 6. 작업 방식 (매 PR 동일)
 
@@ -245,7 +246,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 ## 7. 로컬에서 이어서 돌리기
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Grafana(3000)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Prometheus(9091)·Grafana(3000)
 ./gradlew build                                             # 전체 빌드·테스트
 ./gradlew :services:inventory-service:bootRun               # 8082 (point 8083, payment 8084, order 8081, notification 8085)
 scripts/smoke-saga.sh                                       # 시나리오 0·1 + IDOR
@@ -257,6 +258,7 @@ PG_CLIENT_TIMEOUT=3s PAYMENT_RECONCILE_INTERVAL=1s ./gradlew :services:payment-s
 scripts/smoke-payment-timeout.sh                            # 시나리오 2 (order-service 는 SAGA_PAYMENT_MAX_RESENDS=2 도)
 scripts/dlt.sh list inventory.command.DLT                   # DLT 확인
 scripts/smoke-tracing.sh                                    # 시나리오 11 (trace 는 Grafana http://localhost:3000 → Explore → Tempo)
+scripts/smoke-alerts.sh                                     # 시나리오 12 (경보는 http://localhost:9091/alerts, 대시보드는 Grafana commerce-saga)
 ```
 
 Debezium relay 모드로 돌리기 (infra 는 위와 같이 띄우면 connect 도 뜬다):

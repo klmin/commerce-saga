@@ -1,0 +1,28 @@
+# 로컬·CI 용 Prometheus. 서비스는 호스트에서 뜨므로 host.docker.internal 로 긁는다 (compose 의 extra_hosts)
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # 각 서비스 /actuator/prometheus: Saga·결제·outbox 메트릭(commerce_*), JVM, HTTP, Kafka 클라이언트
+  - job_name: services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels: {service: order-service}
+      - targets: ['host.docker.internal:8082']
+        labels: {service: inventory-service}
+      - targets: ['host.docker.internal:8083']
+        labels: {service: point-service}
+      - targets: ['host.docker.internal:8084']
+        labels: {service: payment-service}
+      - targets: ['host.docker.internal:8085']
+        labels: {service: notification-service}
+
+  # 컨슈머 그룹 lag, 토픽 끝 오프셋(DLT 적재 확인). 서비스가 죽어 있어도 브로커 기준으로 보인다
+  - job_name: kafka
+    static_configs:
+      - targets: ['kafka-exporter:9308']

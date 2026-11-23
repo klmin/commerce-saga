@@ -55,7 +55,27 @@ PASS
 
 11b의 `inventory.command`·`point.command` 2개는 정방향(`ReserveStock`, `UsePoint`)과 보상(`ReleaseStock`, `RefundPoint`)이다. `order.events` 2개는 `OrderCancelled`를 받은 notification과, 관심 없는 타입이라 건너뛰는 inventory다(span은 받은 메시지마다 생긴다).
 
-CI 결과는 이 PR의 `e2e` 실행 로그로 채운다.
+CI [2026-11-23 실행](https://github.com/klmin/commerce-saga/actions/runs/45146288339) (PR #27). 두 relay 모드 모두 PASS. scheduler 모드:
+
+```
+== 11a. 정상 주문 → trace 하나에 다섯 서비스
+  ok  주문 …c9f97011 COMPLETED, trace 44f73581f24d83e1be311040eeccf820
+  ok  trace 하나에 다섯 서비스: inventory-service notification-service order-service payment-service point-service
+            1 http post /orders
+            1 inventory.command process
+            1 inventory.reply process
+            2 order.events process
+            1 payment.command process
+            1 payment.reply process
+            1 point.command process
+            1 point.reply process
+  ok  주문 id 로 검색 → 같은 trace 하나
+== 11b. 결제 실패 → 보상까지 같은 trace
+  ok  주문 …9d9f8b02 CANCELLED, trace c0768963f64bc6c4ce379f8816c0af57
+  ok  trace 하나에 다섯 서비스: inventory-service notification-service order-service payment-service point-service
+```
+
+debezium 모드도 11a(주문 …32aa13b0, span 9개 구성이 위와 같음, 주문 id 검색 통과)·11b(주문 …2fd6c6d1) 모두 통과했다. 스케줄러 relay 도 Debezium 과 같은 방식(저장한 traceparent 를 헤더로)이라 결과가 같다.
 
 ## 확인하면서 본 것
 
