@@ -90,7 +90,7 @@ class SagaTimeoutIntegrationTest {
 
     private Order place(long userId) {
         return placeOrderUseCase.placeOrder(new PlaceOrderCommand(userId, List.of(
-                new PlaceOrderCommand.Line(10L, 1, 1_000L)), 0L));
+                new PlaceOrderCommand.Line(10L, 1, 1_000L)), 0L)).order();
     }
 
     @Test

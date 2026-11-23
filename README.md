@@ -74,15 +74,18 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/json' \
   -d '{"loginId":"user1","password":"local-dev-pass"}' | sed -nE 's/.*"accessToken":"([^"]+)".*/\1/p')   # 개발용 시드 사용자 1
 curl -X POST localhost:8000/api/orders -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":1000}],"pointAmount":500}'
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":1000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
 curl localhost:8000/api/orders/<orderId> -H "Authorization: Bearer $TOKEN"        # PENDING -> COMPLETED
 curl localhost:8000/api/orders/<orderId>/saga -H "Authorization: Bearer $TOKEN"   # Saga 단계 타임라인 (본인 주문만)
+curl localhost:8000/api/orders?size=20 -H "Authorization: Bearer $TOKEN"          # 내 주문 목록 (최신순, 다음 쪽은 before=<마지막 orderId>). 결제는 /api/payments
 scripts/smoke-saga.sh                                      # 정상·품절·결제 실패 보상·소유권 검사 한 번에
 scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메시지와 원인 (replay 로 재처리)
 scripts/smoke-tracing.sh                                   # 주문 한 건 = trace 하나 (Grafana → Explore → Tempo 에서 trace 보기)
 scripts/smoke-alerts.sh                                    # 장애 → 경보 firing (Grafana 대시보드 commerce-saga)
 scripts/smoke-auth.sh                                      # 가입·로그인·refresh 회전·재사용 탐지 (auth-service 를 AUTH_REFRESH_GRACE=2s 로 띄우면 GRACE_WAIT=3 로 빨리)
 scripts/smoke-gateway.sh                                   # Gateway·서비스 JWT 검증, 남의 주문 404, 관리자 역할, rate limit
+scripts/smoke-idempotency.sh                               # 같은 Idempotency-Key 재요청·동시 요청에도 주문 하나, 다른 본문 422, 내 주문·결제 목록
 ```
 
 - JDK 25는 Gradle 툴체인이 자동으로 받는다
@@ -105,6 +108,7 @@ scripts/smoke-gateway.sh                                   # Gateway·서비스 
 | 7 | [relay 비교: 스케줄러 vs Debezium, Saga 완료 지연·DB 부하](docs/scenarios/07-relay-comparison.md) | 측정 (로컬, CI `e2e`) |
 | 8 | [알림 서비스 다운 → 주문은 정상 완료, 복구 후 밀린 이벤트 처리](docs/scenarios/08-notification-down.md) | 통과 (CI `e2e`) |
 | 9 | [인증: refresh token 회전, 옛 토큰 재사용 → 그 기기 세션 폐기, 로그인 잠금](docs/scenarios/09-auth-refresh-reuse.md), JWT 로 바꾼 뒤 남의 주문 404·Gateway·서비스 이중 검증·rate limit | 통과 (로컬, CI `e2e`) |
+| 10 | [주문 Idempotency-Key: 같은 키 재요청·동시 5번 → 주문 1건, 다른 본문 422 / 내 주문·결제 목록](docs/scenarios/10-order-idempotency.md) | CI `e2e` |
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
 

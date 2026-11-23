@@ -2,6 +2,7 @@ package com.klmin.commerce.orderservice.common.web;
 
 import com.klmin.commerce.orderservice.common.error.DomainValidationException;
 import com.klmin.commerce.orderservice.common.error.NotFoundException;
+import com.klmin.commerce.orderservice.common.error.UnprocessableRequestException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +38,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     ProblemDetail handleNotFound(NotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(UnprocessableRequestException.class)
+    ProblemDetail handleUnprocessable(UnprocessableRequestException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
 
     // 처리하지 못한 예외도 Problem Details 로 응답한다. 내부 메시지는 응답에 넣지 않고 로그로만 남긴다

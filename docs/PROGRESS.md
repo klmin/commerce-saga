@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #31 머지 후, 후속 2 남은 계획 정리 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료. 다음은 A-3-1 → A-3-2(프론트용 백엔드 보강) → F-1 Next.js(템플릿 가져오기) → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-23 (PR #32 머지 후, A-3-1 order·payment 조회 보강·주문 Idempotency-Key PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1(내 주문·결제 목록, 주문 Idempotency-Key) 이번 PR. 다음은 A-3-2(가입 → 포인트 계정) → F-1 Next.js(템플릿 가져오기) → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -109,9 +109,10 @@ flowchart LR
 | #29 | Spring Boot 4.1.2 → 4.2.0 (Kafka 클라이언트 4.4.0 = 브로커와 같은 버전, spring-kafka 4.2), Gradle 9.9.2. 후속 2 Gateway에 쓸 Spring Cloud 2026.0(Gateway 5.1)이 Boot 4.2 기준이라 먼저 올림. 시나리오 12 CI 결과 |
 | #30 | 후속 2 A-1 auth-service: 회원가입·로그인(BCrypt, 아이디별 5회 실패 잠금), access token JWT RS256 + JWKS, refresh token `familyId.secret` 회전(Redis Lua compare-and-set)·동시 refresh 유예·재사용 탐지 시 family 폐기, 로그아웃·전체 로그아웃·로그인 기기 관리, Redis(6380), 시나리오 9(인증 부분), ADR 0008 |
 | #31 | 후속 2 A-2: Spring Cloud Gateway(:8000, WebFlux, 라우팅·JWT 1차 검증·`/api/admin/**` ADMIN·사용자별 rate limit), 다섯 서비스 resource server(`X-User-Id` → JWT `sub`, `@CurrentUserId`), auth-service 개발용 시드 사용자, 스크립트 토큰화(`scripts/lib/auth.sh`), 시나리오 9 Gateway·소유권 부분(`smoke-gateway.sh`), 빌드 설정 분리(`boot-app-conventions`) |
-| (이번 PR) | 문서: 후속 2 남은 계획(A-3 백엔드 보강 목록, F-1 템플릿 가져오기 결정·프론트엔드 준비 메모), 시나리오 9 CI 결과(PR #31) |
+| #32 | 문서: 후속 2 남은 계획(A-3 백엔드 보강 목록, F-1 템플릿 가져오기 결정·프론트엔드 준비 메모), 시나리오 9 CI 결과(PR #31) |
+| (이번 PR) | 후속 2 A-3-1: 내 주문 목록 `GET /orders`·내 결제 목록 `GET /payments`(커서 페이징, DTO 직접 조회, 인덱스 `(user_id, id)`), 주문 `Idempotency-Key`(`order_idempotency_keys` 선점, 같은 키 = 처음 주문 200, 다른 본문 422), 시나리오 10(`smoke-idempotency.sh`, CI 두 모드) |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·11·12를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·10·11·12를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -203,8 +204,8 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | 0 | Spring Boot 4.1.2 → 4.2.0 (Spring Cloud 2026.0 = Gateway 5.1 이 Boot 4.2 기준, 4.1 에 맞는 릴리스 없음) | 완료 PR #29 |
 | A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 완료 PR #30 |
 | A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 완료 PR #31 |
-| A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 다음 |
-| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | A-3-1 다음 |
+| A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 이번 PR |
+| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 다음 |
 | F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-3-2 다음. 템플릿 가져오기(아래 메모) |
 | F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
 
@@ -230,6 +231,16 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 9f~9i `scripts/smoke-gateway.sh`(CI 두 모드, smoke-saga 다음, `GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10`). 로컬 Debezium 모드에서 smoke-gateway·smoke-saga·smoke-auth·smoke-tracing PASS
 - 테스트: `GatewayRoutingTest` 6개(JDK HttpServer가 서비스·JWKS 흉내, Redis Testcontainers), 서비스 `@WebMvcTest`는 `@Import(SecurityConfig)` + `jwt()`로 바꾸고 토큰 없으면 401, 결제 장애 주입 ADMIN 확인 추가
 - 한계: 가입한 사용자는 포인트 계정이 없다(포인트 시드 1~4만). 가입을 알리는 이벤트(`UserRegistered`)는 필요해지면 auth-service에 outbox를 붙여서 (ADR 0008)
+
+**A-3-1 order·payment 조회 보강, 주문 Idempotency-Key (이번 PR) 에서 한 것 (결정·확인 사항)**
+- 내 주문 목록 `GET /orders?before=<orderId>&size=`(Gateway `/api/orders`), 내 결제 목록 `GET /payments?before=<paymentId>&size=`(Gateway `/api/payments`, 정확 경로를 라우트에 추가). 알림과 같은 커서 페이징(`size` 1~50, 기본 20, 최신순, 다음 쪽은 마지막 id). 경로에 사용자 id 없이 토큰 `sub`로만 거른다
+- 헥사고날 그대로: `port.in` `ListMyOrdersUseCase`·`ListMyPaymentsUseCase`(조회 DTO `OrderSummaryResult`·`PaymentSummaryResult`) → 조회 전용 서비스(`OrderQueryService`·`PaymentQueryService`) → `port.out` `Load*SummariesPort` → JdbcClient 어댑터. 주문 줄은 주문 id 목록으로 한 번에 읽어 쿼리 2개(N+1 없음). 결제 목록은 PG 거래 id를 내보내지 않는다. 결제 응답에 `updatedAt` 필드 추가
+- Flyway order V6 / payment V6: `(user_id, id)` 인덱스, 기존 `(user_id)` 인덱스는 앞부분이라 삭제
+- 주문 `Idempotency-Key`(선택, 1~100자 보이는 ASCII): `order_idempotency_keys (user_id, idempotency_key)` PK + `order_id`(orders FK, `deferrable initially deferred`: 키를 먼저 선점하고 주문을 나중에 넣으므로). 주문 트랜잭션 안에서 `insert … on conflict do nothing`으로 선점 → `processed_message`와 같은 원리로 동시 요청도 하나만 만든다. 같은 본문(줄은 상품 id 순 정렬·수량·단가·포인트의 SHA-256)이면 처음 주문을 `200` + `Idempotent-Replayed: true`, 다르면 `422`(새 `UnprocessableRequestException`). 키 선점 + 주문 + Saga + 커맨드 outbox = 한 트랜잭션
+- `PlaceOrderUseCase.placeOrder`가 `PlaceOrderResult(order, created)`를 돌려준다(컨트롤러가 201/200 구분)
+- 시나리오 10 `scripts/smoke-idempotency.sh`(CI 두 모드, smoke-gateway 다음, 사용자 3): 같은 키 두 번, 동시 5번, 다른 본문 422, 두 주문 COMPLETED·포인트 2건분만 차감, 목록 커서·다른 사용자에게 안 보임
+- 테스트: `OrderServiceTest`(키 6개), `OrderQueryAndIdempotencyIntegrationTest`(Postgres, 같은 키 8개 동시 → 주문·Saga·키 각 1행, 목록 커서), `PaymentSummaryPersistenceAdapterTest`, 컨트롤러 테스트, `GatewayRoutingTest`(목록 경로)
+- 한계: 키 보존 기간 정리 작업 없음. 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
 
 ### 프론트엔드 준비 메모 (2026-11-23 정리, A-3·F-1 시작 전에 읽기)
 
