@@ -45,6 +45,9 @@ class OrderSagaJpaEntity {
     @Column(name = "failure_reason", length = 200)
     private String failureReason;
 
+    @Column(name = "step_resends", nullable = false)
+    private int stepResends;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -64,8 +67,8 @@ class OrderSagaJpaEntity {
     }
 
     OrderSagaJpaEntity(UUID orderId, long userId, long pointAmount, long paidAmount, SagaState state,
-                       boolean pointUsed, String failureReason, Instant createdAt, Instant updatedAt,
-                       List<SagaHistoryEmbeddable> history) {
+                       boolean pointUsed, String failureReason, int stepResends, Instant createdAt,
+                       Instant updatedAt, List<SagaHistoryEmbeddable> history) {
         this.orderId = orderId;
         this.userId = userId;
         this.pointAmount = pointAmount;
@@ -73,17 +76,19 @@ class OrderSagaJpaEntity {
         this.state = state;
         this.pointUsed = pointUsed;
         this.failureReason = failureReason;
+        this.stepResends = stepResends;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.history = new ArrayList<>(history);
     }
 
     /** 진행 기록은 뒤에 붙기만 하므로 저장된 것 이후의 항목만 추가한다 */
-    void change(SagaState state, boolean pointUsed, String failureReason, Instant updatedAt,
+    void change(SagaState state, boolean pointUsed, String failureReason, int stepResends, Instant updatedAt,
                 List<SagaHistoryEmbeddable> fullHistory) {
         this.state = state;
         this.pointUsed = pointUsed;
         this.failureReason = failureReason;
+        this.stepResends = stepResends;
         this.updatedAt = updatedAt;
         for (int i = history.size(); i < fullHistory.size(); i++) {
             history.add(fullHistory.get(i));
@@ -116,6 +121,10 @@ class OrderSagaJpaEntity {
 
     String getFailureReason() {
         return failureReason;
+    }
+
+    int getStepResends() {
+        return stepResends;
     }
 
     Instant getCreatedAt() {

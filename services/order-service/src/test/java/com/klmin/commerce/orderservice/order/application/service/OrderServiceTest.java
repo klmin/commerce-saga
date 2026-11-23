@@ -216,6 +216,16 @@ class OrderServiceTest {
         }
 
         @Override
+        public List<UUID> findStuckOrderIds(Instant updatedBefore, int limit) {
+            return store.values().stream()
+                    .filter(s -> !s.state().isFinished() && !s.updatedAt().isAfter(updatedBefore))
+                    .sorted(java.util.Comparator.comparing(OrderSaga::updatedAt))
+                    .limit(limit)
+                    .map(OrderSaga::orderId)
+                    .toList();
+        }
+
+        @Override
         public void insert(OrderSaga saga) {
             store.put(saga.orderId(), copy(saga));
         }
@@ -228,7 +238,7 @@ class OrderServiceTest {
 
         private static OrderSaga copy(OrderSaga s) {
             return OrderSaga.restore(s.orderId(), s.userId(), s.pointAmount(), s.paidAmount(), s.state(),
-                    s.pointUsed(), s.failureReason(), s.history(), s.createdAt(), s.updatedAt());
+                    s.pointUsed(), s.failureReason(), s.stepResends(), s.history(), s.createdAt(), s.updatedAt());
         }
     }
 

@@ -3,8 +3,10 @@ package com.klmin.commerce.orderservice.order.adapter.out.persistence;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
 import com.klmin.commerce.orderservice.order.domain.SagaHistoryEntry;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,10 +31,15 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
     }
 
     @Override
+    public List<UUID> findStuckOrderIds(Instant updatedBefore, int limit) {
+        return repository.findStuckOrderIds(updatedBefore, Limit.of(limit));
+    }
+
+    @Override
     public void insert(OrderSaga saga) {
         repository.save(new OrderSagaJpaEntity(saga.orderId(), saga.userId(), saga.pointAmount(),
-                saga.paidAmount(), saga.state(), saga.pointUsed(), saga.failureReason(), saga.createdAt(),
-                saga.updatedAt(), toEmbeddables(saga.history())));
+                saga.paidAmount(), saga.state(), saga.pointUsed(), saga.failureReason(), saga.stepResends(),
+                saga.createdAt(), saga.updatedAt(), toEmbeddables(saga.history())));
     }
 
     // 같은 트랜잭션에서 잠가 조회한 영속 엔티티에 값만 옮긴다. 커밋 때 더티 체킹으로 UPDATE
@@ -40,7 +47,7 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
     public void update(OrderSaga saga) {
         OrderSagaJpaEntity entity = repository.findById(saga.orderId())
                 .orElseThrow(() -> new IllegalStateException("saga not found: " + saga.orderId()));
-        entity.change(saga.state(), saga.pointUsed(), saga.failureReason(), saga.updatedAt(),
+        entity.change(saga.state(), saga.pointUsed(), saga.failureReason(), saga.stepResends(), saga.updatedAt(),
                 toEmbeddables(saga.history()));
     }
 
@@ -52,7 +59,7 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
 
     private static OrderSaga toDomain(OrderSagaJpaEntity e) {
         return OrderSaga.restore(e.getOrderId(), e.getUserId(), e.getPointAmount(), e.getPaidAmount(),
-                e.getState(), e.isPointUsed(), e.getFailureReason(),
+                e.getState(), e.isPointUsed(), e.getFailureReason(), e.getStepResends(),
                 e.getHistory().stream()
                         .map(h -> new SagaHistoryEntry(h.getEvent(), h.getState(), h.getReason(), h.getOccurredAt()))
                         .toList(),

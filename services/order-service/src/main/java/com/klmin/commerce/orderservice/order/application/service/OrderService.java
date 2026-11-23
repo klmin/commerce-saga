@@ -1,7 +1,6 @@
 package com.klmin.commerce.orderservice.order.application.service;
 
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.klmin.commerce.orderservice.common.error.InvariantViolationException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.SagaNotFoundException;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
@@ -47,7 +46,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     private final SaveOrderPort saveOrderPort;
     private final OrderSagaPort sagaPort;
     private final SagaCommandPort commandPort;
-    private final OrderEventPort eventPort;
+    private final SagaActionExecutor executor;
     private final ProcessedMessagePort processedMessagePort;
     private final Clock clock;
 
@@ -58,7 +57,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
         this.saveOrderPort = saveOrderPort;
         this.sagaPort = sagaPort;
         this.commandPort = commandPort;
-        this.eventPort = eventPort;
+        this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort);
         this.processedMessagePort = processedMessagePort;
         this.clock = clock;
     }
@@ -109,7 +108,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
             return;
         }
         sagaPort.update(saga);
-        execute(action, saga, now);
+        executor.execute(action, saga, now);
     }
 
     @Override
@@ -118,38 +117,5 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
         return sagaPort.findByOrderId(query.orderId())
                 .filter(saga -> saga.userId() == query.userId())
                 .orElseThrow(() -> new SagaNotFoundException(query.orderId()));
-    }
-
-    private void execute(SagaAction action, OrderSaga saga, Instant now) {
-        UUID orderId = saga.orderId();
-        switch (action) {
-            case SagaAction.ReserveStock ignored -> commandPort.reserveStock(loadOrder(orderId));
-            case SagaAction.UsePoint usePoint -> commandPort.usePoint(orderId, saga.userId(), usePoint.amount());
-            case SagaAction.Pay pay -> commandPort.pay(orderId, saga.userId(), pay.amount());
-            case SagaAction.RefundPoint ignored -> commandPort.refundPoint(orderId);
-            case SagaAction.ReleaseStock ignored -> commandPort.releaseStock(orderId);
-            case SagaAction.Complete ignored -> {
-                Order order = loadOrder(orderId);
-                if (order.complete(now)) {
-                    saveOrderPort.update(order);
-                    eventPort.orderCompleted(order);
-                }
-            }
-            case SagaAction.Cancel cancel -> {
-                Order order = loadOrder(orderId);
-                if (order.cancel(cancel.reason(), now)) {
-                    saveOrderPort.update(order);
-                    eventPort.orderCancelled(order);
-                }
-            }
-            case SagaAction.Ignore ignored -> {
-                // handle() 에서 이미 걸렀다
-            }
-        }
-    }
-
-    private Order loadOrder(UUID orderId) {
-        return loadOrderPort.findById(orderId)
-                .orElseThrow(() -> new InvariantViolationException("saga exists but order is missing: " + orderId));
     }
 }
