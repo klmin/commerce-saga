@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 뒤의 서비스와 auth-service JWKS 는 JDK HttpServer 하나가 흉내 낸다(받은 경로와 헤더를 되돌려줌). Redis 는 Testcontainers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "GATEWAY_USER_RATE=1", "GATEWAY_USER_BURST=3"})
+        "GATEWAY_USER_RATE=1", "GATEWAY_USER_BURST=3", "GATEWAY_AUTH_RATE=1", "GATEWAY_AUTH_BURST=3"})
 @Testcontainers(disabledWithoutDocker = true)
 class GatewayRoutingTest {
 
@@ -142,6 +142,28 @@ class GatewayRoutingTest {
 
         assertThat(limited).isPositive();
         assertThat(get("/api/points/me", token(KEY, "22", List.of("USER"), 300)).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void auth_rate_limit_은_믿는_프록시_BFF_가_넘긴_브라우저_IP_마다_따로다() throws Exception {
+        // 테스트 클라이언트는 localhost 라 기본 설정(gateway.trusted-proxies = 루프백)에서 Next 서버처럼 믿는 프록시다
+        int limited = 0;
+        for (int i = 0; i < 8; i++) {
+            if (refreshFrom("198.51.100.1").statusCode() == 429) {
+                limited++;
+            }
+        }
+
+        assertThat(limited).isPositive();
+        // 같은 Next 서버를 거친 다른 브라우저는 영향이 없다
+        assertThat(refreshFrom("198.51.100.2").statusCode()).isNotEqualTo(429);
+    }
+
+    private HttpResponse<String> refreshFrom(String browserIp) throws Exception {
+        return send(HttpRequest.newBuilder(uri("/auth/refresh"))
+                .header("X-Forwarded-For", browserIp)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build());
     }
 
     private HttpResponse<String> get(String path, String token) throws Exception {

@@ -9,6 +9,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 - Java 25, Spring Boot 4.2, Gradle Kotlin DSL 멀티모듈 모노레포. 인증은 Spring Security (OAuth2 Resource Server, JWT RS256) + Redis (후속 2)
 - PostgreSQL(서비스별 DB), Flyway, Kafka(KRaft), Spring for Apache Kafka, Debezium(Kafka Connect, 3단계)
 - 테스트: JUnit 5, ArchUnit, Testcontainers(Postgres, Kafka)
+- 프론트엔드: Next.js 16 / React 19 / TypeScript / Tailwind 4 / shadcn/ui, Vitest·Playwright (`frontend/`, 명령은 frontend/README.md). Next 16 은 `frontend/node_modules/next/dist/docs/` 를 먼저 읽는다
 
 ## 구성
 
@@ -18,6 +19,7 @@ services/gateway/          API Gateway (Spring Cloud Gateway, WebFlux, DB 없음
 libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 토픽 이름만
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
+frontend/                  Next.js 화면 (App Router, Tailwind, shadcn/ui). Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다 (ADR 0011)
 build-logic/               공통 빌드 설정 (convention plugin)
 infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect, Redis, Tempo·Prometheus·Grafana)
 scripts/                   커넥터 등록, 부하 생성, 장애 주입, 스모크 테스트

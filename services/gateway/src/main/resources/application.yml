@@ -73,6 +73,11 @@ spring:
                 - Path=/api/admin/payment-faults
               filters: *user-api
 
+# 이 주소에서 온 연결만 X-Forwarded-For 를 믿는다 (rate limit 의 IP, ADR 0011). 화면의 BFF(Next 서버) 주소·대역.
+# 로컬은 Next 가 같은 PC 에서 돈다. 배포에서는 BFF 대역만 둔다. 비우면 아무도 믿지 않는다
+gateway:
+  trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:127.0.0.1,::1}
+
 management:
   endpoints:
     web:

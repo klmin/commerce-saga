@@ -106,7 +106,7 @@ family 와 목록을 함께 바꾸는 일(로그인, 회전, 삭제, 전체 삭�
 | `/api/**` | 로그인 사용자 `sub` (토큰 없이 열린 경로는 IP) | 20 / 40 (`GATEWAY_USER_RATE`, `GATEWAY_USER_BURST`) |
 | `/auth/**` | 클라이언트 IP | 5 / 20 (`GATEWAY_AUTH_RATE`, `GATEWAY_AUTH_BURST`) |
 
-넘으면 `429`. IP 는 TCP 연결 주소다. `X-Forwarded-For` 는 아무나 쓸 수 있어 믿지 않는다. 앞에 edge(Ingress)가 생기면 그 주소만 믿고 헤더를 읽도록 바꾼다(k8s 단계). 로그인 대입은 auth-service 가 아이디별로도 막는다. Redis 가 죽으면 `RedisRateLimiter` 는 요청을 통과시킨다(제한보다 가용성).
+넘으면 `429`. IP 는 TCP 연결 주소다. `X-Forwarded-For` 는 아무나 쓸 수 있어 믿지 않는다. 단 연결이 믿는 프록시(`GATEWAY_TRUSTED_PROXIES`, 화면의 Next 서버)에서 왔으면 그 헤더의 맨 오른쪽 값을 쓴다(F-1a, ADR 0011). 로그인 대입은 auth-service 가 아이디별로도 막는다. Redis 가 죽으면 `RedisRateLimiter` 는 요청을 통과시킨다(제한보다 가용성).
 
 ### 개발용 사용자
 

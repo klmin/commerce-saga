@@ -1,0 +1,46 @@
+name: frontend
+
+# Next.js 화면 (후속 2 F-1, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지.
+# 백엔드 전체 + Next 를 띄우는 브라우저 e2e(Playwright)는 로컬 시나리오로 두고, CI 에 넣을지는 F-2 끝에 정한다
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Docker 이미지 빌드 확인
+        run: docker build -t frontend .

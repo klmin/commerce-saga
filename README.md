@@ -6,7 +6,7 @@
 - DB 저장과 메시지 발행의 이중 쓰기 → **Transactional Outbox** + relay (스케줄러 → **Debezium CDC**)
 - at-least-once 전달로 같은 메시지가 여러 번 온다 → **멱등 처리**, 늦은 응답에 단계가 되돌아가지 않는 상태 머신
 
-> 3단계(신뢰성)까지 완료, `v0.3-reliability`가 완성 기준이다. 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정), 타임아웃·장애 복구(멈춘 Saga 재전송·보상, 결제 타임아웃 PG 조회 보정, 늦은 승인 자동 환불). 후속 1(관측성)도 완료: 분산 트레이싱(주문 한 건 = trace 하나), 메트릭·경보(결제 UNKNOWN·환불 대기·멈춘 Saga·lag·DLT·slot 적체). 후속 2(인증 + 프론트엔드) 진행 중: 자체 JWT auth-service, Spring Cloud Gateway, 서비스 JWT 검증까지 했고 다음은 Next.js 화면. 그다음 k8s → 검색. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md), 왜 이 규모에 서비스를 나눴는지는 [ADR 0000](docs/adr/0000-why-msa.md).
+> 3단계(신뢰성)까지 완료, `v0.3-reliability`가 완성 기준이다. 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정), 타임아웃·장애 복구(멈춘 Saga 재전송·보상, 결제 타임아웃 PG 조회 보정, 늦은 승인 자동 환불). 후속 1(관측성)도 완료: 분산 트레이싱(주문 한 건 = trace 하나), 메트릭·경보(결제 UNKNOWN·환불 대기·멈춘 Saga·lag·DLT·slot 적체). 후속 2(인증 + 프론트엔드) 진행 중: 자체 JWT auth-service, Spring Cloud Gateway, 서비스 JWT 검증, 프론트용 백엔드 보강(내 주문·결제 목록, 주문 Idempotency-Key, 가입 → 포인트 계정)까지 했고 Next.js 화면을 붙이는 중(로그인·회원가입 완료). 그다음 k8s → 검색. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md), 왜 이 규모에 서비스를 나눴는지는 [ADR 0000](docs/adr/0000-why-msa.md).
 
 ## 아키텍처 (3단계)
 
@@ -68,6 +68,7 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:notification-service:bootRun           # 8085 (선택)
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
+(cd frontend && npm ci && npm run dev -- --port 3001)     # 화면 http://localhost:3001 (3000 은 Grafana). frontend/README.md
 ```
 
 ```bash
@@ -112,7 +113,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 10 | [주문 Idempotency-Key: 같은 키 재요청·동시 5번 → 주문 1건, 다른 본문 422 / 내 주문·결제 목록](docs/scenarios/10-order-idempotency.md) | 통과 (CI `e2e`) |
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
-| 13 | [가입 → auth.events(UserRegistered, outbox) → 포인트 계정 하나·가입 축하 1,000P → 그 포인트로 주문](docs/scenarios/13-signup-point-account.md) | CI `e2e` |
+| 13 | [가입 → auth.events(UserRegistered, outbox) → 포인트 계정 하나·가입 축하 1,000P → 그 포인트로 주문](docs/scenarios/13-signup-point-account.md) | 통과 (CI `e2e`) |
 
 ## 설계 결정 (ADR)
 
@@ -125,6 +126,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0006 멱등 컨슈머: 메시지 ID 기록 + 주문별 기록, 두 겹](docs/adr/0006-idempotent-consumer.md)
 - [0007 Saga 타임아웃과 결제 타임아웃 보정: 재전송 후 포기하면 역순 보상, 결제는 PG 조회로 확정하고 늦은 승인은 자동 환불](docs/adr/0007-saga-timeout.md)
 - [0008 인증: 자체 auth-service 가 JWT(RS256 + JWKS) 발급, refresh token 은 회전(RTR)하고 재사용하면 그 기기 세션 폐기](docs/adr/0008-auth-self-issued-jwt.md)
+- [0011 프론트엔드: Next.js + Tailwind + shadcn/ui, Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다(BFF), refresh 는 proxy.ts](docs/adr/0011-frontend-nextjs-bff-session.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
 
@@ -133,6 +135,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 ```
 services/      order(오케스트레이터), inventory, point, payment(가짜 PG), notification, auth(회원·로그인·JWT 발급), gateway(Spring Cloud Gateway)
 libs/          messaging-contract(메시지 스키마), outbox(저장 + relay)
+frontend/      Next.js 화면 (로그인·회원가입, 주문 화면은 진행 중)
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)

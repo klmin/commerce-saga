@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #33 머지 후, A-3-2 가입 → 포인트 계정 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33) 완료, A-3-2(가입 → 포인트 계정) 이번 PR. 다음은 F-1 Next.js(템플릿 가져오기) → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-23 (PR #34 머지 후, F-1a Next.js 기본 구성·로그인 PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011) 이번 PR. 다음은 F-1b 주문 화면 → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 "후속 2 진행" 표의 **F-1 → F-2** 순서 (A-3-1·A-3-2 완료). 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. 다음 작업은 아래 "후속 2 진행" 표의 **F-1b → F-2** 순서 (A-3·F-1a 완료). 프론트엔드는 `frontend/README.md` 와 ADR 0011 을 먼저 읽는다. 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -111,7 +111,8 @@ flowchart LR
 | #31 | 후속 2 A-2: Spring Cloud Gateway(:8000, WebFlux, 라우팅·JWT 1차 검증·`/api/admin/**` ADMIN·사용자별 rate limit), 다섯 서비스 resource server(`X-User-Id` → JWT `sub`, `@CurrentUserId`), auth-service 개발용 시드 사용자, 스크립트 토큰화(`scripts/lib/auth.sh`), 시나리오 9 Gateway·소유권 부분(`smoke-gateway.sh`), 빌드 설정 분리(`boot-app-conventions`) |
 | #32 | 문서: 후속 2 남은 계획(A-3 백엔드 보강 목록, F-1 템플릿 가져오기 결정·프론트엔드 준비 메모), 시나리오 9 CI 결과(PR #31) |
 | #33 | 후속 2 A-3-1: 내 주문 목록 `GET /orders`·내 결제 목록 `GET /payments`(커서 페이징, DTO 직접 조회, 인덱스 `(user_id, id)`), 주문 `Idempotency-Key`(`order_idempotency_keys` 선점, 같은 키 = 처음 주문 200, 다른 본문 422), 시나리오 10(`smoke-idempotency.sh`, CI 두 모드) |
-| (이번 PR) | 후속 2 A-3-2: auth-service outbox(V2) → `auth.events` `UserRegistered`(키 userId) → point-service `AuthEventsListener` 가 멱등하게 계정 생성(가입 축하 1,000P, `processed_message` + `on conflict (user_id) do nothing`), Debezium `auth-outbox` 커넥터·`auth_svc` replication, 시나리오 13(`smoke-signup-points.sh`, CI 두 모드), 시나리오 10 CI 결과(PR #33) |
+| #34 | 후속 2 A-3-2: auth-service outbox(V2) → `auth.events` `UserRegistered`(키 userId) → point-service `AuthEventsListener` 가 멱등하게 계정 생성(가입 축하 1,000P, `processed_message` + `on conflict (user_id) do nothing`), Debezium `auth-outbox` 커넥터·`auth_svc` replication, 시나리오 13(`smoke-signup-points.sh`, CI 두 모드), 시나리오 10 CI 결과(PR #33) |
+| (이번 PR) | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34) |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·10·11·12·13을 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
@@ -206,8 +207,9 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 완료 PR #30 |
 | A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 완료 PR #31 |
 | A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 완료 PR #33 |
-| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 이번 PR |
-| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | 다음. 템플릿 가져오기(아래 메모) |
+| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 완료 PR #34 |
+| F-1a | Next.js 기본 구성(템플릿 가져오기, ADR 0011) + 로그인·회원가입·로그아웃·세션 refresh, CI `frontend` | 이번 PR |
+| F-1b | 상품 목록(고정 1~5), 주문 생성(Idempotency-Key), 내 주문 목록, 주문 상세(Saga 단계 타임라인·보상 경로) | 다음 |
 | F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
@@ -243,7 +245,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 테스트: `OrderServiceTest`(키 6개), `OrderQueryAndIdempotencyIntegrationTest`(Postgres, 같은 키 8개 동시 → 주문·Saga·키 각 1행, 목록 커서), `PaymentSummaryPersistenceAdapterTest`, 컨트롤러 테스트, `GatewayRoutingTest`(목록 경로)
 - 한계: 키 보존 기간 정리 작업 없음. 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
 
-**A-3-2 가입 → 포인트 계정 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**A-3-2 가입 → 포인트 계정 (PR #34) 에서 한 것 (결정·확인 사항)**
 - 메시지 계약(추가만): `UserRegistered(userId, registeredAt)`, 토픽 `Topics.AUTH_EVENTS = "auth.events"`(auth-service 소유). 키는 `userId`(주문과 상관없는 사용자 단위 사실이라 orderId 규칙의 예외, AGENTS.md 에 적음). 개인정보·비밀값은 싣지 않는다
 - auth-service: `libs/outbox`·`messaging-contract`·Kafka 의존 추가, Flyway `V2__outbox.sql`(traceparent 포함, 다른 서비스와 같은 모양), `port.out` `UserEventPort` → `adapter.out.messaging` `UserEventOutboxAdapter`. `signUp` 에서 사용자 저장 직후 같은 트랜잭션으로 outbox. 구독하는 토픽은 없다. A-1 때 "Kafka·outbox 없음"이던 것을 바꿨다
 - point-service: `AuthEventsListener`(이벤트 토픽: 관심 없는 타입 건너뜀, type 헤더 없음·본문·id·userId 이상은 DLT) → `OpenPointAccountUseCase` → `PointAccountService`(새 서비스 클래스, `PointService` 생성자는 그대로): `processed_message` 선점 → `PointAccount.open(userId, 가입 축하)` → `PointAccountPort.insertIfAbsent`(`on conflict (user_id) do nothing`). 이미 있는 계정(시드 등)은 그대로, 쓴 잔액을 되돌리지 않는다. 가입 축하 포인트 `point.account.signup-bonus`(`POINT_SIGNUP_BONUS`, 기본 1,000)
@@ -252,6 +254,18 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 테스트: `AuthServiceTest`·`AuthIntegrationTest`(outbox 행, 중복 가입은 행 없음. relay 는 `fixed-delay=1h` 로 돌지 않게), `PointAccountServiceTest`, `AuthEventsListenerTest`, `PointIntegrationTest`(Kafka 재전달·중복·늦은 이벤트)
 - 시나리오 10 문서에 PR #33 CI 결과
 - 한계: 가입 축하 지급은 `point_usages` 에 남지 않는다(F-2 포인트 내역 때 지급 기록을 따로). 가입 직후 계정이 생기기 전에 포인트를 쓰는 주문은 지금처럼 포인트 단계 실패 → 보상. 탈퇴·정지 이벤트 없음. 머지된 ADR 0008 의 "가입한 사용자에게 포인트 계정 없음" 한계는 고치지 않고 이 문서·시나리오 13 에 해결을 적는다
+
+**F-1a Next.js 기본 구성·로그인 (이번 PR) 에서 한 것 (결정·확인 사항)**
+- F-1 을 둘로 나눴다(추천안): F-1a 기본 구성·인증(이번), F-1b 주문 화면(상품·주문 생성·목록·상세 Saga 타임라인). 인증이 모든 화면의 바탕이고 한 PR 에 다 넣으면 리뷰가 너무 커서
+- 템플릿 `klmin/hexagonal-spring-next-template` main `4ca64fe` 의 `frontend/` 를 파일만 복사(메모의 `61c6ebc` 이후 `frontend/` 변경 없음). items 예시, `api:types`·`openapi-typescript` 제거. 응답은 zod 로 검증
+- 설계는 ADR 0011: 브라우저는 Next 만, Next 서버만 Gateway(`BACKEND_URL` 기본 :8000). 토큰은 Next 가 httpOnly·Secure·SameSite=Lax 쿠키 `cs_access`(토큰 수명 − 30초)·`cs_refresh` 로. 로그인·가입(바로 로그인)·로그아웃은 Server Action
+- `src/proxy.ts`(Next 16 의 Middleware): access 없고 refresh 있으면 auth-service refresh → 응답·이번 요청 모두 새 쿠키. 같은 refresh token 은 프로세스 안에서 한 번으로 묶고 결과를 10초 남김(옛 쿠키로 온 요청이 재사용 탐지에 걸리지 않게). 거절이면 쿠키 지우고 `/login?next=`. `next` 는 사이트 안 경로만
+- 홈 = 내 포인트(가입 직후 계정이 없으면 "만드는 중" 안내). 헤더에 사용자 번호(토큰 `sub` 표시용)·로그아웃
+- 개발 서버는 3001(3000 은 Grafana). `.claude/launch.json` 은 로컬용이라 커밋하지 않았다
+- 확인(로컬, 인프라 + auth·point·gateway jar + `next dev`): 브라우저로 로그인 실패·성공·로그아웃, `document.cookie` 빈 문자열, 가입 → "만드는 중" → 1,000P. curl 로 proxy refresh → 새 쿠키 2개, 10초 안 옛 토큰 → 같은 결과, 유예 지난 옛 토큰 → 쿠키 삭제 + `/login?next=%2Forders`(auth-service "재사용, 그 기기 세션 폐기"). Playwright `e2e/auth.spec.ts` 2개 통과
+- Playwright 첫 실행 실패: 로그인 실패 응답 뒤 React 가 폼을 초기화하는 시점이 테스트의 다음 입력보다 늦어 비밀번호가 지워졌다. 테스트가 새 화면에서 다시 로그인하게 고침(사람이 입력하는 속도에서는 생기지 않음)
+- CI `frontend`: format·lint·typecheck·Vitest(33개)·`next build`·Docker 빌드. 로컬 Node 24.13 은 engines(`^24.15`) 경고만 나고 동작한다. CI 는 Node 26
+- 한계: refresh 묶기는 Next 인스턴스 안에서만(인스턴스 사이는 백엔드 유예 20초). 브라우저 e2e 를 CI 에 넣을지는 F-2 끝에
 
 ### 프론트엔드 준비 메모 (2026-11-23 정리, A-3·F-1 시작 전에 읽기)
 
