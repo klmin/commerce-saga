@@ -10,8 +10,13 @@ values (1, 'user1', '$2a$10$3YheoqMdrLkFoYBPMUqULudxLCpR4yZ11vKA4uipdMogHLs.kgP2
        (100, 'admin', '$2a$10$3YheoqMdrLkFoYBPMUqULudxLCpR4yZ11vKA4uipdMogHLs.kgP2a', 'ACTIVE', now(), now())
 on conflict do nothing;
 
+-- 역할은 id 와 아이디가 모두 시드와 같은 행에만 준다. 이미 같은 id 의 다른(가입한) 사용자가 있으면
+-- 위 INSERT 는 건너뛰지만 여기서 그 사람에게 ADMIN 이 붙으면 안 된다
 insert into user_roles (user_id, role)
-values (1, 'USER'), (2, 'USER'), (3, 'USER'), (4, 'USER'), (100, 'USER'), (100, 'ADMIN')
+select u.id, seed.role
+from (values (1, 'user1', 'USER'), (2, 'user2', 'USER'), (3, 'user3', 'USER'), (4, 'user4', 'USER'),
+             (100, 'admin', 'USER'), (100, 'admin', 'ADMIN')) as seed (id, login_id, role)
+join users u on u.id = seed.id and u.login_id = seed.login_id
 on conflict do nothing;
 
 -- 가입으로 생기는 사용자는 1000 부터 (시드 id 와 겹치지 않게)

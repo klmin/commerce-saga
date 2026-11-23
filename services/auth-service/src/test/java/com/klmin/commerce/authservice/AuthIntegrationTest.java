@@ -71,6 +71,9 @@ class AuthIntegrationTest {
     @Autowired
     JdbcClient jdbc;
 
+    @Autowired
+    javax.sql.DataSource dataSource;
+
     private String loginId;
 
     @BeforeEach
@@ -204,6 +207,29 @@ class AuthIntegrationTest {
         mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"loginId\":\"%s\",\"password\":\"password2\"}".formatted(loginId.toUpperCase())))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void 개발용_시드_관리자는_ADMIN_이고_같은_id_의_다른_사용자에게는_역할을_주지_않는다() throws Exception {
+        assertThat(roles(100)).containsExactlyInAnyOrder("USER", "ADMIN");
+        try {
+            // 시드보다 먼저 가입한 일반 사용자가 id 100 을 차지한 DB 를 만든다
+            jdbc.sql("delete from user_roles where user_id = 100").update();
+            jdbc.sql("update users set login_id = 'mallory' where id = 100").update();
+            jdbc.sql("insert into user_roles (user_id, role) values (100, 'USER')").update();
+
+            new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+                    new org.springframework.core.io.ClassPathResource("db/dev-seed/R__dev_seed_users.sql")).execute(dataSource);
+
+            assertThat(roles(100)).containsExactly("USER");
+        } finally {
+            jdbc.sql("update users set login_id = 'admin' where id = 100").update();
+            jdbc.sql("insert into user_roles (user_id, role) values (100, 'ADMIN') on conflict do nothing").update();
+        }
+    }
+
+    private List<String> roles(long userId) {
+        return jdbc.sql("select role from user_roles where user_id = ?").param(userId).query(String.class).list();
     }
 
     private static String familyId(TokenResult tokens) {
