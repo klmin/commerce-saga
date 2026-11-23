@@ -1,5 +1,6 @@
 package com.klmin.commerce.orderservice.order.application.service;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.klmin.commerce.orderservice.common.error.InvariantViolationException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.SagaNotFoundException;
@@ -70,7 +71,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
         List<OrderLine> lines = command.lines().stream()
                 .map(l -> new OrderLine(l.productId(), l.quantity(), l.unitPrice()))
                 .toList();
-        Order order = Order.place(UUID.randomUUID(), command.userId(), lines, command.pointAmount(), now);
+        Order order = Order.place(UuidCreator.getTimeOrderedEpoch(), command.userId(), lines, command.pointAmount(), now);
         saveOrderPort.insert(order);
         sagaPort.insert(OrderSaga.start(order, now));
         commandPort.reserveStock(order);

@@ -11,6 +11,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("tools.jackson.core:jackson-databind")
     implementation("org.slf4j:slf4j-api")
+    // 메시지 id(outbox.id) 는 UUIDv7
+    implementation("com.github.f4b6a3:uuid-creator:6.1.1")
 
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")

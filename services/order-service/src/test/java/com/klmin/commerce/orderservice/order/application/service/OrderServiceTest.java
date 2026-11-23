@@ -69,6 +69,13 @@ class OrderServiceTest {
     }
 
     @Test
+    void placeOrder_assignsTimeOrderedUuidV7() {
+        Order order = place(1L, 0L);
+
+        assertThat(order.id().version()).isEqualTo(7);
+    }
+
+    @Test
     void happyPath_sendsEachCommandOnce_andPublishesOrderCompleted() {
         Order order = place(1L, 1_000L);
 

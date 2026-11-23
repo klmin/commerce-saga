@@ -1,5 +1,6 @@
 package com.klmin.commerce.paymentservice.payment.application.service;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PayCommand;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort.GatewayResult;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
@@ -58,9 +59,9 @@ class PaymentRecorder {
             return;
         }
         Payment payment = result.approved()
-                ? Payment.approved(UUID.randomUUID(), command.orderId(), command.userId(), command.amount(),
+                ? Payment.approved(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(), command.amount(),
                         result.transactionId(), clock.instant())
-                : Payment.declined(UUID.randomUUID(), command.orderId(), command.userId(), command.amount(),
+                : Payment.declined(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(), command.amount(),
                         result.reason(), clock.instant());
         paymentPort.insert(payment);
         reply(payment);

@@ -1,5 +1,6 @@
 package com.klmin.commerce.paymentservice.payment.adapter.out.pg;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Mode;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Settings;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayFaultPort;
@@ -78,7 +79,7 @@ class FakePaymentGateway implements PaymentGatewayPort, PaymentGatewayFaultPort 
     }
 
     private static String transactionId() {
-        return "fake-" + UUID.randomUUID();
+        return "fake-" + UuidCreator.getTimeOrderedEpoch();
     }
 
     private static void sleep(long millis) {

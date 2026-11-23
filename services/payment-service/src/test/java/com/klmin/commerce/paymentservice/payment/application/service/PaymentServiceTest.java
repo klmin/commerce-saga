@@ -46,6 +46,7 @@ class PaymentServiceTest {
 
         Payment payment = payments.store.get(orderId);
         assertThat(payment.status()).isEqualTo(PaymentStatus.APPROVED);
+        assertThat(payment.id().version()).isEqualTo(7);
         assertThat(replies.log).containsExactly("approved:" + orderId + ":" + payment.id());
     }
 

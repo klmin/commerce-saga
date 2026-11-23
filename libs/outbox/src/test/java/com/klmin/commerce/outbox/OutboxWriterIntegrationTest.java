@@ -88,6 +88,7 @@ class OutboxWriterIntegrationTest {
 
         UUID id = tx.execute(status -> writer.append("inventory.command", "order-1", "ReserveStock", Map.of("a", 1)));
 
+        assertThat(id.version()).isEqualTo(7);
         assertThat(jdbc.sql("select count(*) from outbox where id = ?").param(id).query(Long.class).single())
                 .isEqualTo(1);
     }

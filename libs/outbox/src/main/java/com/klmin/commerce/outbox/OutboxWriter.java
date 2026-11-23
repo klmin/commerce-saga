@@ -1,5 +1,6 @@
 package com.klmin.commerce.outbox;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,7 +54,7 @@ public class OutboxWriter {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public UUID append(String topic, String key, String type, Object payload) {
-        UUID id = UUID.randomUUID();
+        UUID id = UuidCreator.getTimeOrderedEpoch(); // UUIDv7
         jdbc.sql(INSERT)
                 .params(id, topic, key, type, json.writeValueAsString(payload))
                 .update();
