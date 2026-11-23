@@ -77,6 +77,7 @@ ledger() { psql_q payment_db "select approved || ',' || refunded from fake_pg_tr
 echo "== 2a. PG 응답이 클라이언트 타임아웃보다 늦음 → UNKNOWN → PG 조회로 승인 확정 → COMPLETED"
 points_before=$(points "$USER_ID")
 avail_before=$(stock "$PRODUCT_ID" | field available)
+reserved_before=$(stock "$PRODUCT_ID" | field reserved)
 
 fault DELAY "$SHORT_DELAY_MILLIS"
 id=$(place_order)
@@ -92,6 +93,10 @@ expect_eq "결제 상태" APPROVED "$(payment_status "$id")"
 expect_eq "PG 원장 (approved,refunded)" "true,false" "$(ledger "$id")"
 expect_eq "포인트 잔액" $(( points_before - POINT_AMOUNT )) "$(points "$USER_ID")"
 expect_eq "상품 $PRODUCT_ID available" $(( avail_before - 1 )) "$(stock "$PRODUCT_ID" | field available)"
+# 판매 확정(OrderCompleted → inventory reserved -1)은 주문 완료 뒤 이벤트로 처리된다. 끝날 때까지 기다려야
+# 2b 가 reserved 기준값을 확정 전 값으로 잡지 않는다
+wait_until "판매 확정 (reserved 원복)" 30 stock_reserved_is "$reserved_before"
+echo "  ok  판매 확정 → 상품 $PRODUCT_ID reserved = $reserved_before"
 
 echo "== 2b. PG 가 Saga 대기 한도보다 늦게 승인 → 결제 취소·보상 → 늦은 승인 자동 환불"
 points_before=$(points "$USER_ID")
