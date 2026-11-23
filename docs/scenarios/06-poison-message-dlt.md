@@ -74,7 +74,27 @@ PASS
 
 d에서 같은 메시지가 원래 토픽에 두 번 들어갔지만(`@3`, `@4`) 반영은 한 번이다. 재처리 도구가 진행 상황을 기억하지 않아도 되는 이유다.
 
-CI 결과는 이 PR의 `e2e` 실행 로그로 채운다.
+CI [2026-11-22 실행](https://github.com/klmin/commerce-saga/actions/runs/45035791683) (PR #13, 스케줄러 relay):
+
+```
+== 6a. 깨진 메시지는 DLT 로 격리, 같은 주문(파티션)의 다음 메시지는 정상 처리
+  ok  다음 메시지(ReleaseStock) 처리됨 -> 파티션 막힘 없음
+== 6b. DLT 조회: 실패 원인과 원래 위치
+      [1:0] key=f7db3e6d-... type=ReserveStock id=17e68829-... from=inventory.command/1@3
+          error: tools.jackson.core.exc.StreamReadException: Listener method '...' threw exception; Unexpected character ('n' (code 110)): was expecting double-quote to start property name ...
+          value: {not json
+  ok  깨진 메시지가 원인(JSON 파싱 실패)과 함께 보존됨
+== 6c. 고친 뒤 재처리: DLT 의 정상 메시지를 원래 토픽으로 다시 보냄
+      [0:0] replayed -> inventory.command/0@0 (key=42022185-... type=ReserveStock id=74439736-...)
+  ok  상품 1 reserved(재처리 후) = 1
+== 6d. 같은 메시지를 한 번 더 재처리 -> 반영·응답 없음 (id 그대로)
+      [0:0] replayed -> inventory.command/0@1 (key=42022185-... type=ReserveStock id=74439736-...)
+  ok  StockReserved 응답 수 = 1
+  ok  상품 1 reserved(두 번째 재처리 후) = 1
+PASS
+```
+
+지금은 CI `e2e`가 relay 두 모드(scheduler, debezium)에서 매 PR마다 돈다.
 
 ## 관련 테스트
 

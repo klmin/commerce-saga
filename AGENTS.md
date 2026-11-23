@@ -94,7 +94,7 @@ common/error, common/web, common/config
 - 도메인 규칙 위반은 `DomainValidationException`(400), 없는 리소스는 `NotFoundException` 상속(404). 오류 응답은 Problem Details
 - 스키마 변경은 Flyway `V{n}__설명.sql`로만. 머지된 마이그레이션은 고치지 않는다
 - 현재 시각은 `Clock` Bean 주입 (`Instant.now()` 직접 호출 X)
-- 사용자 식별: 1~3단계는 `X-User-Id` 헤더, 4단계부터 JWT. **리소스 조회·변경 시 소유권을 서비스 내부에서 검사한다**
+- 사용자 식별: 1~3단계는 `X-User-Id` 헤더, 후속 2(인증)부터 JWT. **리소스 조회·변경 시 소유권을 서비스 내부에서 검사한다**
 
 ### 테스트
 
