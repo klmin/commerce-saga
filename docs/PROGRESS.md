@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #30 머지 후, 후속 2 A-2 Gateway·서비스 JWT 검증 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(이번 PR). 다음은 F-1 Next.js 기본 + 로그인·주문 화면**
+- 마지막 갱신: 2026-11-23 (PR #31 머지 후, 후속 2 남은 계획 정리 PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료. 다음은 A-3 프론트용 백엔드 보강 → F-1 Next.js(템플릿 가져오기)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 **후속 2의 F-1 (Next.js 기본 구성 + 로그인·회원가입·주문 화면)**. 아래 "후속 2 진행" 절의 PR 순서와 "후속 2 설계 메모"(프론트엔드)대로 하고, 시작할 때 ADR 0011(프론트엔드)을 남긴다. **템플릿(`hexagonal-spring-next-template/frontend`) 위치를 먼저 사용자에게 묻는다(이 PC에 없음).** 백엔드 API 는 Gateway(:8000)의 `/auth/**`·`/api/**`, 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md). main에서 `feat/frontend` 같은 브랜치를 만든다
+2. 다음 작업은 아래 "후속 2 진행" 표의 **A-3(프론트가 쓸 백엔드 보강) → F-1(Next.js, 템플릿 가져오기)**. 먼저 "프론트엔드 준비 메모"를 읽는다. A-3 범위 중 사용자 확인이 필요하다고 적힌 항목(상품 카탈로그·가격, 관리자 DLT API)은 시작할 때 사용자에게 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -45,7 +45,7 @@
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
-| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 auth-service PR #30, A-2 Gateway·JWT) |
+| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 auth-service PR #30, A-2 Gateway·JWT PR #31. 다음 A-3 → F-1 → F-2) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
@@ -108,7 +108,8 @@ flowchart LR
 | #28 | 후속 1 O-2 메트릭·경보: 서비스 `/actuator/prometheus`(Saga·결제·outbox·slot 메트릭, 자기 DB 기준), kafka-exporter(lag·DLT), Prometheus 경보 규칙 10개, Grafana 대시보드, 시나리오 12, ADR 0013 메트릭·경보 부분 |
 | #29 | Spring Boot 4.1.2 → 4.2.0 (Kafka 클라이언트 4.4.0 = 브로커와 같은 버전, spring-kafka 4.2), Gradle 9.9.2. 후속 2 Gateway에 쓸 Spring Cloud 2026.0(Gateway 5.1)이 Boot 4.2 기준이라 먼저 올림. 시나리오 12 CI 결과 |
 | #30 | 후속 2 A-1 auth-service: 회원가입·로그인(BCrypt, 아이디별 5회 실패 잠금), access token JWT RS256 + JWKS, refresh token `familyId.secret` 회전(Redis Lua compare-and-set)·동시 refresh 유예·재사용 탐지 시 family 폐기, 로그아웃·전체 로그아웃·로그인 기기 관리, Redis(6380), 시나리오 9(인증 부분), ADR 0008 |
-| (이번 PR) | 후속 2 A-2: Spring Cloud Gateway(:8000, WebFlux, 라우팅·JWT 1차 검증·`/api/admin/**` ADMIN·사용자별 rate limit), 다섯 서비스 resource server(`X-User-Id` → JWT `sub`, `@CurrentUserId`), auth-service 개발용 시드 사용자, 스크립트 토큰화(`scripts/lib/auth.sh`), 시나리오 9 Gateway·소유권 부분(`smoke-gateway.sh`), 빌드 설정 분리(`boot-app-conventions`) |
+| #31 | 후속 2 A-2: Spring Cloud Gateway(:8000, WebFlux, 라우팅·JWT 1차 검증·`/api/admin/**` ADMIN·사용자별 rate limit), 다섯 서비스 resource server(`X-User-Id` → JWT `sub`, `@CurrentUserId`), auth-service 개발용 시드 사용자, 스크립트 토큰화(`scripts/lib/auth.sh`), 시나리오 9 Gateway·소유권 부분(`smoke-gateway.sh`), 빌드 설정 분리(`boot-app-conventions`) |
+| (이번 PR) | 문서: 후속 2 남은 계획(A-3 백엔드 보강 목록, F-1 템플릿 가져오기 결정·프론트엔드 준비 메모), 시나리오 9 CI 결과(PR #31) |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·11·12를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
@@ -195,14 +196,15 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 12 (`scripts/smoke-alerts.sh`, CI 두 모드, 시나리오 11 다음): 12a 깨진 메시지 → `payment.command.DLT` → `DeadLetterMessage`, 12b PG 지연 45초 → `SagaTimeoutGiveUp`·`PaymentResultUnknown` firing → 환불 후 해제. 경보가 이미 firing 중일 수 있어 메트릭 값 증가도 함께 확인. 로컬 Debezium 모드 PASS
 - 테스트: `SagaStatsPersistenceAdapterTest`, `PaymentStatsPersistenceAdapterTest`, `OutboxWriterIntegrationTest`(OutboxMetrics)
 
-### 후속 2 진행 (PR 4개, 2026-11-23 사용자 합의)
+### 후속 2 진행 (2026-11-23 사용자 합의: A-1·A-2·F-1·F-2, 이후 A-3 추가 제안)
 
 | 순서 | PR | 상태 |
 |---|---|---|
 | 0 | Spring Boot 4.1.2 → 4.2.0 (Spring Cloud 2026.0 = Gateway 5.1 이 Boot 4.2 기준, 4.1 에 맞는 릴리스 없음) | 완료 PR #29 |
 | A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 완료 PR #30 |
-| A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 이번 PR |
-| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | 다음. 템플릿 위치를 사용자에게 묻는다 |
+| A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 완료 PR #31 |
+| A-3 | 프론트가 쓸 백엔드 보강: 내 주문 목록, 가입 시 포인트 계정(`UserRegistered`, auth-service outbox), 주문 `Idempotency-Key`(브리프 시나리오 10), 내 결제 목록. 범위는 아래 "프론트엔드 준비 메모" | 다음 (추천 순서, 사용자 확인) |
+| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-3 다음. 템플릿은 가져오기로 결정(아래 메모) |
 | F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
@@ -216,7 +218,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 테스트 68개: `RefreshFamilyTest`, `RefreshTokenTest`, `UserTest`, `AuthServiceTest`(인메모리 포트), `AuthControllerTest`(쿠키 속성), `AuthIntegrationTest`(Postgres + Redis, JWKS 서명 검증, 동시 refresh 8개 → 회전 1번), ArchUnit
 - 시나리오 9 인증 부분 `scripts/smoke-auth.sh` (CI 두 모드, 서비스 기동 직후, `AUTH_REFRESH_GRACE=2s`). 로컬 PASS. Prometheus 가 auth-service(8086)도 긁는다(`ServiceDown` 대상)
 
-**A-2 Gateway·서비스 JWT 검증 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**A-2 Gateway·서비스 JWT 검증 (PR #31) 에서 한 것 (결정·확인 사항)**
 - `services/gateway` (8000, 이 PC는 8080을 다른 앱이 씀): Spring Cloud Gateway 2026.0(Gateway 5.1) **WebFlux**. `RedisRateLimiter`가 리액티브 쪽이라 이렇게 했다. 빌드 설정은 `commerce.boot-app-conventions`(관측성·JWT 검증·테스트 공통)와 `commerce.service-conventions`(서블릿 + validation)로 나눴다
 - 라우팅: `/auth/**`·JWKS → auth-service(토큰 없이), `/api/{orders,stocks,points,payments,notifications}/**` → 각 서비스(`StripPrefix=1`), `/api/admin/payment-faults` → payment `/admin/payment-faults`(ADMIN). 나머지 경로는 거부. 들어온 `X-User-Id`는 지운다
 - rate limit: `/api/**`는 사용자(sub)별 초당 20·버스트 40, `/auth/**`는 IP별 초당 5·버스트 20(`GATEWAY_*` 환경 변수). IP는 TCP 주소(XFF 안 믿음)
@@ -227,6 +229,38 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 9f~9i `scripts/smoke-gateway.sh`(CI 두 모드, smoke-saga 다음, `GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10`). 로컬 Debezium 모드에서 smoke-gateway·smoke-saga·smoke-auth·smoke-tracing PASS
 - 테스트: `GatewayRoutingTest` 6개(JDK HttpServer가 서비스·JWKS 흉내, Redis Testcontainers), 서비스 `@WebMvcTest`는 `@Import(SecurityConfig)` + `jwt()`로 바꾸고 토큰 없으면 401, 결제 장애 주입 ADMIN 확인 추가
 - 한계: 가입한 사용자는 포인트 계정이 없다(포인트 시드 1~4만). 가입을 알리는 이벤트(`UserRegistered`)는 필요해지면 auth-service에 outbox를 붙여서 (ADR 0008)
+
+### 프론트엔드 준비 메모 (2026-11-23 정리, A-3·F-1 시작 전에 읽기)
+
+**백엔드는 프론트에 아직 부족하다 (A-3).** A-2까지로 인증·Gateway·소유권은 끝났지만, 화면이 쓸 API 중 없는 것이 있다. 지금 있는 API(Gateway 기준): `POST /auth/signup|login|refresh|logout|logout-all`, `GET/DELETE /auth/sessions`, `POST /api/orders`, `GET /api/orders/{id}`, `GET /api/orders/{id}/saga`, `GET /api/stocks/{productId}`, `GET /api/points/me`(잔액만), `GET /api/payments/orders/{orderId}`, `GET /api/notifications/me`(커서 페이징), `GET/PUT /api/admin/payment-faults`
+
+| # | 없는 것 | 왜 필요 | 제안 | 결정 |
+|---|---|---|---|---|
+| 1 | 내 주문 목록 (`GET /orders?before=&size=`) | 주문 목록 화면 | order-service, 알림처럼 커서 페이징, DTO 직접 조회 | A-3 에서 (추천) |
+| 2 | 가입한 사용자의 포인트 계정 | 지금은 시드 1~4만 계정이 있어, 새로 가입하면 포인트를 쓰는 주문이 실패한다 | auth-service 에 outbox 를 붙여 `UserRegistered`(`auth.events`, 키 = userId) → point-service 가 멱등하게 계정 생성(가입 축하 포인트). 분산 정합성 주제와도 맞음 | A-3 에서 (추천) |
+| 3 | 주문 `Idempotency-Key` (브리프 시나리오 10) | 결제 버튼 두 번·새로고침에도 주문 1건 | order-service 에 `(user_id, idempotency_key)` 유니크 + 같은 키면 처음 주문 반환. 시나리오 10 문서·스크립트 | A-3 에서 (추천) |
+| 4 | 내 결제 목록 (`GET /payments`) | 결제 내역 화면 | payment-service, 커서 페이징 | A-3 또는 F-2 |
+| 5 | 상품 카탈로그(이름·가격) | 상품 목록·주문 화면. 지금은 재고(수량)만 있고 **가격을 클라이언트가 보낸다**(`unitPrice`) | (a) 프론트에 상품 1~5 를 고정 목록으로 두고 가격 문제는 한계로 기록 (b) product 정보를 inventory 에 넣고 주문 시 가격을 서버가 정함(주문 Saga 변경 큼) (c) 후속 4(검색, product-service) 때 | **사용자 확인** (추천 a, 가격 신뢰 문제는 README 한계에) |
+| 6 | 관리자 DLT 조회·재처리 API | 관리자 화면 | 지금은 CLI(`tools/dlt-replay`)뿐. HTTP 로 내려면 어느 서비스가 맡을지(새 admin 서비스 vs 도구를 서버로) 정해야 함 | **사용자 확인** (추천: F-2 관리자 화면은 결제 장애 주입만, DLT 는 Kafka UI 링크) |
+| 7 | 포인트 사용 내역 | 포인트 화면 | point-service `point_usages` 를 내 것만 조회 | F-2 때 필요하면 |
+
+A-3 를 한 PR 로 할지 (1·2·3) / (4·7) 로 나눌지는 시작할 때 사용자에게 묻는다.
+
+**F-1 템플릿: 가져온다 (사용자 결정).** 사용자 공개 저장소 `klmin/hexagonal-spring-next-template` 의 `frontend/`(확인 시점 main `61c6ebc`, 2026-11-23)를 이 저장소 `frontend/` 로 **파일만 복사**한다(git 이력 X, 가져온 커밋은 ADR 0011 에 적음).
+- 들어 있는 것: Next 16.4 App Router·서버 액션, React 19.3, `server-only` API 클라이언트(`src/lib/api/client.ts`, Problem Details → `ApiError`, 10초 타임아웃, 요청 시점 env), zod env(`src/lib/env.ts`, `BACKEND_URL`), Tailwind 4 + **shadcn/ui 이미 설정됨**(`components.json`, button·card·input·label·textarea), Vitest + Testing Library, Playwright(`e2e/`), ESLint·Prettier, Dockerfile, Node 22/24+
+- 지울 것: 예시 `items` CRUD(`src/app/items`, `src/lib/api/items*`)
+- **API 타입은 zod 로 직접 쓴다** (사용자 결정). 템플릿의 `api:types`(openapi-typescript, `../openapi/openapi.json`)는 우리 서비스에 OpenAPI 문서가 없어 스크립트·`schema.d.ts` 를 빼고, 응답을 zod 스키마로 검증한다(API 가 열 개 남짓)
+- 템플릿 `frontend/AGENTS.md` 의 경고: Next 16 은 학습 데이터와 다르니 `node_modules/next/dist/docs/` 를 먼저 읽을 것
+- 구조: 템플릿 기본형(라우트 colocation), 화면이 늘면 `features/<기능>/{api,components}` (설계 메모)
+- `BACKEND_URL` = Gateway `http://localhost:8000`. Next 서버만 Gateway 를 부른다(브라우저는 Next 만). CORS 불필요
+
+**F-1 인증 흐름 (ADR 0008 과 맞출 것)**
+- 로그인: 서버 액션이 `POST /auth/login` → 받은 access token 과 응답 `Set-Cookie` 의 refresh token 을 **Next 가 브라우저에 httpOnly·Secure·SameSite=Lax 쿠키로** 심는다(localStorage 금지)
+- API 호출: 서버에서 access 쿠키를 `Authorization: Bearer` 로 붙인다
+- refresh: middleware(또는 서버 헬퍼)가 access 만료면 `POST /auth/refresh` 에 refresh 쿠키를 `Cookie: refresh_token=…` 로 넣고 **`X-Requested-With` 헤더를 반드시 붙인다**(없으면 403). 응답에 `Set-Cookie` 가 없으면(동시 refresh 유예) refresh 쿠키는 그대로 두고 access 만 바꾼다. 같은 사용자의 동시 refresh 는 single-flight 로 묶는다
+- 401 이면 `/login`, 로그아웃은 `POST /auth/logout`(+ `X-Requested-With`) 후 두 쿠키 삭제
+- 개발 사용자 `user1`~`user4` / `admin`, 비밀번호 `local-dev-pass` (README)
+- F-1 e2e(Playwright)를 CI 에 넣을지(백엔드 전체 + Next 를 띄워야 함)는 F-1 에서 정한다
 
 ### 후속 2 설계 메모 (2026-11-23 사용자와 정리. 인증 부분은 ADR 0008 로 남김)
 
