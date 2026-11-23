@@ -21,8 +21,8 @@ import java.util.UUID;
 public class OutboxWriter {
 
     private static final String INSERT = """
-            insert into outbox (id, aggregatetype, aggregateid, type, payload)
-            values (?, ?, ?, ?, ?::jsonb)
+            insert into outbox (id, aggregatetype, aggregateid, type, payload, traceparent)
+            values (?, ?, ?, ?, ?::jsonb, ?)
             """;
 
     private static final String DELETE = "delete from outbox where id = ?";
@@ -30,9 +30,10 @@ public class OutboxWriter {
     private final JdbcClient jdbc;
     private final JsonMapper json;
     private final boolean deleteAfterInsert;
+    private final OutboxTraceContext traceContext;
 
     public OutboxWriter(JdbcClient jdbc, JsonMapper json) {
-        this(jdbc, json, false);
+        this(jdbc, json, false, OutboxTraceContext.NONE);
     }
 
     /**
@@ -40,9 +41,17 @@ public class OutboxWriter {
      *                          테이블에서 행을 읽어 발행하므로 false 여야 한다
      */
     public OutboxWriter(JdbcClient jdbc, JsonMapper json, boolean deleteAfterInsert) {
+        this(jdbc, json, deleteAfterInsert, OutboxTraceContext.NONE);
+    }
+
+    /**
+     * @param traceContext 넣는 시점의 trace 문맥. 값이 있으면 outbox.traceparent 에 저장해 relay 가 헤더로 싣는다
+     */
+    public OutboxWriter(JdbcClient jdbc, JsonMapper json, boolean deleteAfterInsert, OutboxTraceContext traceContext) {
         this.jdbc = jdbc;
         this.json = json;
         this.deleteAfterInsert = deleteAfterInsert;
+        this.traceContext = traceContext;
     }
 
     /**
@@ -56,7 +65,7 @@ public class OutboxWriter {
     public UUID append(String topic, String key, String type, Object payload) {
         UUID id = UuidCreator.getTimeOrderedEpoch(); // UUIDv7
         jdbc.sql(INSERT)
-                .params(id, topic, key, type, json.writeValueAsString(payload))
+                .params(id, topic, key, type, json.writeValueAsString(payload), traceContext.currentTraceparent())
                 .update();
         if (deleteAfterInsert) {
             jdbc.sql(DELETE).params(id).update();

@@ -47,7 +47,8 @@ class OutboxWriterIntegrationTest {
                     aggregateid   varchar(100) not null,
                     type          varchar(100) not null,
                     payload       jsonb        not null,
-                    created_at    timestamptz  not null default now()
+                    created_at    timestamptz  not null default now(),
+                    traceparent   varchar(55)
                 )""").update();
         jdbc.sql("truncate outbox").update();
         jdbc.sql("select pg_drop_replication_slot(slot_name) from pg_replication_slots where slot_name = ?")
@@ -91,6 +92,28 @@ class OutboxWriterIntegrationTest {
         assertThat(id.version()).isEqualTo(7);
         assertThat(jdbc.sql("select count(*) from outbox where id = ?").param(id).query(Long.class).single())
                 .isEqualTo(1);
+    }
+
+    @Test
+    void 넣는_시점의_traceparent_를_저장하고_Debezium_도_WAL_에서_읽을_수_있다() {
+        String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        var scheduler = new OutboxWriter(jdbc, json, false, () -> traceparent);
+        var debezium = new OutboxWriter(jdbc, json, true, () -> traceparent);
+        var noTrace = new OutboxWriter(jdbc, json, false, OutboxTraceContext.NONE);
+
+        UUID id = tx.execute(status -> scheduler.append("inventory.command", "order-1", "ReserveStock", Map.of("a", 1)));
+        UUID cdcId = tx.execute(status -> debezium.append("inventory.command", "order-2", "ReserveStock", Map.of("a", 1)));
+        UUID plainId = tx.execute(status -> noTrace.append("inventory.command", "order-3", "ReserveStock", Map.of("a", 1)));
+
+        assertThat(traceparentOf(id)).isEqualTo(traceparent);
+        assertThat(traceparentOf(plainId)).isNull();
+        assertThat(walChanges()).anySatisfy(c -> assertThat(c).startsWith("table public.outbox: INSERT:")
+                .contains(cdcId.toString())
+                .contains("traceparent[character varying]:'" + traceparent + "'"));
+    }
+
+    private String traceparentOf(UUID id) {
+        return jdbc.sql("select traceparent from outbox where id = ?").param(id).query(String.class).list().getFirst();
     }
 
     private long outboxCount() {

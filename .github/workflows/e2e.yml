@@ -1,6 +1,6 @@
 name: e2e
 
-# 인프라(docker-compose) + 네 서비스(inventory, point, payment, order)를 실제로 띄우고 Saga 스모크 테스트를 돌린다.
+# 인프라(docker-compose) + 서비스(inventory, point, payment, order, notification)를 실제로 띄우고 Saga 스모크 테스트를 돌린다.
 # outbox relay 두 모드(scheduler: libs/outbox 스케줄러, debezium: Kafka Connect + Outbox Event Router)에서 같은 시나리오를 돌린다
 on:
   push:
@@ -51,7 +51,11 @@ jobs:
 
       # README 의 기동 명령 그대로. postgres-init(서비스 DB·계정), kafka-init(토픽)까지 끝나야 성공한다
       - name: 인프라 기동
-        run: docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
+        run: |
+          docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
+          # Tempo 이미지에는 healthcheck 를 둘 도구가 없어 여기서 준비를 기다린다 (시나리오 11)
+          for i in $(seq 1 60); do curl -sf http://localhost:3210/ready > /dev/null && break; sleep 2; done
+          curl -sf http://localhost:3210/ready
 
       - name: 서비스 기동
         run: |
@@ -120,6 +124,10 @@ jobs:
       # PG 지연을 주입한다. 짧은 지연은 PG 조회로 승인 확정 후 완료, 긴 지연은 결제 취소·보상 후 늦은 승인 자동 환불
       - name: 결제 타임아웃 보정·늦은 승인 자동 환불 (시나리오 2)
         run: bash scripts/smoke-payment-timeout.sh
+
+      # 주문 한 건(정상, 결제 실패 보상)이 다섯 서비스를 거치는 동안 trace 하나로 이어지는지, 주문 id 로 찾히는지
+      - name: 분산 트레이싱, Saga 한 건 = trace 하나 (시나리오 11)
+        run: bash scripts/smoke-tracing.sh
 
       # 커넥터를 멈춘 동안 낸 주문이 재개 후 모두 완료되는지(유실 0), 그동안 slot 이 WAL 을 붙잡는지, heartbeat 로 다시 줄어드는지
       - name: 커넥터 중단 후 재개, 유실 0 (시나리오 5)
