@@ -44,11 +44,11 @@
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | **진행 중**. 끝나면 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 3단계 후 |
-| 후속 2 | 4단계 인증 (api-gateway, auth-service RS256 JWT + JWKS, Redis) | |
+| 후속 2 | 4단계 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 관측성 다음 |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
-후속 순서는 2026-11-22에 사용자와 합의했다. 브리프 5절은 아직 옛 순서(4~6단계 필수)라 3-E에서 고친다.
+후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절은 아직 옛 순서(4~6단계 필수)라 3-E에서 고친다.
 
 ## 2. 현재 아키텍처
 
@@ -96,6 +96,7 @@ flowchart LR
 | #18 | README 진행 상태를 3단계 기준으로 갱신 |
 | #19 | 3-E에 ADR 0000 대안 비교 항목 추가 |
 | #20 | 3-C-1 Debezium relay: Kafka 4.4.0, Kafka Connect + Debezium Outbox Event Router, 서비스별 커넥터·등록 스크립트, `OUTBOX_RELAY_ENABLED` 모드 전환, e2e matrix(scheduler/debezium) |
+| (이번 PR) | 후속 2 범위에 프론트엔드 추가, 인증(자체 JWT·RTR)·Gateway·프론트 설계 메모 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다.
 
@@ -135,6 +136,28 @@ PR 두 개로 나눴다. 3-C-1(relay 교체)은 완료, 다음은 **3-C-2(시나
   - 메인 Saga 방식의 대안 비교도 함께 적는다: ① 동기 API 오케스트레이션 + 이벤트 뒷처리 + 대사 배치(실무에서 가장 흔함, 대신 참여 서비스 장애가 곧 주문 장애) ② Temporal 같은 워크플로 엔진(Saga 상태·재시도·타임아웃을 엔진이 맡고 Kafka는 이벤트용으로 남음, 대신 이 프로젝트가 증명하려는 메커니즘이 엔진 뒤로 숨고 운영 인프라가 늘어남) ③ 순수 코레오그래피(흐름이 흩어져 보상 순서 관리가 어려움). 결론: 메커니즘을 직접 구현·증명하려는 목적과 장애 격리 때문에 Kafka 커맨드/응답 오케스트레이션을 택함. 머지된 ADR 0003은 고치지 않는다
 - 시나리오 3·6 문서의 "CI 결과"를 PR #12·#13의 e2e 로그로 채우기 (#12: actions run `45033520460`)
 - README 아키텍처를 3단계 기준으로, 시나리오 표·ADR 목록 정리
+
+### 후속 2 설계 메모 (2026-11-23 사용자와 정리, 시작할 때 ADR로 남긴다)
+
+**인증: 자체 JWT auth-service (Spring Authorization Server는 쓰지 않음)**
+- 로그인은 자체 회원(아이디·비밀번호) 하나, 클라이언트는 우리 Next 앱뿐이다. OAuth2/OIDC(SAS, Keycloak)는 외부 앱에 로그인 제공·소셜 로그인·여러 앱 SSO가 필요할 때 의미가 있어 지금은 과하다. password grant가 폐기돼 SAS로는 Next 화면에서 바로 로그인할 수 없다는 점도 이유. 필요해지면 서비스 쪽(resource server)은 그대로 두고 auth-service만 바꾼다
+- auth-service (API만, 화면 없음, `auth_db` + Redis): `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`(+ 전체 로그아웃), `GET /.well-known/jwks.json`. 비밀번호 bcrypt/argon2, 로그인 시도 제한
+- access token: JWT RS256, 10~15분, `kid` 포함. 개인키는 auth-service만. 키 교체 때 JWKS에 새 키·이전 키를 함께 노출
+- 검증: Gateway 1차(JWKS 캐시, 실패면 401) + 각 서비스 resource server 재검증(내부망 무조건 신뢰 안 함). 소유권 검사는 지금처럼 서비스 안에서, `X-User-Id` 대신 JWT `sub`와 비교. 일반 API 요청마다 auth-service를 부르지 않는다
+- refresh token: 랜덤 문자열(JWT 아님), 14일, **로그인(기기·브라우저) 한 번 = family 하나**로 Redis에 저장(`refresh:<id>`, `family:<id>`, `user:<id>:families`). 기기별 로그아웃·전체 로그아웃·로그인 기기 목록이 가능
+- **RTR**: refresh 때마다 새 토큰, 이전 것은 사용 불가. 이미 회전된 토큰이 다시 오면 탈취로 보고 그 family 전체 폐기. 여러 탭 동시 refresh 오탐은 Next 서버 single-flight + 짧은 유예(10~30초)로 막는다
+- 로그아웃: family 폐기. 비밀번호 변경·강제 로그아웃은 사용자 family 전체 폐기. 이미 나간 access token은 짧은 수명으로 감수(즉시 차단이 필요하면 사용자 토큰 버전을 Gateway에서 확인하는 방식 검토)
+- 토큰 보관: Next 서버가 httpOnly·Secure·SameSite=Lax 쿠키로만. 브라우저 JS(localStorage)에 두지 않는다
+
+**Gateway·배포 경계**
+- Spring Cloud Gateway: `/auth/**` → auth-service(검증 없이 전달), `/api/**` → JWT 검증 후 서비스별 라우팅, 사용자별 rate limit(Redis), 역할 검사(`/api/admin/**`). Boot 4.1에 맞는 Spring Cloud 릴리스를 시작할 때 확인
+- 외부 공개는 edge(k8s 단계의 Ingress)만. Gateway·서비스·DB·Kafka·Redis는 내부망
+
+**프론트엔드: Next.js + Tailwind + shadcn/ui** (브리프, ADR 0011 예정)
+- 템플릿 `hexagonal-spring-next-template/frontend`(Next 16 App Router, 서버 액션, `server-only` API 클라이언트, openapi-typescript, zod env, Vitest·Playwright)를 가져와 shadcn을 더한다
+- 구조: 템플릿 기본형(라우트 colocation) + 화면이 늘면 `features/<기능>/{api,components}`. FSD는 이 규모에 과해서 쓰지 않는다
+- 로그인 화면은 Next. middleware가 쿠키를 보고 access 유효 → 통과, 만료 → refresh, 둘 다 없음 → `/login`
+- 화면(포트폴리오용으로 상황에 맞게 전부): 회원가입·로그인·로그인 기기 관리, 주문 생성·목록·상세(Saga 단계 타임라인, 보상 경로 표시), 포인트, 결제 내역, 알림, 관리자(결제 장애 주입, DLT 조회·재처리 등)
 
 ## 5. 알려진 한계·나중 일
 
