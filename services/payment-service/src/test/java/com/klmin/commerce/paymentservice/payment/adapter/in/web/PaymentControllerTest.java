@@ -3,6 +3,9 @@ package com.klmin.commerce.paymentservice.payment.adapter.in.web;
 import com.klmin.commerce.paymentservice.payment.application.PaymentNotFoundException;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentQuery;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentUseCase;
+import com.klmin.commerce.paymentservice.payment.application.port.in.ListMyPaymentsQuery;
+import com.klmin.commerce.paymentservice.payment.application.port.in.ListMyPaymentsUseCase;
+import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentSummaryResult;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Mode;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Settings;
@@ -16,6 +19,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -41,6 +45,9 @@ class PaymentControllerTest {
     GetPaymentUseCase getPaymentUseCase;
 
     @MockitoBean
+    ListMyPaymentsUseCase listMyPaymentsUseCase;
+
+    @MockitoBean
     PaymentFaultUseCase paymentFaultUseCase;
 
     @Test
@@ -63,6 +70,36 @@ class PaymentControllerTest {
 
         mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject("2"))))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void myPayments_usesTokenSubject_andCursor() throws Exception {
+        UUID before = UUID.randomUUID();
+        PaymentSummaryResult summary = new PaymentSummaryResult(UUID.randomUUID(), UUID.randomUUID(), 5_000L, "REFUNDED",
+                "refunded: order cancelled", Instant.parse("2026-11-23T00:00:00Z"),
+                Instant.parse("2026-11-23T00:00:05Z"));
+        given(listMyPaymentsUseCase.listMyPayments(new ListMyPaymentsQuery(1L, before, 5)))
+                .willReturn(List.of(summary));
+
+        mvc.perform(get("/payments").param("before", before.toString()).param("size", "5")
+                        .with(jwt().jwt(j -> j.subject("1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].paymentId").value(summary.paymentId().toString()))
+                .andExpect(jsonPath("$[0].status").value("REFUNDED"))
+                .andExpect(jsonPath("$[0].updatedAt").value("2026-11-23T00:00:05Z"));
+    }
+
+    @Test
+    void myPayments_defaultsAndValidation() throws Exception {
+        given(listMyPaymentsUseCase.listMyPayments(new ListMyPaymentsQuery(1L, null, 20))).willReturn(List.of());
+
+        mvc.perform(get("/payments").with(jwt().jwt(j -> j.subject("1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/payments").param("size", "0").with(jwt().jwt(j -> j.subject("1"))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/payments"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -31,13 +31,14 @@ class SagaTimeoutServiceTest {
     private final InMemorySagas sagas = new InMemorySagas();
     private final Recording sent = new Recording();
     private final OrderService orderService =
-            new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(), clock);
+            new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(),
+                    new InMemoryIdempotencyKeys(), clock);
     private final SagaTimeoutService timeouts = new SagaTimeoutService(orders, orders, sagas, sent, sent,
             new SagaTimeoutProperties(STEP, 1, 2, 100), clock);
 
     private Order place(long pointAmount) {
         return orderService.placeOrder(new PlaceOrderCommand(1L, List.of(
-                new PlaceOrderCommand.Line(10L, 2, 1_000L)), pointAmount));
+                new PlaceOrderCommand.Line(10L, 2, 1_000L)), pointAmount)).order();
     }
 
     private void reply(Order order, SagaEventType type) {

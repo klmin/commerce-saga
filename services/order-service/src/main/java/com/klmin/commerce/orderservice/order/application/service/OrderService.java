@@ -1,6 +1,7 @@
 package com.klmin.commerce.orderservice.order.application.service;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.SagaNotFoundException;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
@@ -8,10 +9,12 @@ import com.klmin.commerce.orderservice.order.application.port.in.GetOrderSagaUse
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.HandleSagaReplyUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
+import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderResult;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.SagaReplyCommand;
 import com.klmin.commerce.orderservice.order.application.port.out.LoadOrderPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderEventPort;
+import com.klmin.commerce.orderservice.order.application.port.out.OrderIdempotencyPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
 import com.klmin.commerce.orderservice.order.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPort;
@@ -48,10 +51,12 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     private final SagaCommandPort commandPort;
     private final SagaActionExecutor executor;
     private final ProcessedMessagePort processedMessagePort;
+    private final OrderIdempotencyPort idempotencyPort;
     private final Clock clock;
 
     OrderService(LoadOrderPort loadOrderPort, SaveOrderPort saveOrderPort, OrderSagaPort sagaPort,
                  SagaCommandPort commandPort, OrderEventPort eventPort, ProcessedMessagePort processedMessagePort,
+                 OrderIdempotencyPort idempotencyPort,
                  Clock clock) {
         this.loadOrderPort = loadOrderPort;
         this.saveOrderPort = saveOrderPort;
@@ -59,22 +64,44 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
         this.commandPort = commandPort;
         this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort);
         this.processedMessagePort = processedMessagePort;
+        this.idempotencyPort = idempotencyPort;
         this.clock = clock;
     }
 
-    // 주문 + Saga 저장 + 재고 예약 커맨드(outbox) = 한 트랜잭션
+    // (키 선점) + 주문 + Saga 저장 + 재고 예약 커맨드(outbox) = 한 트랜잭션
     @Override
     @Transactional
-    public Order placeOrder(PlaceOrderCommand command) {
+    public PlaceOrderResult placeOrder(PlaceOrderCommand command) {
         Instant now = clock.instant();
         List<OrderLine> lines = command.lines().stream()
                 .map(l -> new OrderLine(l.productId(), l.quantity(), l.unitPrice()))
                 .toList();
+        // 도메인 검증을 먼저 해서 잘못된 요청은 키를 선점하지 않는다 (어차피 롤백되지만 기다림을 줄인다)
         Order order = Order.place(UuidCreator.getTimeOrderedEpoch(), command.userId(), lines, command.pointAmount(), now);
+        if (command.idempotencyKey() != null) {
+            String hash = OrderRequestHash.of(command);
+            Optional<OrderIdempotencyPort.KeyRecord> existing =
+                    idempotencyPort.claim(command.userId(), command.idempotencyKey(), hash, order.id(), now);
+            if (existing.isPresent()) {
+                return replay(command, existing.get(), hash);
+            }
+        }
         saveOrderPort.insert(order);
         sagaPort.insert(OrderSaga.start(order, now));
         commandPort.reserveStock(order);
-        return order;
+        return new PlaceOrderResult(order, true);
+    }
+
+    // 같은 키의 재요청: 처음 주문을 그대로 돌려준다. 커맨드는 다시 보내지 않는다 (Saga 는 처음 주문 것 하나)
+    private PlaceOrderResult replay(PlaceOrderCommand command, OrderIdempotencyPort.KeyRecord existing, String hash) {
+        if (!existing.requestHash().equals(hash)) {
+            throw new IdempotencyKeyReusedException();
+        }
+        Order first = loadOrderPort.findById(existing.orderId())
+                .filter(o -> o.isOwnedBy(command.userId()))
+                .orElseThrow(() -> new IllegalStateException("idempotency key without order: " + existing.orderId()));
+        log.info("같은 Idempotency-Key 재요청, 처음 주문 반환 (userId={}, orderId={})", command.userId(), first.id());
+        return new PlaceOrderResult(first, false);
     }
 
     @Override

@@ -94,6 +94,10 @@ jobs:
       - name: Gateway·소유권 검사 (시나리오 9)
         run: bash scripts/smoke-gateway.sh
 
+      # 같은 키 재요청·동시 요청에도 주문 하나, 같은 키 + 다른 본문은 422, 내 주문·결제 목록
+      - name: 주문 Idempotency-Key·내 주문·결제 목록 (시나리오 10)
+        run: bash scripts/smoke-idempotency.sh
+
       - name: 알림 서비스 기동 후 밀린 이벤트 처리 확인 (시나리오 8)
         run: |
           nohup java -jar services/notification-service/build/libs/notification-service-*.jar > logs/notification-service.log 2>&1 &

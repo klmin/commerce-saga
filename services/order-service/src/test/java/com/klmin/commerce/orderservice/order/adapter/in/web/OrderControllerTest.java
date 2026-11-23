@@ -4,7 +4,12 @@ import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
+import com.klmin.commerce.orderservice.order.application.port.in.ListMyOrdersQuery;
+import com.klmin.commerce.orderservice.order.application.port.in.ListMyOrdersUseCase;
+import com.klmin.commerce.orderservice.order.application.port.in.OrderSummaryResult;
+import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderResult;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderUseCase;
+import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedException;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
 import org.junit.jupiter.api.Test;
@@ -47,6 +52,9 @@ class OrderControllerTest {
     @MockitoBean
     GetOrderUseCase getOrderUseCase;
 
+    @MockitoBean
+    ListMyOrdersUseCase listMyOrdersUseCase;
+
     private static Order order(long userId) {
         return Order.place(UUID.randomUUID(), userId, List.of(new OrderLine(10L, 2, 1_000L)), 0L,
                 Instant.parse("2026-11-22T00:00:00Z"));
@@ -56,7 +64,7 @@ class OrderControllerTest {
     void placeOrder_returns201WithLocation() throws Exception {
         Order order = order(7L);
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
-                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L))).willReturn(order);
+                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L))).willReturn(new PlaceOrderResult(order, true));
 
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
@@ -72,7 +80,7 @@ class OrderControllerTest {
     void placeOrder_withPoints_passesPointAmount() throws Exception {
         Order order = order(7L);
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
-                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 500L))).willReturn(order);
+                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 500L))).willReturn(new PlaceOrderResult(order, true));
 
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -138,5 +146,76 @@ class OrderControllerTest {
 
         mvc.perform(get("/orders/{id}", id).with(jwt().jwt(j -> j.subject("8"))))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void placeOrder_withIdempotencyKey_passesKey_andReplayReturns200() throws Exception {
+        Order order = order(7L);
+        PlaceOrderCommand command = new PlaceOrderCommand(7L,
+                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L, "key-1");
+        given(placeOrderUseCase.placeOrder(command))
+                .willReturn(new PlaceOrderResult(order, true), new PlaceOrderResult(order, false));
+
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7"))).header("Idempotency-Key", "key-1")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Idempotent-Replayed"));
+
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7"))).header("Idempotency-Key", "key-1")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Location", "/orders/" + order.id()))
+                .andExpect(header().string("Idempotent-Replayed", "true"))
+                .andExpect(jsonPath("$.orderId").value(order.id().toString()));
+    }
+
+    @Test
+    void placeOrder_keyReusedWithDifferentBody_returns422() throws Exception {
+        given(placeOrderUseCase.placeOrder(any())).willThrow(new IdempotencyKeyReusedException());
+
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7"))).header("Idempotency-Key", "key-1")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.status").value(422));
+    }
+
+    @Test
+    void placeOrder_invalidIdempotencyKey_returns400() throws Exception {
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7"))).header("Idempotency-Key", "x".repeat(101))
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isBadRequest());
+
+        verify(placeOrderUseCase, never()).placeOrder(any());
+    }
+
+    @Test
+    void myOrders_usesTokenSubject_andCursor() throws Exception {
+        UUID before = UUID.randomUUID();
+        OrderSummaryResult summary = new OrderSummaryResult(UUID.randomUUID(), "COMPLETED", 2_000L, 500L, null,
+                List.of(new OrderSummaryResult.Line(10L, 2, 1_000L)),
+                Instant.parse("2026-11-22T00:00:00Z"), Instant.parse("2026-11-22T00:00:01Z"));
+        given(listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(7L, before, 10))).willReturn(List.of(summary));
+
+        mvc.perform(get("/orders").param("before", before.toString()).param("size", "10")
+                        .with(jwt().jwt(j -> j.subject("7"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].orderId").value(summary.orderId().toString()))
+                .andExpect(jsonPath("$[0].paidAmount").value(1500))
+                .andExpect(jsonPath("$[0].lines[0].productId").value(10));
+    }
+
+    @Test
+    void myOrders_defaultsAndValidation() throws Exception {
+        given(listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(7L, null, 20))).willReturn(List.of());
+
+        mvc.perform(get("/orders").with(jwt().jwt(j -> j.subject("7"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/orders").param("size", "51").with(jwt().jwt(j -> j.subject("7"))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/orders").param("before", "not-a-uuid").with(jwt().jwt(j -> j.subject("7"))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/orders"))
+                .andExpect(status().isUnauthorized());
     }
 }

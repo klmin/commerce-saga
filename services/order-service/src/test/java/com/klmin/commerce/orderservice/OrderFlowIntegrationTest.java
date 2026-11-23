@@ -98,7 +98,7 @@ class OrderFlowIntegrationTest {
     /** 합계 2,000 */
     private Order place(long userId, long pointAmount) {
         return placeOrderUseCase.placeOrder(new PlaceOrderCommand(userId, List.of(
-                new PlaceOrderCommand.Line(10L, 2, 1_000L)), pointAmount));
+                new PlaceOrderCommand.Line(10L, 2, 1_000L)), pointAmount)).order();
     }
 
     @Test

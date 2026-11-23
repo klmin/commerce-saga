@@ -96,6 +96,16 @@ class GatewayRoutingTest {
     }
 
     @Test
+    void 목록_API_는_뒤에_경로가_없어도_서비스로_넘긴다() throws Exception {
+        String token = token(KEY, "8", List.of("USER"), 300);
+
+        assertThat(get("/api/orders?size=5", token).statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/orders");
+        assertThat(get("/api/payments?size=5", token).statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/payments");
+    }
+
+    @Test
     void 관리자_경로는_ADMIN_역할만() throws Exception {
         assertThat(get("/api/admin/payment-faults", token(KEY, "9", List.of("USER"), 300)).statusCode()).isEqualTo(403);
 
