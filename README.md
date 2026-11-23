@@ -54,7 +54,7 @@ flowchart LR
 - 멱등 컨슈머 두 겹: 같은 메시지의 재전달은 `processed_message`(헤더 `id`)로 건너뛰고, 내용이 같은 재요청은 주문별 처리 기록(예약·사용·결제)으로 한 번만 반영한다 ([ADR 0006](docs/adr/0006-idempotent-consumer.md)). 처리할 수 없는 메시지는 `<토픽>.DLT`
 - 분산 트레이싱: outbox 행에 넣는 시점의 `traceparent`를 저장하고 relay가 Kafka 헤더로 옮겨, 주문 한 건이 서비스를 몇 개 지나도 trace 하나 ([ADR 0013](docs/adr/0013-observability.md))
 - 메트릭·경보: 서비스마다 자기 DB 기준의 Saga·결제·outbox 메트릭(`/actuator/prometheus`), kafka-exporter 로 lag·DLT, Prometheus 경보 규칙(`infra/prometheus/rules`), Grafana 대시보드 ([ADR 0013](docs/adr/0013-observability.md))
-- 인증(후속 2): auth-service 가 access token(JWT RS256, 15분)을 발급하고 공개키를 JWKS 로 낸다. refresh token 은 httpOnly 쿠키, 쓸 때마다 회전하고 옛 토큰을 다시 쓰면 그 기기 세션을 버린다. 요청은 Spring Cloud Gateway(:8000)가 1차로 검증·라우팅·사용자별 rate limit 하고, 서비스마다 다시 검증해 토큰의 `sub` 로 소유권을 본다 ([ADR 0008](docs/adr/0008-auth-self-issued-jwt.md))
+- 인증(후속 2): auth-service 가 access token(JWT RS256, 15분)을 발급하고 공개키를 JWKS 로 낸다. refresh token 은 httpOnly 쿠키, 쓸 때마다 회전하고 옛 토큰을 다시 쓰면 그 기기 세션을 버린다. 요청은 Spring Cloud Gateway(:8000)가 1차로 검증·라우팅·사용자별 rate limit 하고, 서비스마다 다시 검증해 토큰의 `sub` 로 소유권을 본다 ([ADR 0008](docs/adr/0008-auth-self-issued-jwt.md)). 가입은 `auth.events`(`UserRegistered`, outbox)로 알리고 point-service 가 멱등하게 포인트 계정을 만든다(시나리오 13)
 - 서비스 내부는 헥사고날 + DDD 애그리거트 ([ADR 0002](docs/adr/0002-persistence-domain-jpa-separation.md)), 서비스별 DB·계정 분리 ([ADR 0001](docs/adr/0001-monorepo-independent-deploy.md))
 
 ## 실행
@@ -86,10 +86,11 @@ scripts/smoke-alerts.sh                                    # 장애 → 경보 f
 scripts/smoke-auth.sh                                      # 가입·로그인·refresh 회전·재사용 탐지 (auth-service 를 AUTH_REFRESH_GRACE=2s 로 띄우면 GRACE_WAIT=3 로 빨리)
 scripts/smoke-gateway.sh                                   # Gateway·서비스 JWT 검증, 남의 주문 404, 관리자 역할, rate limit
 scripts/smoke-idempotency.sh                               # 같은 Idempotency-Key 재요청·동시 요청에도 주문 하나, 다른 본문 422, 내 주문·결제 목록
+scripts/smoke-signup-points.sh                             # 가입 → auth.events → 포인트 계정(가입 축하 1,000P) → 그 포인트로 주문
 ```
 
 - JDK 25는 Gradle 툴체인이 자동으로 받는다
-- 시드 데이터: 재고 상품 1~3은 100개, 4는 1개, 5는 품절 / 포인트 사용자 1~3은 10,000P, 4는 0P / 로그인 사용자 `user1`~`user4`(id 1~4), `admin`(id 100), 비밀번호 `local-dev-pass` (로컬 개발용, 운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`)
+- 시드 데이터: 재고 상품 1~3은 100개, 4는 1개, 5는 품절 / 포인트 사용자 1~3은 10,000P, 4는 0P, 새로 가입하면 1,000P(auth.events → point-service) / 로그인 사용자 `user1`~`user4`(id 1~4), `admin`(id 100), 비밀번호 `local-dev-pass` (로컬 개발용, 운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`)
 - 결제 실패 주입(관리자): `curl -X PUT localhost:8000/api/admin/payment-faults -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' -d '{"mode":"DECLINE","delayMillis":0}'` (`admin` 으로 로그인한 토큰)
 
 진행 현황과 다음 작업: [docs/PROGRESS.md](docs/PROGRESS.md)
@@ -108,9 +109,10 @@ scripts/smoke-idempotency.sh                               # 같은 Idempotency-
 | 7 | [relay 비교: 스케줄러 vs Debezium, Saga 완료 지연·DB 부하](docs/scenarios/07-relay-comparison.md) | 측정 (로컬, CI `e2e`) |
 | 8 | [알림 서비스 다운 → 주문은 정상 완료, 복구 후 밀린 이벤트 처리](docs/scenarios/08-notification-down.md) | 통과 (CI `e2e`) |
 | 9 | [인증: refresh token 회전, 옛 토큰 재사용 → 그 기기 세션 폐기, 로그인 잠금](docs/scenarios/09-auth-refresh-reuse.md), JWT 로 바꾼 뒤 남의 주문 404·Gateway·서비스 이중 검증·rate limit | 통과 (로컬, CI `e2e`) |
-| 10 | [주문 Idempotency-Key: 같은 키 재요청·동시 5번 → 주문 1건, 다른 본문 422 / 내 주문·결제 목록](docs/scenarios/10-order-idempotency.md) | CI `e2e` |
+| 10 | [주문 Idempotency-Key: 같은 키 재요청·동시 5번 → 주문 1건, 다른 본문 422 / 내 주문·결제 목록](docs/scenarios/10-order-idempotency.md) | 통과 (CI `e2e`) |
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
+| 13 | [가입 → auth.events(UserRegistered, outbox) → 포인트 계정 하나·가입 축하 1,000P → 그 포인트로 주문](docs/scenarios/13-signup-point-account.md) | CI `e2e` |
 
 ## 설계 결정 (ADR)
 

@@ -176,6 +176,11 @@ class PointServiceTest {
             store.put(account.userId(), copy(account));
         }
 
+        @Override
+        public boolean insertIfAbsent(PointAccount account) {
+            return store.putIfAbsent(account.userId(), copy(account)) == null;
+        }
+
         private static PointAccount copy(PointAccount a) {
             return PointAccount.restore(a.userId(), a.balance(), a.updatedAt());
         }

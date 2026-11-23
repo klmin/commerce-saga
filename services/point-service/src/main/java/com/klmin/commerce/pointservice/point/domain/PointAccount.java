@@ -1,5 +1,6 @@
 package com.klmin.commerce.pointservice.point.domain;
 
+import com.klmin.commerce.pointservice.common.error.DomainValidationException;
 import com.klmin.commerce.pointservice.common.error.InvariantViolationException;
 
 import java.time.Instant;
@@ -19,6 +20,17 @@ public final class PointAccount {
         this.userId = userId;
         this.balance = balance;
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
+    }
+
+    /** 가입한 사용자의 새 계정. 시작 잔액은 가입 축하 포인트 (0 이상) */
+    public static PointAccount open(long userId, long initialBalance, Instant now) {
+        if (userId <= 0) {
+            throw new DomainValidationException("userId must be positive: " + userId);
+        }
+        if (initialBalance < 0) {
+            throw new DomainValidationException("initial balance must not be negative: " + initialBalance);
+        }
+        return new PointAccount(userId, initialBalance, now);
     }
 
     public static PointAccount restore(long userId, long balance, Instant updatedAt) {

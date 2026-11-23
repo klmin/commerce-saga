@@ -47,7 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Postgres + Redis 를 띄워 가입 → 로그인 → refresh 회전 → 재사용 탐지 → 기기 관리까지 실제 저장소로 확인한다.
  * access token 은 JWKS 로 받은 공개키로 서명을 검증한다 (Gateway·서비스가 할 일과 같다).
  */
-@SpringBootTest(properties = "auth.cookie.secure=false")
+// outbox relay 는 켜 두되 돌지 않게 (Kafka 없이 outbox 행을 확인한다)
+@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h"})
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @Testcontainers(disabledWithoutDocker = true)
@@ -234,6 +235,25 @@ class AuthIntegrationTest {
 
     private static String familyId(TokenResult tokens) {
         return tokens.refreshToken().substring(0, tokens.refreshToken().indexOf('.'));
+    }
+
+    @Test
+    void 가입하면_같은_트랜잭션에서_UserRegistered_가_outbox_에_남고_중복_가입은_남기지_않는다() throws Exception {
+        long userId = signUp.signUp(new SignUpCommand(loginId, "password1"));
+        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"%s\",\"password\":\"password2\"}".formatted(loginId)))
+                .andExpect(status().isConflict());
+
+        var rows = jdbc.sql("""
+                        select aggregatetype, type, payload::text as payload from outbox
+                        where aggregateid = ?""")
+                .param(Long.toString(userId))
+                .query((rs, n) -> rs.getString("aggregatetype") + "|" + rs.getString("type") + "|"
+                        + rs.getString("payload"))
+                .list();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst()).startsWith("auth.events|UserRegistered|")
+                .contains("\"userId\": " + userId).contains("\"registeredAt\": \"20");
     }
 
     private static String refreshCookie(MvcResult result) {

@@ -12,7 +12,7 @@ set -euo pipefail
 CONNECT_URL=${CONNECT_URL:-http://localhost:8088}
 CONNECTOR_DIR=${CONNECTOR_DIR:-infra/connect}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
-CONNECTORS=${CONNECTORS:-"order-outbox inventory-outbox point-outbox payment-outbox"}
+CONNECTORS=${CONNECTORS:-"order-outbox inventory-outbox point-outbox payment-outbox auth-outbox"}
 
 state() { # name -> "<커넥터 상태> <태스크 상태들>" (예: RUNNING RUNNING)
   curl -sf "$CONNECT_URL/connectors/$1/status" | grep -oE '"state":"[A-Z]+"' | sed -E 's/"state":"([A-Z]+)"/\1/' | tr '\n' ' '

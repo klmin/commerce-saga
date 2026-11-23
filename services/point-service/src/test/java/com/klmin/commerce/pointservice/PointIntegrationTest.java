@@ -2,6 +2,7 @@ package com.klmin.commerce.pointservice;
 
 import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
+import com.klmin.commerce.contract.auth.UserRegistered;
 import com.klmin.commerce.contract.point.PointRefunded;
 import com.klmin.commerce.contract.point.PointUseFailed;
 import com.klmin.commerce.contract.point.PointUsed;
@@ -149,6 +150,37 @@ class PointIntegrationTest {
             replyConsumer.poll(Duration.ofMillis(200)).forEach(received::add);
         }
         assertThat(received.stream().filter(r -> orderId.toString().equals(r.key()))).hasSize(1);
+    }
+
+    /** 가입 이벤트가 재전달·중복돼도 계정은 하나, 가입 축하 포인트도 한 번 (후속 2 A-3-2) */
+    @Test
+    void userRegistered_opensAccountOnce_evenIfRedeliveredOrDuplicated() {
+        long userId = 7_001L;
+        UserRegistered event = new UserRegistered(userId, java.time.Instant.parse("2026-11-23T00:00:00Z"));
+        UUID messageId = UUID.randomUUID();
+        sendAuthEvent(userId, messageId, event);
+        sendAuthEvent(userId, messageId, event);          // 같은 메시지 재전달
+        sendAuthEvent(userId, UUID.randomUUID(), event);  // 내용이 같은 다른 메시지
+
+        await().atMost(Duration.ofSeconds(30)).ignoreExceptions()
+                .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId).balance()).isEqualTo(1_000L));
+        // 계정이 생긴 뒤 포인트를 쓰고, 늦게 온 같은 이벤트가 잔액을 되돌리지 않는지 본다
+        usePointUseCase.use(UUID.randomUUID(), new UsePointCommand(UUID.randomUUID(), userId, 400L));
+        sendAuthEvent(userId, UUID.randomUUID(), event);
+        UUID marker = UUID.randomUUID();
+        sendAuthEvent(userId + 1, marker, new UserRegistered(userId + 1, event.registeredAt()));
+        await().atMost(Duration.ofSeconds(30)).ignoreExceptions()
+                .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId + 1).balance()).isEqualTo(1_000L));
+        assertThat(getPointBalanceUseCase.getBalance(userId).balance()).isEqualTo(600L);
+    }
+
+    private void sendAuthEvent(long userId, UUID messageId, UserRegistered event) {
+        // 키가 userId 라 같은 사용자의 이벤트는 같은 파티션에서 순서대로 처리된다. 확인용 다른 사용자도 같은 파티션에 둔다
+        ProducerRecord<String, String> record = new ProducerRecord<>(Topics.AUTH_EVENTS, 0, Long.toString(userId),
+                json.writeValueAsString(event));
+        record.headers().add(MessageHeaders.ID, messageId.toString().getBytes(StandardCharsets.UTF_8));
+        record.headers().add(MessageHeaders.TYPE, UserRegistered.TYPE.getBytes(StandardCharsets.UTF_8));
+        kafkaTemplate.send(record).join();
     }
 
     private void send(UUID orderId, String type, Object payload) {

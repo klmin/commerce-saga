@@ -7,7 +7,7 @@ package com.klmin.commerce.contract;
  *   <li>{@code <서비스>.reply}: 커맨드에 대한 응답. 오케스트레이터(order-service)만 구독</li>
  *   <li>{@code <서비스>.events}: 발행 서비스가 알리는 사실. 누구나 구독</li>
  * </ul>
- * 메시지 키는 모두 orderId 다 (주문 단위 순서 보장).
+ * 메시지 키는 주문 관련 메시지는 orderId (주문 단위 순서 보장), auth.events 는 userId.
  * 처리할 수 없는 메시지는 소비자가 {@code <토픽>.DLT} 로 옮긴다.
  */
 public final class Topics {
@@ -19,6 +19,8 @@ public final class Topics {
     public static final String PAYMENT_COMMAND = "payment.command";
     public static final String PAYMENT_REPLY = "payment.reply";
     public static final String ORDER_EVENTS = "order.events";
+    /** 회원 이벤트. 키는 userId (주문과 상관없는 사용자 단위 사실) */
+    public static final String AUTH_EVENTS = "auth.events";
 
     private Topics() {
     }

@@ -62,10 +62,11 @@ state() {
   done
 }
 
-# 그룹의 모든 파티션에 컨슈머가 붙어 있고 lag 가 0 이면 성공
+# 그룹의 모든 파티션에 컨슈머가 붙어 있고 lag 가 0 이면 성공.
+# 메시지가 한 번도 없던 파티션(LOG-END-OFFSET 0)은 커밋한 오프셋이 없어 LAG 가 "-" 로 나오므로 따라잡은 것으로 본다
 caught_up() {
   kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:29092 --describe --group "$1" 2>/dev/null \
-    | awk -v g="$1" '$1 == g { rows++; if ($6 != "0" || $7 == "-") bad++ } END { exit (rows > 0 && bad == 0) ? 0 : 1 }'
+    | awk -v g="$1" '$1 == g { rows++; if (($6 != "0" && $5 != "0") || $7 == "-") bad++ } END { exit (rows > 0 && bad == 0) ? 0 : 1 }'
 }
 
 wait_caught_up() {

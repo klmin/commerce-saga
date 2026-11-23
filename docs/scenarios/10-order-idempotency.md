@@ -40,7 +40,28 @@ CI `e2e`가 두 relay 모드에서 Gateway 시나리오(9f~9i) 다음에 돈다.
 
 ## 실제 결과
 
-CI `e2e` 결과는 머지 후 다음 PR에서 채운다.
+CI `e2e` 실행 로그 ([PR #33, 2026-11-23 실행](https://github.com/klmin/commerce-saga/actions/runs/45189097911), GitHub Actions ubuntu-latest). scheduler·debezium 두 모드 모두 같은 결과로 PASS, 아래는 scheduler 모드:
+
+```
+== 10a. 같은 키로 두 번
+  ok  첫 요청 → 201, 주문 …fec87d70
+  ok  재요청 → 200, 같은 주문, Idempotent-Replayed: true
+== 10b. 같은 키로 동시에 5번
+  ok  5개 모두 주문 …da88ffbd, 201 한 번 + 200 네 번
+  ok  내 주문 목록 맨 위 두 건 = 10b, 10a (다른 주문이 생기지 않음)
+== 10c. 같은 키 + 다른 본문 → 422
+  ok  다른 본문 → 422, 주문 안 생김
+== 10d. 두 주문 COMPLETED, 포인트는 주문마다 한 번
+  ok  두 주문 COMPLETED
+  ok  포인트 10000 → 9800 (2건 × 100, 재요청은 차감 없음)
+== 10e. 내 주문·결제 목록
+  ok  주문 목록 커서(before=10b 주문) → 10a 주문
+  ok  결제 목록에 두 주문 결제가 하나씩
+  ok  사용자 4 의 주문·결제 목록에는 안 보임
+PASS: 시나리오 10 (주문 Idempotency-Key, 내 주문·결제 목록)
+```
+
+같은 키로 일곱 번(순차 2 + 동시 5) 보냈지만 주문·Saga·포인트 차감은 키마다 한 번이었다. 첫 실행에서는 바로 앞 시나리오 9(rate limit 확인)가 같은 사용자의 Gateway 버킷을 비워 10d 조회가 429로 실패했다. 스크립트가 429면 기다렸다 다시 보내게 고쳤다(429는 Gateway가 서비스에 넘기기 전에 거절한 것이라 다시 보내도 안전).
 
 ## 한계
 
