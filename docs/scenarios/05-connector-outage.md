@@ -47,7 +47,25 @@ CI `e2e`의 `saga (debezium)`가 다른 시나리오 뒤에 이 스크립트를 
 PASS
 ```
 
-CI `e2e` `saga (debezium)`: (CI 실행 후 채움)
+CI `e2e` `saga (debezium)` ([2026-11-23 실행](https://github.com/klmin/commerce-saga/actions/runs/45125062218), GitHub Actions ubuntu-latest, 다른 시나리오를 다 돈 뒤):
+
+```
+== 5. 커넥터 중단 → 주문 → 재개 후 유실 0
+  ok  커넥터 STOPPED, order_outbox_slot active=f
+  주문 5건 생성, 15초 동안 커넥터 중단 유지
+  ok  중단 중 주문 …(5건) status = PENDING
+  ok  중단 중 order_db outbox 행 수 (넣고 바로 지움) = 0
+  ok  중단 중 포인트 잔액 (변화 없음) = 10000
+  slot 적체 (order_outbox_slot): 중단 직후 2128 B → 중단 중 10248 B
+  ok  재개 후 주문 5건 모두 COMPLETED (1818ms)
+  ok  포인트 잔액 (주문 수만큼 한 번씩) = 9500
+  ok  상품 2 available = 95
+  ok  상품 2 reserved (판매 확정) = 0
+  ok  재개 후 slot 적체 10248 B → 7312 B
+PASS
+```
+
+로컬 결과의 "중단 전" 값은 커넥터를 멈추기 전에 읽은 것이고, 지금 스크립트는 멈춘 직후에 읽는다(Codex 리뷰 반영).
 
 heartbeat 효과 (로컬, 별도 확인): 다른 DB(`postgres`)에 약 20 MB의 WAL을 만든 뒤 네 slot 모두 적체가 21 MB로 늘었다. heartbeat를 켠 inventory 커넥터만 20초 안에 **96 B**로 돌아왔고, 아직 켜지 않은 나머지 셋은 21 MB 그대로였다.
 
