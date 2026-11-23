@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-24 (PR #35 머지 후, F-1b 주문 화면 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인) 이번 PR. 다음은 F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-24 (PR #36 머지 후, F-2 시작 전 정리)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료. **다음은 F-2 (후속 2 마지막), 아래 "F-2 시작 메모"부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 "후속 2 진행" 표의 **F-2** (A-3·F-1 완료). 프론트엔드는 `frontend/README.md` 와 ADR 0011 을 먼저 읽는다. 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. 다음 작업은 아래 "후속 2 진행" 표의 **F-2** (A-3·F-1 완료). **바로 시작하려면 "F-2 시작 메모"(후속 2 진행 절 끝)를 읽는다.** 프론트엔드는 `frontend/README.md` 와 ADR 0011 을 먼저 읽는다. 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -45,7 +45,7 @@
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
-| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b 이번 PR. 다음 F-2) |
+| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36. 다음 F-2) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
@@ -112,7 +112,9 @@ flowchart LR
 | #32 | 문서: 후속 2 남은 계획(A-3 백엔드 보강 목록, F-1 템플릿 가져오기 결정·프론트엔드 준비 메모), 시나리오 9 CI 결과(PR #31) |
 | #33 | 후속 2 A-3-1: 내 주문 목록 `GET /orders`·내 결제 목록 `GET /payments`(커서 페이징, DTO 직접 조회, 인덱스 `(user_id, id)`), 주문 `Idempotency-Key`(`order_idempotency_keys` 선점, 같은 키 = 처음 주문 200, 다른 본문 422), 시나리오 10(`smoke-idempotency.sh`, CI 두 모드) |
 | #34 | 후속 2 A-3-2: auth-service outbox(V2) → `auth.events` `UserRegistered`(키 userId) → point-service `AuthEventsListener` 가 멱등하게 계정 생성(가입 축하 1,000P, `processed_message` + `on conflict (user_id) do nothing`), Debezium `auth-outbox` 커넥터·`auth_svc` replication, 시나리오 13(`smoke-signup-points.sh`, CI 두 모드), 시나리오 10 CI 결과(PR #33) |
-| (이번 PR) | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34) |
+| #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
+| #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
+| (이번 PR) | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·10·11·12·13을 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
@@ -209,8 +211,8 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 완료 PR #33 |
 | A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 완료 PR #34 |
 | F-1a | Next.js 기본 구성(템플릿 가져오기, ADR 0011) + 로그인·회원가입·로그아웃·세션 refresh, CI `frontend` | 완료 PR #35 |
-| F-1b | 상품 목록(고정 1~5), 주문 생성(Idempotency-Key), 내 주문 목록, 주문 상세(Saga 단계 타임라인·보상 경로) | 이번 PR |
-| F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 다음 (마지막) |
+| F-1b | 상품 목록(고정 1~5), 주문 생성(Idempotency-Key), 내 주문 목록, 주문 상세(Saga 단계 타임라인·보상 경로) | 완료 PR #36 |
+| F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입. DLT 는 화면 없이 안내, 준비 메모 #6) | **다음 (마지막)**, "F-2 시작 메모" |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
 - 새 서비스 `services/auth-service` (8086, `auth_db`/`auth_svc`, Redis 6380). 헥사고날 그대로, 기능 패키지 `auth` 하나. Kafka·outbox 없음(다른 서비스와 메시지를 주고받지 않음)
@@ -269,7 +271,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - CI 재실행 1번: saga(scheduler) 인프라 기동에서 Maven Central 이 Debezium 플러그인 다운로드에 429 를 돌려줌(코드와 무관, 실패한 잡만 재실행해 통과)
 - 한계: refresh 묶기는 Next 인스턴스 안에서만(인스턴스 사이는 백엔드 유예 20초). 브라우저 e2e 를 CI 에 넣을지는 F-2 끝에
 
-**F-1b 주문 화면 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**F-1b 주문 화면 (PR #36) 에서 한 것 (결정·확인 사항)**
 - 화면: 홈 = 내 포인트 + 상품 1~5(이름·가격은 `src/lib/products.ts` 고정, 재고는 `GET /api/stocks/{id}`), `/orders/new` 주문(수량·포인트·결제할 금액), `/orders` 내 주문(커서 `?before=`, 20개씩), `/orders/[orderId]` 주문 상세(주문 내용 + Saga 단계 + 기록). 헤더에 "내 주문"
 - 상품 가격: 준비 메모 #5 (a) 그대로. 고정 목록의 가격을 `unitPrice` 로 보낸다(폼 값이 아니라 서버 액션이 목록에서 읽는다). 서버가 가격을 정하지 않는 것은 한계(후속 4 product-service)
 - 주문 `Idempotency-Key`: 폼을 열 때 서버가 UUID 를 정해 hidden 으로 둔다. 응답을 못 받은 실패(시간 초과)·검증 오류는 같은 키를 다시 쓰고, 같은 키에 다른 내용(422)일 때만 새 키. 버튼을 여러 번 눌러도 주문 한 건(Playwright 로 같은 폼 세 번 제출 → 목록에 1건)
@@ -280,7 +282,40 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 확인(로컬, 인프라 + 서비스 jar 6개 + `next dev`): 브라우저로 정상 주문(재고 → 포인트 → 결제 → 완료), 품절(재고 예약 실패 → 되돌릴 것 없이 취소), 포인트 부족(포인트 실패 → 재고 해제 → 취소), 결제 거절 주입(결제 실패 → 포인트 환불 → 재고 해제 → 취소), 결제 4초 지연 주입("결제 중"에서 새로고침 없이 "완료"로)
 - Playwright `e2e/orders.spec.ts` 5개(정상·품절·포인트 부족 보상·중복 제출 1건·남의 주문). 시나리오마다 새로 가입해 시드 잔액에 기대지 않는다. 병렬로 돌리면 가입·로그인이 한 IP 로 몰려 Gateway `/auth` rate limit(초당 5)에 걸려 `workers: 1` 로 바꿨다. 가입 직후 포인트 확인이 가입 화면 안내 문구("1,000P 를 드립니다")에 잘못 맞던 것도 고침
 - Vitest 55개(+ Saga 단계 8, 주문 입력 4, 주문 액션 6)
+- Codex 반영(P2): 주문과 Saga 를 따로 읽는 사이 Saga 가 끝나면 주문이 PENDING 으로 남아 갱신이 멈췄다 → 둘 다 끝났을 때만 멈춘다
 - 한계: 가격은 클라이언트(Next) 고정 목록. 진행 표시는 폴링(1초). 주문 취소 API 는 없다(Saga 가 끝나야 결과가 난다)
+
+### F-2 시작 메모 (2026-11-24 정리, 여기서 바로 시작)
+
+F-2 = 후속 2 마지막. 남은 화면: 포인트(잔액·내역), 결제 내역, 알림, 로그인 기기 관리, 관리자(결제 장애 주입). 범위·결정은 아래 "프론트엔드 준비 메모"를 따른다(#6 DLT 는 화면 없이 Kafka UI 링크·`scripts/dlt.sh` 안내, #7 포인트 내역 API 추가).
+
+**화면별 백엔드 API (Gateway 기준)**
+
+| 화면 | API | 있나 |
+|---|---|---|
+| 포인트 잔액 | `GET /api/points/me` | 있음 (홈에서 씀) |
+| 포인트 내역 | point-service 에 내 `point_usages` 조회(커서 페이징, 다른 목록과 같은 모양) | **없음 → 추가**. 가입 축하 지급은 `point_usages` 에 안 남으므로(A-3-2 한계) 지급 기록을 어떻게 보일지 같이 정한다 |
+| 결제 내역 | `GET /api/payments?before=&size=` | 있음 (A-3-1) |
+| 알림 | `GET /api/notifications/me` (커서) | 있음 |
+| 로그인 기기 관리 | `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `POST /auth/logout-all` (Bearer access token) | 있음 (A-1). Next 에서 부를 때는 `lib/auth/backend.ts` 처럼 `ClientInfo`(브라우저 IP)를 넘긴다 |
+| 관리자 결제 장애 주입 | `GET/PUT /api/admin/payment-faults` (`mode`: APPROVE·DECLINE·DELAY, `delayMillis`), ADMIN 역할 | 있음. 메뉴는 토큰 `roles` 에 ADMIN 이 있을 때만 보이고, 권한 검사는 백엔드 |
+
+**PR 나누기 (추천안, 그대로 진행)**
+- F-2a: 포인트 내역 API(point-service, 백엔드 규칙대로 테스트·ArchUnit) + 포인트·결제 내역·알림 화면
+- F-2b: 로그인 기기 관리 + 관리자 결제 장애 주입 화면 + 브라우저 e2e 를 CI 에 넣을지 판단(준비 메모 "F-1 CI" 항목) + 후속 2 마무리(README. 태그를 붙일지는 사용자에게 묻는다)
+
+**로컬 실행 (F-1b 때 쓴 방법)**
+- 인프라: `docker compose -f infra/docker-compose.yml up -d --wait`
+- 서비스: `./gradlew build` 후 `java -jar services/<이름>/build/libs/<이름>-0.0.1-SNAPSHOT.jar` (JDK 25. 이 PC는 `C:/Users/user/.jdks/openjdk-25.0.2`). 화면 전체에 필요한 것: auth 8086, point 8083, order 8081, inventory 8082, payment 8084, notification 8085, gateway 8000
+- 화면: `cd frontend && npm run dev -- --port 3001` (3000 은 Grafana). Playwright: `E2E_BASE_URL=http://localhost:3001 npm run test:e2e` (한 worker)
+- 관리자 토큰: `admin` / `local-dev-pass` 로 `POST localhost:8000/auth/login`. 결제 장애 주입은 확인 뒤 `{"mode":"APPROVE","delayMillis":0}` 로 되돌린다
+- Redis·Kafka 컨테이너를 다시 띄우면 오래 떠 있던 gateway 가 `/auth` 요청에 응답하지 않은 적이 있다(F-1a). 그러면 gateway 를 다시 띄운다
+
+**DDD 점검 결과와 후속 후보 (2026-11-24 사용자 질문. 후보는 결정 필요)**
+- 이미 된 것: 서비스 = bounded context(DB 분리, 메시지로만 연결, 계약은 `messaging-contract`). 행위를 가진 애그리거트(`Order`·`OrderSaga`·`Stock`·`StockReservation`·`PointAccount`·`Payment`·`User`·`RefreshFamily`, setter 없음). 도메인 모델과 JPA 엔티티 분리(ADR 0002: 애그리거트는 순수 자바, `@Entity` 는 어댑터 안 package-private, ArchUnit 이 검사). 루트마다 리포지토리(포트), 다른 애그리거트는 ID 참조, 쓰기만 애그리거트·조회는 DTO
+- 의도적 타협(바꾸지 않음): 재고 예약은 한 트랜잭션에서 여러 `Stock` + `StockReservation` 을 바꾼다(ADR 0002). 도메인 이벤트 객체 없이 애플리케이션 서비스가 outbox 포트에 쓴다. notification 은 단순 구조
+- 후보 1 (중간 규모, 후속 2 밖이라 **시작 전에 사용자에게 묻는다**): 값 객체. 금액·포인트·수량·userId 가 `long`/`int` 라 "0 이상"·"포인트와 원화 구분" 규칙이 흩어져 있다 → `Money`·`Points`·`Quantity` 등. 추천 시점은 F-2 다음 별도 PR
+- 후보 2 (작음): 컨텍스트 맵 + 용어집 ADR(서비스 관계: 오케스트레이터·참여자·순수 소비자·공개 이벤트. 용어: 예약·확정·해제, 차감·환불, 보상). F-2b 끝에 붙여도 된다
 
 ### 프론트엔드 준비 메모 (2026-11-23 정리, A-3·F-1 시작 전에 읽기)
 
