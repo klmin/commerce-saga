@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #24 머지 후, 3-D-2 PR)
-- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C(Debezium relay, 시나리오 5·7, ADR 0004), 3-D(멈춘 Saga 정리, 결제 타임아웃 보정·늦은 승인 자동 환불, 시나리오 2·4, ADR 0007) 완료, 다음은 3-E(정리 후 `v0.3-reliability` 태그)**
+- 마지막 갱신: 2026-11-23 (PR #25 머지 후, 3-E PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준. 3-E(정리) PR이 머지되면 `v0.3-reliability` 태그. 다음은 후속 1(관측성)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 4절 **3-E**. main에서 `docs/v0.3-wrap-up` 같은 브랜치를 만든다
+2. 다음 작업은 1절 표의 **후속 1(관측성)**. 시작할 때 범위를 사용자와 먼저 정하고(새 인프라 도입이라), main에서 `feat/observability` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -43,13 +43,13 @@
 |---|---|---|
 | 1 | 기본 흐름 (모노레포, outbox + 스케줄러 relay, order → inventory) | 완료, 태그 `v0.1-basic-flow` |
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
-| 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | **진행 중**. 끝나면 `v0.3-reliability` = **완성 기준** |
+| 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 3단계 후 |
-| 후속 2 | 4단계 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 관측성 다음 |
+| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 관측성 다음 |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
-후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절은 아직 옛 순서(4~6단계 필수)라 3-E에서 고친다.
+후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
 
 ## 2. 현재 아키텍처
 
@@ -75,7 +75,7 @@ flowchart LR
 ```
 
 - 서비스 5개, 서비스마다 자기 DB·계정 (Postgres 하나에 DB 분리). 서비스끼리 HTTP 호출 없음, Kafka 메시지만
-- Saga: `RESERVING_STOCK → USING_POINT → PAYING → COMPLETED`, 실패 시 `REFUNDING_POINT → RELEASING_STOCK → CANCELLED` (ADR 0003)
+- Saga: `RESERVING_STOCK → USING_POINT → PAYING → COMPLETED`, 실패 시 `REFUNDING_POINT → RELEASING_STOCK → CANCELLED` (ADR 0003). 응답이 없으면 단계 타임아웃으로 재전송하다 포기 후 역순 보상, 결제는 `CANCELLING_PAYMENT`(`CancelPayment`)부터 (ADR 0007)
 - 모든 발행은 outbox (비즈니스 변경 + outbox = 한 트랜잭션). relay는 두 모드: **스케줄러**(`libs/outbox`, `FOR UPDATE SKIP LOCKED`, 기본) 또는 **Debezium**(Kafka Connect + Outbox Event Router, `OUTBOX_RELAY_ENABLED=false`). **운영 기준은 Debezium, 코드 기본값은 스케줄러**(Connect 없이 잘못 띄워도 메시지를 잃지 않게) (ADR 0004)
 - 메시지: key = orderId, value = payload JSON, 헤더 `id`(= outbox id) · `type` (ADR 0005)
 - 멱등 두 겹: 같은 메시지 재전달은 `processed_message`, 내용이 같은 재요청은 주문별 기록 (ADR 0006)
@@ -101,13 +101,14 @@ flowchart LR
 | #22 | 주문·결제·outbox(메시지) id 생성을 UUIDv4 → UUIDv7 (`uuid-creator`). 컬럼·메시지 계약 변경 없음, 사용자 id 는 bigint 유지 |
 | #23 | 3-C-2: 시나리오 5(커넥터 중단 → 유실 0, slot WAL 적체, heartbeat)·7(relay 지연·DB 부하 측정), ADR 0004(운영 기준 Debezium, 코드 기본값 스케줄러), 커넥터 `poll.interval.ms=100`·heartbeat |
 | #24 | 3-D-1: 멈춘 Saga 정리(단계 타임아웃 → 새 메시지 id로 재전송 → 정방향은 포기 후 역순 보상, 결제·보상은 계속 재전송), 시나리오 4(참여 서비스 다운), ADR 0007 |
-| (이번 PR) | 3-D-2: 결제 타임아웃 보정(PG 타임아웃 → `UNKNOWN` → PG 조회로 확정), 결제 단계 포기 시 `CancelPayment`(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`), 취소된 주문의 승인 결제 PG 환불(늦은 승인 자동 환불), 시나리오 2, ADR 0007 결제 부분 |
+| #25 | 3-D-2: 결제 타임아웃 보정(PG 타임아웃 → `UNKNOWN` → PG 조회로 확정), 결제 단계 포기 시 `CancelPayment`(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`), 취소된 주문의 승인 결제 PG 환불(늦은 승인 자동 환불), 시나리오 2, ADR 0007 결제 부분 |
+| (이번 PR) | 3-E 정리: 브리프 5절 진행 순서(1~3단계 = 완성, 후속 1~4), ADR 0000(왜 MSA인가, 메인 Saga 방식 대안 비교), 시나리오 3·6 CI 결과, README 아키텍처 3단계 기준 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
-## 4. 남은 일 (3단계)
+## 4. 3단계 작업 기록
 
 ### 3-C. Debezium relay
 
@@ -156,12 +157,12 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 2 (`scripts/smoke-payment-timeout.sh`, CI 두 모드): 2a PG 지연 6초(> 클라이언트 3초) → `UNKNOWN` → 조회로 승인 → `COMPLETED` / 2b PG 지연 45초(> Saga 결제 대기 약 30초) → 결제 취소·포인트 환불·재고 해제 → `CANCELLED` → PG 늦은 승인 → 자동 환불(`REFUNDED`, 원장 `refunded=true`)
 - CI e2e는 `SAGA_PAYMENT_MAX_RESENDS=2`, `PAYMENT_RECONCILE_INTERVAL=1s`를 더 둔다. 시나리오 7 유휴 커밋에 결제 보정 조회(1초에 한 번, payment_db)도 더해진다
 
-### 3-E. 정리 후 `v0.3-reliability` 태그
-- 브리프 5절을 합의된 순서로 수정 (v0.3 = 완성, 후속 순서는 위 표)
-- ADR 0000 "왜 MSA인가": 이 규모는 모놀리스로 충분하지만 분산 정합성을 검증하려고 나눴다 (drive 세션 제안 2)
-  - 메인 Saga 방식의 대안 비교도 함께 적는다: ① 동기 API 오케스트레이션 + 이벤트 뒷처리 + 대사 배치(실무에서 가장 흔함, 대신 참여 서비스 장애가 곧 주문 장애) ② Temporal 같은 워크플로 엔진(Saga 상태·재시도·타임아웃을 엔진이 맡고 Kafka는 이벤트용으로 남음, 대신 이 프로젝트가 증명하려는 메커니즘이 엔진 뒤로 숨고 운영 인프라가 늘어남) ③ 순수 코레오그래피(흐름이 흩어져 보상 순서 관리가 어려움). 결론: 메커니즘을 직접 구현·증명하려는 목적과 장애 격리 때문에 Kafka 커맨드/응답 오케스트레이션을 택함. 머지된 ADR 0003은 고치지 않는다
-- 시나리오 3·6 문서의 "CI 결과"를 PR #12·#13의 e2e 로그로 채우기 (#12: actions run `45033520460`)
-- README 아키텍처를 3단계 기준으로, 시나리오 표·ADR 목록 정리
+### 3-E. 정리 후 `v0.3-reliability` 태그 (완료)
+- 브리프 5절을 합의된 순서로 수정 (1~3단계 = 완성, 후속 1~4 표). 브리프의 다른 절도 옛 단계 번호(4·5·6단계)를 후속 번호로, 실패 처리(retry 토픽 → 제자리 재시도 + DLT), 시나리오 7 측정 도구(k6 → bash + curl)를 실제와 맞춤
+- ADR 0000 "왜 MSA인가": 이 규모는 모놀리스로 충분하지만 분산 정합성을 검증하려고 나눴다. 메인 Saga 방식 대안 비교(① 동기 API 오케스트레이션 + 대사 배치 ② Temporal 같은 워크플로 엔진 ③ 순수 코레오그래피 vs Kafka 커맨드/응답 오케스트레이션). 머지된 ADR 0003은 고치지 않음
+- 시나리오 3·6 문서의 CI 결과를 PR #12(run `45033520460`)·#13(run `45035791683`)의 e2e 로그로 채움
+- README 아키텍처를 3단계 기준으로(relay 두 모드, 단계 타임아웃, `CancelPayment`·결제 보정, DLT), ADR 목록에 0000
+- 이 PR이 머지되면 main 머지 커밋에 `v0.3-reliability` 태그
 
 ### 후속 2 설계 메모 (2026-11-23 사용자와 정리, 시작할 때 ADR로 남긴다)
 
@@ -200,7 +201,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 후속 관측성 작업. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
-- 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 4단계
+- 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 후속 2(인증)
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). lag 경보는 후속 관측성 작업에서
 
 ## 6. 작업 방식 (매 PR 동일)

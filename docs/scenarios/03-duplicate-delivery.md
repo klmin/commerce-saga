@@ -76,7 +76,23 @@ PASS
 - payment 2건: `Pay` 2
 - order 9건: 재고 응답 4, 포인트 응답 3, 결제 응답 2
 
-CI 결과는 이 PR의 `e2e` 실행 로그로 채운다.
+CI [2026-11-22 실행](https://github.com/klmin/commerce-saga/actions/runs/45033520460) (PR #12, 스케줄러 relay. 서비스를 `pkill`로 내리고 되감은 뒤 다시 띄움):
+
+```
+== 3. 오프셋 되감기로 전부 다시 전달 -> 재고·포인트·응답 변화 없음
+  ok  inventory-service lag 0
+  ok  point-service lag 0
+  ok  payment-service lag 0
+  ok  order-service lag 0
+  ok  재고·포인트·토픽 끝 오프셋 모두 그대로 (21 항목)
+  ok  inventory-service 재전달 5건 건너뜀
+  ok  point-service 재전달 3건 건너뜀
+  ok  payment-service 재전달 2건 건너뜀
+  ok  order-service 재전달 9건 건너뜀
+PASS
+```
+
+로컬과 건수까지 같다. 지금은 CI `e2e`가 relay 두 모드(scheduler, debezium)에서 매 PR마다 돈다.
 
 ### 덤으로 확인한 것: 배포 경계
 
