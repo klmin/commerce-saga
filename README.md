@@ -124,4 +124,4 @@ docs/          ADR, 시나리오
 
 ## 기술 스택
 
-Java 25, Spring Boot 4.1, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, OpenTelemetry(OTLP) + Grafana Tempo, Prometheus + Grafana, Testcontainers, ArchUnit
+Java 25, Spring Boot 4.2, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, OpenTelemetry(OTLP) + Grafana Tempo, Prometheus + Grafana, Testcontainers, ArchUnit

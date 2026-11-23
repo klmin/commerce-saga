@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #27 머지 후, 후속 1 O-2 메트릭·경보 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료: O-1 분산 트레이싱(PR #27), O-2 메트릭·경보(이번 PR). 다음은 후속 2(인증 + 프론트엔드)**
+- 마지막 갱신: 2026-11-23 (PR #28 머지 후, Spring Boot 4.2 업그레이드 PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료: O-1 분산 트레이싱(PR #27), O-2 메트릭·경보(PR #28). 다음은 후속 2(인증 + 프론트엔드), 그 전에 Spring Boot 4.2.0 으로 올림(이번 PR)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -44,7 +44,7 @@
 | 1 | 기본 흐름 (모노레포, outbox + 스케줄러 relay, order → inventory) | 완료, 태그 `v0.1-basic-flow` |
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
-| 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보) |
+| 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 관측성 다음 |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
@@ -105,7 +105,8 @@ flowchart LR
 | #25 | 3-D-2: 결제 타임아웃 보정(PG 타임아웃 → `UNKNOWN` → PG 조회로 확정), 결제 단계 포기 시 `CancelPayment`(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`), 취소된 주문의 승인 결제 PG 환불(늦은 승인 자동 환불), 시나리오 2, ADR 0007 결제 부분 |
 | #26 | 3-E 정리: 브리프 5절 진행 순서(1~3단계 = 완성, 후속 1~4), ADR 0000(왜 MSA인가, 메인 Saga 방식 대안 비교), 시나리오 3·6 CI 결과, README 아키텍처 3단계 기준 |
 | #27 | 후속 1 O-1 분산 트레이싱: OTel(OTLP) → Tempo + Grafana, outbox `traceparent` 컬럼 → Kafka 헤더 → 리스너 observation(relay 두 모드 같은 방식), 리스너 span 에 orderId·메시지 타입, 시나리오 11, ADR 0013 |
-| (이번 PR) | 후속 1 O-2 메트릭·경보: 서비스 `/actuator/prometheus`(Saga·결제·outbox·slot 메트릭, 자기 DB 기준), kafka-exporter(lag·DLT), Prometheus 경보 규칙 10개, Grafana 대시보드, 시나리오 12, ADR 0013 메트릭·경보 부분 |
+| #28 | 후속 1 O-2 메트릭·경보: 서비스 `/actuator/prometheus`(Saga·결제·outbox·slot 메트릭, 자기 DB 기준), kafka-exporter(lag·DLT), Prometheus 경보 규칙 10개, Grafana 대시보드, 시나리오 12, ADR 0013 메트릭·경보 부분 |
+| (이번 PR) | Spring Boot 4.1.2 → 4.2.0 (Kafka 클라이언트 4.4.0 = 브로커와 같은 버전, spring-kafka 4.2), Gradle 9.9.2. 후속 2 Gateway에 쓸 Spring Cloud 2026.0(Gateway 5.1)이 Boot 4.2 기준이라 먼저 올림. 시나리오 12 CI 결과 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·11·12와 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
@@ -213,7 +214,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 토큰 보관: Next 서버가 httpOnly·Secure·SameSite=Lax 쿠키로만. 브라우저 JS(localStorage)에 두지 않는다
 
 **Gateway·배포 경계**
-- Spring Cloud Gateway: `/auth/**` → auth-service(검증 없이 전달), `/api/**` → JWT 검증 후 서비스별 라우팅, 사용자별 rate limit(Redis), 역할 검사(`/api/admin/**`). Boot 4.1에 맞는 Spring Cloud 릴리스를 시작할 때 확인
+- Spring Cloud Gateway: `/auth/**` → auth-service(검증 없이 전달), `/api/**` → JWT 검증 후 서비스별 라우팅, 사용자별 rate limit(Redis), 역할 검사(`/api/admin/**`). Spring Cloud 2026.0 (Gateway 5.1, Boot 4.2 기준). 그래서 후속 2 시작 전에 Boot 4.1.2 → 4.2.0 으로 올렸다
 - 외부 공개는 edge(k8s 단계의 Ingress)만. Gateway·서비스·DB·Kafka·Redis는 내부망
 
 **프론트엔드: Next.js + Tailwind + shadcn/ui** (브리프, ADR 0011 예정)

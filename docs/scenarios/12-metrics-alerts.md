@@ -40,7 +40,14 @@ PASS
 
 로컬은 같은 스크립트를 여러 번 돌려 DLT 메시지·포기 횟수가 0부터 시작하지 않았다. 그래서 "경보가 firing 중"만이 아니라 값이 늘었는지를 본다.
 
-CI 결과는 이 PR의 `e2e` 실행 로그로 채운다.
+CI(PR #28, `e2e` run 45154167233)에서 relay 두 모드 모두 통과했다.
+
+| 모드 | 12a DLT 메시지 | 12a 경보 | 12b 포기 횟수 | 12b 경보 |
+|---|---|---|---|---|
+| scheduler | `payment.command.DLT` 0 → 1 | `DeadLetterMessage` firing | `commerce_saga_timeout_give_ups_total` 2 → 3 | `SagaTimeoutGiveUp`·`PaymentResultUnknown` firing → 환불(`REFUNDED`) 후 `PaymentResultUnknown` 해제 |
+| debezium | 0 → 1 | `DeadLetterMessage` firing | 2 → 3 | 같음 |
+
+포기 횟수가 2부터 시작하는 것은 같은 CI 실행에서 앞서 돈 시나리오 2(결제 타임아웃)가 이미 두 번 포기했기 때문이다.
 
 ## 만들면서 발견한 것
 
