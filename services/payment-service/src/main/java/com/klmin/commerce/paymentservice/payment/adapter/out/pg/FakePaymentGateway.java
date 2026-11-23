@@ -84,8 +84,10 @@ class FakePaymentGateway implements PaymentGatewayPort, PaymentGatewayFaultPort,
         }
         Settings current = settings.get();
         CompletableFuture<GatewayResult> processing = inFlight.computeIfAbsent(orderId, id ->
-                CompletableFuture.supplyAsync(() -> process(id, userId, amount, current), pg)
-                        .whenComplete((result, error) -> inFlight.remove(id)));
+                CompletableFuture.supplyAsync(() -> process(id, userId, amount, current), pg));
+        // 맵 등록이 끝난 뒤 연결한다. 등록 전에 끝난 작업이면 콜백이 computeIfAbsent 안에서 돌아
+        // remove 가 실패하고 실패한 future 가 맵에 남는다. 조건부 remove 라 여러 번 연결돼도 안전하다
+        processing.whenComplete((result, error) -> inFlight.remove(orderId, processing));
         try {
             return processing.get(clientTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {

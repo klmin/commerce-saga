@@ -10,11 +10,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DelegatingDataSource;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,6 +84,29 @@ class FakePaymentGatewayTest {
         assertThat(gateway.inquire(orderId).orElseThrow().approved()).isTrue();
         // 같은 주문 재요청은 늦게 확정된 그 결과 (두 번 승인되지 않음)
         assertThat(gateway.approve(orderId, 1L, 100L)).isEqualTo(gateway.inquire(orderId).orElseThrow());
+    }
+
+    @Test
+    void ledgerFailure_isNotCached_retrySucceedsAfterRecovery() {
+        // 연결 순서: 1 = 첫 요청의 원장 조회, 2 = 첫 요청의 원장 기록(일시 장애), 이후 정상
+        AtomicInteger connections = new AtomicInteger();
+        DataSource flaky = new DelegatingDataSource(dataSource) {
+            @Override
+            public Connection getConnection() throws SQLException {
+                if (connections.incrementAndGet() == 2) {
+                    throw new SQLException("일시 장애");
+                }
+                return super.getConnection();
+            }
+        };
+        FakePaymentGateway gateway = new FakePaymentGateway(flaky, Mode.APPROVE, 0);
+        UUID orderId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> gateway.approve(orderId, 1L, 100L)).isInstanceOf(IllegalStateException.class);
+
+        // 실패한 처리가 남아 있으면 재시도도 같은 실패를 받는다
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                assertThat(gateway.approve(orderId, 1L, 100L).approved()).isTrue());
     }
 
     @Test
