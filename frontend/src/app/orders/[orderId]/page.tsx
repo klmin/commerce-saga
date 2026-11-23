@@ -37,7 +37,9 @@ async function OrderDetail({ params }: Pick<PageProps<"/orders/[orderId]">, "par
     notFound();
   }
   const [order, saga] = await load(orderId);
-  const finished = isFinished(saga.state);
+  // 주문과 Saga 는 따로 읽어 같은 순간이 아닐 수 있다(그 사이 Saga 가 끝나면 주문은 아직 PENDING).
+  // 둘 다 끝난 상태일 때만 갱신을 멈춘다
+  const finished = isFinished(saga.state) && order.status !== "PENDING";
   const steps = sagaSteps(saga, order);
 
   return (
