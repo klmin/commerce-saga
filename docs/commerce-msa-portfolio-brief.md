@@ -280,7 +280,7 @@ product-service (Postgres) ──Debezium 테이블 CDC──▶ Kafka ──▶
   - 나중에 가져올 것: `frontend/`(Next.js + Tailwind, 프론트엔드 단계에서), openapi 기반 프론트 타입 생성. 1~3단계에서는 가져오지 않는다.
 
 ### 기술 스택 (템플릿과 맞춤)
-- Java 25, Spring Boot 4.1, Gradle Kotlin DSL, PostgreSQL, Kafka (KRaft), Spring for Apache Kafka, Debezium (Kafka Connect), Flyway
+- Java 25, Spring Boot 4.2, Gradle Kotlin DSL, PostgreSQL, Kafka (KRaft), Spring for Apache Kafka, Debezium (Kafka Connect), Flyway
 - 테스트: JUnit 5, **Testcontainers** (Postgres + Kafka + Debezium 통합 테스트 1~2개)
 - 관측성(후속 1): Prometheus/Grafana, OpenTelemetry (HTTP → Kafka → 컨슈머 트레이싱)
 - k8s(후속 3): Strimzi (`Kafka`, `KafkaConnect`, `KafkaConnector` CRD), ArgoCD, Helm

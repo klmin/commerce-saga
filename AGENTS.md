@@ -6,7 +6,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 
 커머스 주문(주문·재고·포인트·결제)을 MSA로 나누고, 서비스 간 정합성을 **Saga + Transactional Outbox + Kafka (+ Debezium)** 로 맞추는 포트폴리오 프로젝트. 배경과 설계 결정은 [docs/commerce-msa-portfolio-brief.md](docs/commerce-msa-portfolio-brief.md), 결정 기록은 `docs/adr/`.
 
-- Java 25, Spring Boot 4.1, Gradle Kotlin DSL 멀티모듈 모노레포
+- Java 25, Spring Boot 4.2, Gradle Kotlin DSL 멀티모듈 모노레포
 - PostgreSQL(서비스별 DB), Flyway, Kafka(KRaft), Spring for Apache Kafka, Debezium(Kafka Connect, 3단계)
 - 테스트: JUnit 5, ArchUnit, Testcontainers(Postgres, Kafka)
 
