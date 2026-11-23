@@ -7,8 +7,14 @@
 #
 # 측정하는 것
 #   1. 유휴 부하: 트래픽 없이 IDLE_SECONDS 동안 DB 네 개의 커밋 수·outbox 테이블 스캔 수 (relay 폴링 비용)
-#   2. 부하 중: 주문 ORDERS 건을 CONCURRENCY 개씩 동시에 넣고, 주문 생성 → COMPLETED 까지 걸린 시간
-#      (orders.updated_at - created_at, 서버 시각이라 폴링 간격 오차가 없다) 과 그동안의 DB 커밋 수
+#   2. 지연: 진행 중인 Saga 를 최대 CONCURRENCY 건으로 유지하며 주문 ORDERS 건. 한 묶음(CONCURRENCY 건)을 넣고
+#      모두 끝난 뒤 다음 묶음을 넣는다 (CONCURRENCY=1 이면 Saga 하나씩 직렬). 주문 생성 → COMPLETED 시간은
+#      서버 시각(orders.updated_at - created_at)이라 스크립트의 폴링 간격 오차가 없다
+#   3. 부하 중 커밋: 2 의 구간 커밋 수에서 같은 길이의 유휴분(1 의 비율)을 뺀 값을 주문 수로 나눈다
+#
+# Postgres 누적 통계(pg_stat_*)는 백엔드가 모아 두었다가 늦게 반영한다 (쉬는 연결은 최대 10초 뒤).
+# 그래서 스냅숏 전에 STATS_SETTLE_SECONDS 만큼 기다린다. 지연 측정 종료와 통계 수집 시점은 분리돼 있다
+#
 # k6 대신 bash + curl 을 쓴다 (CI·로컬에 추가 도구 없이 같은 방식으로 돌리려고)
 set -euo pipefail
 
@@ -19,36 +25,28 @@ ORDERS=${ORDERS:-30}
 CONCURRENCY=${CONCURRENCY:-5}
 USER_ID=${USER_ID:-3}
 IDLE_SECONDS=${IDLE_SECONDS:-30}
-TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
+STATS_SETTLE_SECONDS=${STATS_SETTLE_SECONDS:-11}
+TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 DBS="order_db inventory_db point_db payment_db"
 
+field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 psql_q() { docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d "$1" -tAc "$2"; }
+now_s() { date +%s.%N | cut -c1-14; }
+calc() { awk "BEGIN{printf \"%.1f\", $1}"; }
 
-commits() { # db -> xact_commit
-  psql_q postgres "select xact_commit from pg_stat_database where datname = '$1'"
+snapshot() { # -> "db:commits:scans ..." (커밋 수, outbox 테이블을 읽은 횟수 seq + index). 시점을 맞추려고 exec 한 번에 읽는다
+  docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres sh -c '
+    for db in '"$DBS"'; do
+      c=$(psql -U postgres -d postgres -tAc "select xact_commit from pg_stat_database where datname = '"'"'$db'"'"'")
+      s=$(psql -U postgres -d "$db" -tAc "select coalesce(seq_scan, 0) + coalesce(idx_scan, 0) from pg_stat_user_tables where relname = '"'"'outbox'"'"'")
+      printf " %s:%s:%s" "$db" "$c" "$s"
+    done'
 }
-outbox_scans() { # db -> outbox 테이블을 읽은 횟수 (seq + index)
-  psql_q "$1" "select coalesce(seq_scan, 0) + coalesce(idx_scan, 0) from pg_stat_user_tables where relname = 'outbox'"
-}
-snapshot() { # -> "db:commits:scans ..."
-  local db out=""
-  for db in $DBS; do out="$out $db:$(commits "$db"):$(outbox_scans "$db")"; done
-  echo "$out"
-}
-print_delta() { # title seconds before after
-  local title=$1 secs=$2 before=$3 after=$4 db b a total_c=0 total_s=0
-  echo "  $title (${secs}s)"
-  printf '    %-13s %10s %10s %14s\n' db commits "commits/s" "outbox scans"
-  for db in $DBS; do
-    b=$(echo "$before" | tr ' ' '\n' | grep "^$db:")
-    a=$(echo "$after" | tr ' ' '\n' | grep "^$db:")
-    local dc=$(( $(echo "$a" | cut -d: -f2) - $(echo "$b" | cut -d: -f2) ))
-    local ds=$(( $(echo "$a" | cut -d: -f3) - $(echo "$b" | cut -d: -f3) ))
-    total_c=$(( total_c + dc )); total_s=$(( total_s + ds ))
-    printf '    %-13s %10d %10s %14d\n' "$db" "$dc" "$(awk "BEGIN{printf \"%.1f\", $dc/$secs}")" "$ds"
-  done
-  printf '    %-13s %10d %10s %14d\n' total "$total_c" "$(awk "BEGIN{printf \"%.1f\", $total_c/$secs}")" "$total_s"
-  last_total_commits=$total_c
+delta() { # before after db col(2=commits,3=scans)
+  local b a
+  b=$(echo "$1" | tr ' ' '\n' | grep "^$3:" | cut -d: -f"$4")
+  a=$(echo "$2" | tr ' ' '\n' | grep "^$3:" | cut -d: -f"$4")
+  echo $(( a - b ))
 }
 
 curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H 'Content-Type: application/json' \
@@ -57,37 +55,53 @@ curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H 'Content-Type: applicatio
 mode=$(psql_q postgres "select case when count(*) filter (where active) > 0 then 'debezium' else 'scheduler' end from pg_replication_slots")
 echo "== 7. relay 측정 (mode=$mode, orders=$ORDERS, concurrency=$CONCURRENCY)"
 
-# 1. 유휴 부하
-before=$(snapshot)
+# 1. 유휴 부하 (앞선 작업의 통계가 반영된 뒤 시작)
+sleep "$STATS_SETTLE_SECONDS"
+t0=$(now_s); before=$(snapshot)
 sleep "$IDLE_SECONDS"
-after=$(snapshot)
-print_delta "유휴" "$IDLE_SECONDS" "$before" "$after"
+t1=$(now_s); after=$(snapshot)
+idle_secs=$(calc "$t1 - $t0")
+echo "  유휴 (${idle_secs}s)"
+printf '    %-13s %10s %10s %14s\n' db commits "commits/s" "outbox scans"
+declare -A idle_rate_c idle_rate_s
+total_c=0; total_s=0
+for db in $DBS; do
+  dc=$(delta "$before" "$after" "$db" 2); ds=$(delta "$before" "$after" "$db" 3)
+  idle_rate_c[$db]=$(calc "$dc / $idle_secs"); idle_rate_s[$db]=$(calc "$ds / $idle_secs")
+  total_c=$(( total_c + dc )); total_s=$(( total_s + ds ))
+  printf '    %-13s %10d %10s %14d\n' "$db" "$dc" "${idle_rate_c[$db]}" "$ds"
+done
+printf '    %-13s %10d %10s %14d\n' total "$total_c" "$(calc "$total_c / $idle_secs")" "$total_s"
 
-# 2. 부하 중 지연
+# 2. 지연: 묶음 단위로 넣고 그 묶음이 끝나면 다음 묶음 (진행 중인 Saga 최대 CONCURRENCY 건)
+sleep "$STATS_SETTLE_SECONDS"
 mark=$(psql_q order_db "select now()")
-before=$(snapshot)
-start=$(date +%s)
-n=0
-for i in $(seq 1 "$ORDERS"); do
-  product=$(( (i % 3) + 1 ))
-  curl -sf -o /dev/null -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $USER_ID" \
-    -d "{\"lines\":[{\"productId\":$product,\"quantity\":1,\"unitPrice\":100}],\"pointAmount\":10}" &
-  n=$(( n + 1 ))
-  if [ "$n" -ge "$CONCURRENCY" ]; then wait; n=0; fi
+t0=$(now_s); before=$(snapshot)
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+sent=0
+while [ "$sent" -lt "$ORDERS" ]; do
+  batch=$(( ORDERS - sent < CONCURRENCY ? ORDERS - sent : CONCURRENCY ))
+  rm -f "$tmp"/*
+  for j in $(seq 1 "$batch"); do
+    product=$(( ((sent + j) % 3) + 1 ))
+    curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $USER_ID" \
+      -d "{\"lines\":[{\"productId\":$product,\"quantity\":1,\"unitPrice\":100}],\"pointAmount\":10}" \
+      | field orderId > "$tmp/$j" &
+  done
+  wait
+  ids=$(for f in "$tmp"/*; do id=$(cat "$f"); [ -n "$id" ] && printf "'%s'\n" "$id"; done | paste -sd, -)
+  [ "$(echo "$ids" | tr ',' '\n' | grep -c .)" -eq "$batch" ] || { echo "FAIL: 주문 생성 실패" >&2; exit 1; }
+  deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+  while [ "$(psql_q order_db "select count(*) from orders where id in ($ids) and status in ('COMPLETED', 'CANCELLED')")" -lt "$batch" ]; do
+    if [ "$(date +%s)" -gt "$deadline" ]; then
+      echo "FAIL: ${TIMEOUT_SECONDS}초 안에 묶음이 끝나지 않음" >&2
+      exit 1
+    fi
+    sleep 0.2
+  done
+  sent=$(( sent + batch ))
 done
-wait
-
-done_sql="select count(*) from orders where created_at >= '$mark' and status in ('COMPLETED', 'CANCELLED')"
-deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
-while [ "$(psql_q order_db "$done_sql")" -lt "$ORDERS" ]; do
-  if [ "$(date +%s)" -gt "$deadline" ]; then
-    echo "FAIL: ${TIMEOUT_SECONDS}초 안에 주문이 끝나지 않음 ($(psql_q order_db "$done_sql")/$ORDERS)" >&2
-    exit 1
-  fi
-  sleep 0.5
-done
-elapsed=$(( $(date +%s) - start ))
-after=$(snapshot)
 
 echo "  주문 → COMPLETED 지연 (ms, 서버 시각 orders.updated_at - created_at)"
 psql_q order_db "
@@ -98,5 +112,18 @@ psql_q order_db "
     round(max(ms) filter (where status = 'COMPLETED')))
   from (select status, extract(epoch from (updated_at - created_at)) * 1000 as ms
         from orders where created_at >= '$mark') t"
-print_delta "부하 중" "$(( elapsed > 0 ? elapsed : 1 ))" "$before" "$after"
-echo "    주문 1건당 커밋 $(awk "BEGIN{printf \"%.1f\", $last_total_commits/$ORDERS}")"
+
+# 3. 부하 중 커밋: 통계 반영을 기다린 뒤 수집하고, 구간 길이만큼의 유휴분을 뺀다
+sleep "$STATS_SETTLE_SECONDS"
+t1=$(now_s); after=$(snapshot)
+win=$(calc "$t1 - $t0")
+echo "  부하 구간 (${win}s, 통계 반영 대기 ${STATS_SETTLE_SECONDS}s 포함, 유휴분 = 유휴 비율 × 구간)"
+printf '    %-13s %10s %10s %12s %14s\n' db commits "유휴분" "주문당" "outbox scans"
+total_c=0; total_net=0; total_s=0
+for db in $DBS; do
+  dc=$(delta "$before" "$after" "$db" 2); ds=$(delta "$before" "$after" "$db" 3)
+  net=$(calc "$dc - ${idle_rate_c[$db]} * $win")
+  total_c=$(( total_c + dc )); total_s=$(( total_s + ds )); total_net=$(calc "$total_net + $net")
+  printf '    %-13s %10d %10s %12s %14d\n' "$db" "$dc" "$(calc "${idle_rate_c[$db]} * $win")" "$(calc "$net / $ORDERS")" "$ds"
+done
+printf '    %-13s %10d %10s %12s %14d\n' total "$total_c" "$(calc "$total_c - $total_net")" "$(calc "$total_net / $ORDERS")" "$total_s"

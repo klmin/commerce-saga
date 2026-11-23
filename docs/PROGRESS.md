@@ -27,6 +27,7 @@
   - 반드시 **마지막 커밋에 대한** 리뷰인지 확인한다 (리뷰의 `commit_id`)
 - CI: `gh pr checks <번호>` → backend, saga (scheduler)·saga (debezium)(e2e), compose-up(infra), analyze(CodeQL), request-review 전부 pass. e2e는 모드마다 6~7분(병렬). compose-up은 `infra/**` 변경, request-review는 PR을 연 뒤 push가 있을 때만 뜬다
 - 머지: `gh pr merge <번호> --squash --delete-branch`
+- PR을 열면 앱의 Auto-fix(CI 실패·리뷰 코멘트가 오면 세션을 깨움)를 **항상 켠다** (Claude 데스크톱 앱 기능이라 AGENTS.md가 아니라 여기 적음). 머지는 Auto-fix가 조용해도 CI 통과와 마지막 커밋의 Codex 리뷰를 직접 확인한 뒤
 - 머지 후 이 문서 3절 PR 표와 맨 위 "마지막 갱신·현재 위치"를 다음 PR에서 갱신한다
 
 **환경 메모**
@@ -123,7 +124,7 @@ PR 두 개로 나눴다. 3-C-1(relay 교체, PR #20), 3-C-2(시나리오·ADR) �
 **3-C-2에서 한 것 (결정·확인 사항)**
 - 시나리오 5 (`scripts/smoke-connector-outage.sh`, CI debezium 모드): 커넥터 네 개 `stop` → 주문 5건은 `PENDING`, outbox 0행(메시지는 WAL에만), slot `active=f`·적체 증가 → `resume` 후 5건 `COMPLETED`, 포인트·재고 정확히 한 번 반영, 적체 감소
 - heartbeat: `heartbeat.interval.ms=10000` + `heartbeat.action.query`로 `pg_logical_emit_message` (테이블·publication 변경 없음), 메시지는 `message.prefix.exclude.list=heartbeat`로 발행 안 함. heartbeat 토픽 `__debezium-heartbeat.<커넥터>`는 `kafka-init`이 만든다. 확인: 다른 DB에 WAL 20 MB를 만들면 모든 slot 적체가 21 MB → heartbeat 켠 커넥터만 20초 안에 96 B
-- 시나리오 7 (`scripts/measure-relay.sh`, CI 두 모드): k6 대신 bash + curl. 지연은 서버 시각 `orders.updated_at − created_at`. 로컬 p50 스케줄러 2083ms / Debezium(poll 500ms 기본) 3169ms / Debezium(poll 100ms) 876ms. 유휴 커밋 23.5/s vs 1.3/s, 유휴 outbox 스캔 675 vs 0 (30초)
+- 시나리오 7 (`scripts/measure-relay.sh`, CI 두 모드): k6 대신 bash + curl. 지연은 서버 시각 `orders.updated_at − created_at`. 진행 중 Saga 최대 5건으로 묶음 단위 투입, 통계 반영 대기 11초(Codex 지적 반영). 로컬 p50/p95 스케줄러 776/1271ms, Debezium(poll 100ms) 811/922ms, Debezium(poll 500ms 기본) 2449/3656ms. 유휴 커밋 19.6/s vs 0.8/s, 유휴 outbox 스캔 574 vs 0 (30초), 주문당 커밋은 비슷(15~17). 핵심 차이는 지연이 아니라 유휴 폴링 비용과 꼬리 지연
 - 커넥터 `poll.interval.ms=100`: 기본 500ms로는 Debezium이 스케줄러보다 느렸다
 - ADR 0004: **운영 기준은 Debezium, 코드 기본값(`outbox.relay.enabled=true`)은 스케줄러 유지**. Debezium 모드는 넣고 바로 지우므로 Connect 없이 그 모드로 뜨면 조용히 발행이 안 되기 때문. 배포 설정에서 `OUTBOX_RELAY_ENABLED=false`를 명시한다
 - 로컬에서 겪은 것: 3-C-1 테스트로 넣은 `aggregatetype='x'` 행 하나 때문에 order 커넥터가 약 2.5시간 동안 아무것도 발행하지 못했는데 상태는 `RUNNING`이었다(Connect 프로듀서 `max.block.ms` 무한, 브로커 자동 생성 꺼짐). ADR 0004 위험 2. slot 적체 경보로 잡는다(후속 관측성)
