@@ -24,17 +24,36 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 ids() { grep -o "\"$1\":\"[^\"]*\"" | sed -E 's/.*:"([^"]*)"/\1/'; }
-points() { curl -sf "$GATEWAY_URL/api/points/me" -H "$(auth "$1")" | field balance; }
+# Gateway 사용자별 rate limit(CI 는 초당 5·버스트 10, 바로 앞 smoke-gateway 가 사용자 3 버킷을 비운다)에 걸리면
+# 기다렸다 다시 보낸다. 429 는 Gateway 가 서비스에 넘기기 전에 거절한 것이라 다시 보내도 안전하다
+RETRIES_429=${RETRIES_429:-30}
+get() { # path userId → 본문 (200 이 아니면 실패)
+  local i out code
+  for i in $(seq 1 "$RETRIES_429"); do
+    out=$(curl -s -w '\n%{http_code}' "$GATEWAY_URL$1" -H "$(auth "$2")")
+    code=${out##*$'\n'}
+    if [ "$code" = 429 ]; then sleep 1; continue; fi
+    [ "$code" = 200 ] || fail "GET $1 (사용자 $2) → $code"
+    printf '%s' "${out%$'\n'*}"
+    return 0
+  done
+  fail "GET $1 (사용자 $2) → 계속 429"
+}
+points() { get /api/points/me "$1" | field balance; }
 body() { # quantity
   printf '{"lines":[{"productId":2,"quantity":%s,"unitPrice":1000}],"pointAmount":%s}' "$1" "$POINT"
 }
 place() { # key quantity → "status orderId replayed"
-  local out headers
+  local out headers status i
   out=$(mktemp)
-  headers=$(curl -s -o "$out" -D - -X POST "$GATEWAY_URL/api/orders" -H "$(auth "$USER_ID")" \
-    -H 'Content-Type: application/json' -H "Idempotency-Key: $1" -d "$(body "$2")")
-  printf '%s %s %s\n' \
-    "$(printf '%s' "$headers" | sed -nE 's#^HTTP/[0-9.]+ ([0-9]+).*#\1#p' | tail -1)" \
+  for i in $(seq 1 "$RETRIES_429"); do
+    headers=$(curl -s -o "$out" -D - -X POST "$GATEWAY_URL/api/orders" -H "$(auth "$USER_ID")" \
+      -H 'Content-Type: application/json' -H "Idempotency-Key: $1" -d "$(body "$2")")
+    status=$(printf '%s' "$headers" | sed -nE 's#^HTTP/[0-9.]+ ([0-9]+).*#\1#p' | tail -1)
+    [ "$status" = 429 ] || break
+    sleep 1
+  done
+  printf '%s %s %s\n' "$status" \
     "$(field orderId < "$out")" \
     "$(printf '%s' "$headers" | tr -d '\r' | sed -nE 's/^[Ii]dempotent-[Rr]eplayed: (.*)$/\1/p')"
   rm -f "$out"
@@ -42,7 +61,7 @@ place() { # key quantity → "status orderId replayed"
 wait_completed() { # orderId
   local deadline=$(( $(date +%s) + TIMEOUT_SECONDS )) status
   while :; do
-    status=$(curl -sf "$GATEWAY_URL/api/orders/$1" -H "$(auth "$USER_ID")" | field status)
+    status=$(get "/api/orders/$1" "$USER_ID" | field status)
     [ "$status" = "COMPLETED" ] && return 0
     [ "$status" = "CANCELLED" ] && fail "주문 …${1: -8} 이 CANCELLED"
     [ "$(date +%s)" -le "$deadline" ] || fail "주문 …${1: -8} 이 COMPLETED 가 안 됨 ($status)"
@@ -78,14 +97,14 @@ order_b=$(awk 'NR==1{print $2}' "$results")
 [ "$(awk '$1==200' "$results" | wc -l)" = 4 ] || { cat "$results"; fail "200(재요청) 이 4번이 아님"; }
 rm -f "$results"
 ok "5개 모두 주문 …${order_b: -8}, 201 한 번 + 200 네 번"
-latest=$(curl -sf "$GATEWAY_URL/api/orders?size=2" -H "$(auth "$USER_ID")" | ids orderId | tr '\n' ' ')
+latest=$(get "/api/orders?size=2" "$USER_ID" | ids orderId | tr '\n' ' ')
 [ "$latest" = "$order_b $order_a " ] || fail "내 주문 목록 맨 위가 [$order_b $order_a] 가 아님: [$latest]"
 ok "내 주문 목록 맨 위 두 건 = 10b, 10a (다른 주문이 생기지 않음)"
 
 echo "== 10c. 같은 키 + 다른 본문 → 422"
 read -r s3 _ _ <<< "$(place "$key_a" 2)"
 [ "$s3" = 422 ] || fail "다른 본문 → $s3 (기대 422)"
-[ "$(curl -sf "$GATEWAY_URL/api/orders?size=1" -H "$(auth "$USER_ID")" | ids orderId)" = "$order_b" ] \
+[ "$(get "/api/orders?size=1" "$USER_ID" | ids orderId)" = "$order_b" ] \
   || fail "422 뒤에 주문이 생김"
 ok "다른 본문 → 422, 주문 안 생김"
 
@@ -99,18 +118,21 @@ points_after=$(points "$USER_ID")
 ok "포인트 $points_before → $points_after (2건 × $POINT, 재요청은 차감 없음)"
 
 echo "== 10e. 내 주문·결제 목록"
-second=$(curl -sf "$GATEWAY_URL/api/orders?size=1&before=$order_b" -H "$(auth "$USER_ID")" | ids orderId)
+second=$(get "/api/orders?size=1&before=$order_b" "$USER_ID" | ids orderId)
 [ "$second" = "$order_a" ] || fail "커서 다음 쪽이 $order_a 가 아님: $second"
 ok "주문 목록 커서(before=10b 주문) → 10a 주문"
-payments=$(curl -sf "$GATEWAY_URL/api/payments?size=5" -H "$(auth "$USER_ID")")
+payments=$(get "/api/payments?size=5" "$USER_ID")
 printf '%s' "$payments" | ids orderId | grep -qx "$order_b" || fail "결제 목록에 10b 주문 결제 없음"
 printf '%s' "$payments" | ids orderId | grep -qx "$order_a" || fail "결제 목록에 10a 주문 결제 없음"
 [ "$(printf '%s' "$payments" | ids orderId | grep -cx "$order_b")" = 1 ] || fail "10b 주문 결제가 두 건 이상"
 ok "결제 목록에 두 주문 결제가 하나씩"
-if curl -sf "$GATEWAY_URL/api/orders?size=50" -H "$(auth "$OTHER_USER_ID")" | ids orderId | grep -qx "$order_b"; then
+# 조회 실패가 "안 보임" 으로 넘어가지 않게 먼저 받아 둔다 (if 안의 파이프는 set -e 가 듣지 않는다)
+other_orders=$(get "/api/orders?size=50" "$OTHER_USER_ID")
+other_payments=$(get "/api/payments?size=50" "$OTHER_USER_ID")
+if printf '%s' "$other_orders" | ids orderId | grep -qx "$order_b"; then
   fail "사용자 $OTHER_USER_ID 주문 목록에 사용자 $USER_ID 주문이 보임"
 fi
-if curl -sf "$GATEWAY_URL/api/payments?size=50" -H "$(auth "$OTHER_USER_ID")" | ids orderId | grep -qx "$order_b"; then
+if printf '%s' "$other_payments" | ids orderId | grep -qx "$order_b"; then
   fail "사용자 $OTHER_USER_ID 결제 목록에 사용자 $USER_ID 결제가 보임"
 fi
 ok "사용자 $OTHER_USER_ID 의 주문·결제 목록에는 안 보임"
