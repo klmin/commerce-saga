@@ -22,6 +22,9 @@ export async function SiteHeaderSession() {
   }
   return (
     <nav className="flex items-center gap-3">
+      <Button variant="ghost" size="sm" asChild>
+        <Link href="/orders">내 주문</Link>
+      </Button>
       <span className="text-sm text-muted-foreground">사용자 #{userId}</span>
       <form action={logoutAction}>
         <Button type="submit" variant="outline" size="sm">
