@@ -168,7 +168,8 @@ class PaymentRecorder {
         switch (payment.status()) {
             case APPROVED -> replyPort.paymentApproved(payment.orderId(), payment.id());
             case DECLINED -> replyPort.paymentFailed(payment.orderId(), payment.reason());
-            case CANCELLED, REFUNDED -> replyPort.paymentFailed(payment.orderId(), CANCELLED_REASON);
+            case CANCELLED -> replyPort.paymentFailed(payment.orderId(), CANCELLED_REASON);
+            case REFUNDED -> replyPort.paymentFailed(payment.orderId(), CANCELLED_REASON);
             case UNKNOWN -> {
                 // PG 조회로 확정될 때 응답한다
             }
