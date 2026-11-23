@@ -1,5 +1,6 @@
 package com.klmin.commerce.orderservice.order.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,11 +14,18 @@ import java.util.UUID;
  * <p>
  * 현재 단계에서 기다리는 응답이 아니면(중복, 늦게 도착, 끝난 Saga) 아무것도 바꾸지 않고 {@link SagaAction.Ignore}.
  * 그래서 at-least-once 전달에서도 단계가 되돌아가거나 커맨드가 두 번 나가지 않는다.
+ * <p>
+ * 응답이 오지 않는 단계(참여 서비스 장애, 커맨드·응답이 DLT 로 감)는 {@link #onTimeout} 이 정리한다:
+ * 같은 커맨드를 다시 보내고(참여 서비스는 주문별 기록으로 처음 결과를 다시 응답), 그래도 안 되면 역순 보상 (ADR 0007).
  */
 public final class OrderSaga {
 
     public static final int REASON_MAX_LENGTH = 200;
     public static final String STARTED = "STARTED";
+    /** 응답이 없어 현재 단계의 커맨드를 다시 보냄 (단계는 그대로) */
+    public static final String TIMEOUT_RESEND = "TIMEOUT_RESEND";
+    /** 재전송해도 응답이 없어 정방향을 포기하고 보상으로 넘어감 */
+    public static final String TIMEOUT_GIVE_UP = "TIMEOUT_GIVE_UP";
 
     private final UUID orderId;
     private final long userId;
@@ -28,14 +36,18 @@ public final class OrderSaga {
     private SagaState state;
     private boolean pointUsed;
     private String failureReason;
+    private int stepResends;
     private Instant updatedAt;
 
     private OrderSaga(UUID orderId, long userId, long pointAmount, long paidAmount, SagaState state,
-                      boolean pointUsed, String failureReason, List<SagaHistoryEntry> history, Instant createdAt,
-                      Instant updatedAt) {
+                      boolean pointUsed, String failureReason, int stepResends, List<SagaHistoryEntry> history,
+                      Instant createdAt, Instant updatedAt) {
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         if (pointAmount < 0 || paidAmount < 0) {
             throw new IllegalArgumentException("amounts must not be negative");
+        }
+        if (stepResends < 0) {
+            throw new IllegalArgumentException("stepResends must not be negative");
         }
         this.userId = userId;
         this.pointAmount = pointAmount;
@@ -43,6 +55,7 @@ public final class OrderSaga {
         this.state = Objects.requireNonNull(state, "state");
         this.pointUsed = pointUsed;
         this.failureReason = failureReason;
+        this.stepResends = stepResends;
         this.history = new ArrayList<>(history);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
@@ -51,15 +64,15 @@ public final class OrderSaga {
     /** Saga 시작. 첫 단계는 재고 예약이다 ({@link SagaAction.ReserveStock}) */
     public static OrderSaga start(Order order, Instant now) {
         return new OrderSaga(order.id(), order.userId(), order.pointAmount(), order.paidAmount(),
-                SagaState.RESERVING_STOCK, false, null,
+                SagaState.RESERVING_STOCK, false, null, 0,
                 List.of(new SagaHistoryEntry(STARTED, SagaState.RESERVING_STOCK, null, now)), now, now);
     }
 
     public static OrderSaga restore(UUID orderId, long userId, long pointAmount, long paidAmount, SagaState state,
-                                    boolean pointUsed, String failureReason, List<SagaHistoryEntry> history,
-                                    Instant createdAt, Instant updatedAt) {
-        return new OrderSaga(orderId, userId, pointAmount, paidAmount, state, pointUsed, failureReason, history,
-                createdAt, updatedAt);
+                                    boolean pointUsed, String failureReason, int stepResends,
+                                    List<SagaHistoryEntry> history, Instant createdAt, Instant updatedAt) {
+        return new OrderSaga(orderId, userId, pointAmount, paidAmount, state, pointUsed, failureReason, stepResends,
+                history, createdAt, updatedAt);
     }
 
     /** 참여 서비스 응답을 반영하고 다음 할 일을 돌려준다 */
@@ -99,6 +112,61 @@ public final class OrderSaga {
         return action;
     }
 
+    /**
+     * 현재 단계에서 {@code stepTimeout} 넘게 아무 응답이 없을 때 할 일. 아직 시간이 안 됐거나 끝난 Saga 면 {@link SagaAction.Ignore}.
+     * <ul>
+     *   <li>정방향(재고 예약·포인트 차감): {@code maxResends} 번까지 같은 커맨드를 다시 보낸다. 그래도 응답이 없으면
+     *       앞 단계가 반영됐는지 알 수 없으므로 <b>반영됐다고 보고</b> 역순 보상한다 (보상 커맨드는 앞 단계가 없었어도 안전)</li>
+     *   <li>결제: 결과가 애매하므로(승인됐을 수 있음) 포기하지 않고 계속 다시 묻는다. 결제 서비스는 같은 주문의 Pay 에
+     *       기록된 결과를 다시 응답한다</li>
+     *   <li>보상: 포기할 수 없으므로 끝까지 다시 보낸다</li>
+     * </ul>
+     * 재전송할 때마다 {@code updatedAt} 이 바뀌어 다음 재전송은 다시 {@code stepTimeout} 뒤다.
+     */
+    public SagaAction onTimeout(Instant now, Duration stepTimeout, int maxResends) {
+        if (state.isFinished() || now.isBefore(updatedAt.plus(stepTimeout))) {
+            return ignore();
+        }
+        SagaState timedOut = state;
+        String event;
+        String reason;
+        SagaAction action;
+        if (stepResends < maxResends || keepsResending(timedOut)) {
+            stepResends++;
+            event = TIMEOUT_RESEND;
+            reason = "no reply in " + timedOut + " for " + stepTimeout.toSeconds() + "s, resend #" + stepResends;
+            action = currentCommand();
+        } else {
+            event = TIMEOUT_GIVE_UP;
+            reason = "timeout: no reply in " + timedOut + " after " + maxResends + " resends";
+            failureReason = truncate(reason);
+            action = timedOut == SagaState.RESERVING_STOCK
+                    ? moveTo(SagaState.RELEASING_STOCK, new SagaAction.ReleaseStock())
+                    // 포인트 차감 여부를 모른다. 환불은 차감 기록이 없어도 안전하다
+                    : moveTo(SagaState.REFUNDING_POINT, new SagaAction.RefundPoint());
+        }
+        history.add(new SagaHistoryEntry(event, state, truncate(reason), now));
+        updatedAt = now;
+        return action;
+    }
+
+    /** 포기하지 않는 단계: 결제(결과가 애매함)와 보상 */
+    private static boolean keepsResending(SagaState state) {
+        return state == SagaState.PAYING || state.isCompensating();
+    }
+
+    /** 현재 단계에서 응답을 기다리는 커맨드 */
+    private SagaAction currentCommand() {
+        return switch (state) {
+            case RESERVING_STOCK -> new SagaAction.ReserveStock();
+            case USING_POINT -> new SagaAction.UsePoint(pointAmount);
+            case PAYING -> new SagaAction.Pay(paidAmount);
+            case REFUNDING_POINT -> new SagaAction.RefundPoint();
+            case RELEASING_STOCK -> new SagaAction.ReleaseStock();
+            case COMPLETED, CANCELLED -> throw new IllegalStateException("finished saga has no command: " + state);
+        };
+    }
+
     private SagaAction afterStockReserved() {
         if (pointAmount > 0) {
             return moveTo(SagaState.USING_POINT, new SagaAction.UsePoint(pointAmount));
@@ -132,6 +200,7 @@ public final class OrderSaga {
 
     private SagaAction moveTo(SagaState next, SagaAction action) {
         state = next;
+        stepResends = 0;
         return action;
     }
 
@@ -173,6 +242,11 @@ public final class OrderSaga {
 
     public String failureReason() {
         return failureReason;
+    }
+
+    /** 현재 단계에서 타임아웃으로 커맨드를 다시 보낸 횟수. 단계가 바뀌면 0 */
+    public int stepResends() {
+        return stepResends;
     }
 
     public List<SagaHistoryEntry> history() {

@@ -32,6 +32,16 @@ outbox:
     fixed-delay: 200ms
     batch-size: 100
 
+# 멈춘 Saga 정리 (ADR 0007). 단계마다 step-timeout 동안 응답이 없으면 같은 커맨드를 다시 보내고,
+# 재고 예약·포인트 차감은 max-resends 번 넘게 응답이 없으면 역순 보상한다. 결제·보상 단계는 포기하지 않는다
+saga:
+  timeout:
+    enabled: ${SAGA_TIMEOUT_ENABLED:true}
+    step-timeout: ${SAGA_STEP_TIMEOUT:30s}
+    max-resends: ${SAGA_MAX_RESENDS:3}
+    scan-interval: ${SAGA_TIMEOUT_SCAN_INTERVAL:5s}
+    batch-size: 100
+
 management:
   endpoints:
     web:

@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #22 머지 후, 3-C-2 PR)
-- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C(Debezium relay, 시나리오 5·7, ADR 0004) 완료, 다음은 3-D(타임아웃·장애 복구)**
+- 마지막 갱신: 2026-11-23 (PR #23 머지 후, 3-D-1 PR)
+- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C(Debezium relay, 시나리오 5·7, ADR 0004), 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007) 완료, 다음은 3-D-2(결제 타임아웃 보정·늦은 승인 자동 환불, 시나리오 2)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 4절 **3-D**. main에서 `feat/saga-timeout` 같은 브랜치를 만든다
+2. 다음 작업은 아래 4절 **3-D-2**. main에서 `feat/payment-timeout` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -99,9 +99,10 @@ flowchart LR
 | #20 | 3-C-1 Debezium relay: Kafka 4.4.0, Kafka Connect + Debezium Outbox Event Router, 서비스별 커넥터·등록 스크립트, `OUTBOX_RELAY_ENABLED` 모드 전환, e2e matrix(scheduler/debezium) |
 | #21 | 후속 2 범위에 프론트엔드 추가, 인증(자체 JWT·RTR)·Gateway·프론트 설계 메모 |
 | #22 | 주문·결제·outbox(메시지) id 생성을 UUIDv4 → UUIDv7 (`uuid-creator`). 컬럼·메시지 계약 변경 없음, 사용자 id 는 bigint 유지 |
-| (이번 PR) | 3-C-2: 시나리오 5(커넥터 중단 → 유실 0, slot WAL 적체, heartbeat)·7(relay 지연·DB 부하 측정), ADR 0004(운영 기준 Debezium, 코드 기본값 스케줄러), 커넥터 `poll.interval.ms=100`·heartbeat |
+| #23 | 3-C-2: 시나리오 5(커넥터 중단 → 유실 0, slot WAL 적체, heartbeat)·7(relay 지연·DB 부하 측정), ADR 0004(운영 기준 Debezium, 코드 기본값 스케줄러), 커넥터 `poll.interval.ms=100`·heartbeat |
+| (이번 PR) | 3-D-1: 멈춘 Saga 정리(단계 타임아웃 → 새 메시지 id로 재전송 → 정방향은 포기 후 역순 보상, 결제·보상은 계속 재전송), 시나리오 4(참여 서비스 다운), ADR 0007 |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·4·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -131,11 +132,24 @@ PR 두 개로 나눴다. 3-C-1(relay 교체, PR #20), 3-C-2(시나리오·ADR) �
 - UUIDv7 주문 id는 앞 8자리(시각)가 같다. 로그에서 주문을 구분할 때는 뒤쪽을 본다
 
 ### 3-D. 타임아웃·장애 복구
-- **멈춘 Saga 정리**: 같은 단계에 N분 넘게 있는 Saga를 찾아 커맨드 재전송(새 메시지 id, 참여 서비스는 주문별 기록으로 처음 결과 재응답) → 그래도 안 되면 역순 보상. 지금은 커맨드가 DLT로 가거나 응답이 안 오면 Saga가 그 단계에서 **계속 기다리는 구멍**이 있다
-- **결제 타임아웃 보정**: 결과가 애매하면 바로 보상하지 않고 PG 조회(가짜 PG에 조회 API 추가) 후 결정
-- **늦은 승인 자동 환불**: 타임아웃으로 이미 보상·취소했는데 PG 조회 결과가 승인이면 자동 환불 (drive 세션 제안 3)
-- 서비스 다운 중 주문 → 복구 후 Saga 이어서 진행 (시나리오 4)
-- 시나리오 2·4, ADR 0007
+
+PR 두 개로 나눈다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007)은 이 PR, 3-D-2(결제 타임아웃 보정)는 다음.
+
+**3-D-1에서 한 것 (결정·확인 사항)**
+- order-service 단계 타임아웃 `saga.timeout.*` (기본 `step-timeout=30s`, `max-resends=3`, `scan-interval=5s`, 환경 변수 `SAGA_STEP_TIMEOUT` 등). 판단은 도메인 `OrderSaga.onTimeout`, 실행은 `SagaTimeoutService`, 주기 실행은 `adapter.in.scheduler.SagaTimeoutScheduler`(Debezium 모드에서도 돌도록 `@EnableScheduling`을 따로 켬)
+- 재전송은 **새 메시지 id**(같은 id면 `processed_message`로 건너뛰어 응답도 안 옴). 참여 서비스는 주문별 기록으로 처음 결과를 다시 응답한다
+- 정방향(재고 예약·포인트 차감)은 `max-resends` 넘으면 **반영됐다고 보고** 역순 보상. 포인트 단계에서 포기하면 `pointUsed`와 무관하게 환불부터. 결제(`PAYING`)와 보상 단계는 포기하지 않고 계속 재전송
+- 스캔은 잠그지 않고 id만 읽고, Saga마다 행 락 후 `updatedAt`으로 다시 판단 → 응답과 겹치거나 인스턴스가 여럿이어도 한 번만 처리 (`SagaTimeoutServiceTest`)
+- Flyway `V4__saga_timeout.sql`: `order_sagas.step_resends`, 진행 중 Saga 부분 인덱스 `(updated_at) where state not in ('COMPLETED','CANCELLED')`
+- 시나리오 4 (`scripts/smoke-service-down.sh`, CI 두 모드): point-service를 `pkill`로 내리고 `java -jar`로 올린다. 4a 짧은 장애 → 재전송 후 `COMPLETED`, 포인트 한 번만 차감 / 4b 긴 장애 → 포기 → `REFUNDING_POINT` → 복구 후 밀린 `UsePoint` → `RefundPoint` 순으로 처리되어 `CANCELLED`, 포인트·재고 원복
+- CI e2e는 order-service를 `SAGA_STEP_TIMEOUT=10s`, `SAGA_MAX_RESENDS=3`, `SAGA_TIMEOUT_SCAN_INTERVAL=1s`로 띄운다. 시나리오 5(커넥터 중단 약 20초)는 포기(약 40초) 전에 재개된다. 시나리오 7 유휴 커밋에는 이 스캔(1초에 한 번, order_db)이 더해진다
+- 발견: 프로세스를 강제 종료하면 Kafka가 그 컨슈머를 `session.timeout.ms`(45초) 뒤에야 빼서, 다시 뜬 인스턴스가 파티션을 늦게 받는다(로컬 26초). 그사이 재전송을 다 쓰면 복구될 장애도 보상으로 끝난다. `step-timeout × (max-resends+1)`은 재기동 + 45초보다 길게 (ADR 0007, 시나리오 4 문서)
+
+**3-D-2에서 할 것**
+- **결제 타임아웃 보정**: payment-service가 PG 호출에 타임아웃을 두고, 타임아웃이면 결제를 `UNKNOWN`으로 기록(응답 안 함). 주기적으로 PG 조회(가짜 PG에 조회 API 추가)해 승인·거절이 확정되면 그때 기록 + 응답. 가짜 PG의 `DELAY`는 PG 쪽에서 계속 진행되도록(클라이언트 타임아웃 후에도 승인됨) 바꾼다
+- **결제 단계 포기 + 늦은 승인 자동 환불**: order-service가 `PAYING`에서도 일정 시간 뒤 포기하고 새 커맨드 `CancelPayment`를 보낸다(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`, 계약은 추가만). payment-service는 취소 요청을 기록하고 응답한다. 이미 승인됐거나 나중에 PG 조회 결과가 승인이면 PG 환불(가짜 PG에 환불 API)까지 payment-service가 끝까지 책임진다 (drive 세션 제안 3)
+- 배포 순서: 새 응답 타입을 받는 order-service가 먼저 (계약에 없는 타입은 DLT)
+- 시나리오 2 (지연 < 포기 시간 → 조회로 확정 후 완료 / 지연 > 포기 시간 → 취소 + 늦은 승인 자동 환불), ADR 0007에 결제 부분 덧붙이기
 
 ### 3-E. 정리 후 `v0.3-reliability` 태그
 - 브리프 5절을 합의된 순서로 수정 (v0.3 = 완성, 후속 순서는 위 표)
@@ -176,7 +190,8 @@ PR 두 개로 나눴다. 3-C-1(relay 교체, PR #20), 3-C-2(시나리오·ADR) �
 
 ## 5. 알려진 한계·나중 일
 
-- 멈춘 Saga 자동 정리 없음 → 3-D
+- 결제 서비스가 오래 다운되거나 PG 결과가 계속 애매하면 Saga가 `PAYING`에서 계속 기다린다(재고·포인트가 묶임, 결제를 포기하지 않으므로) → 3-D-2
+- 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그만 남긴다. 경보는 후속 관측성 작업
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 후속 관측성 작업. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
@@ -201,6 +216,8 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 scripts/smoke-saga.sh                                       # 시나리오 0·1 + IDOR
 scripts/smoke-redelivery.sh snapshot|verify                 # 시나리오 3 (순서는 스크립트 머리말)
 scripts/smoke-poison.sh                                     # 시나리오 6
+SAGA_STEP_TIMEOUT=10s SAGA_MAX_RESENDS=3 SAGA_TIMEOUT_SCAN_INTERVAL=1s ./gradlew :services:order-service:bootRun  # 단계 타임아웃을 짧게 (기본 30s·3·5s)
+scripts/smoke-service-down.sh                               # 시나리오 4 (point-service 를 내렸다 올림. Windows 는 POINT_STOP_CMD·POINT_START_CMD)
 scripts/dlt.sh list inventory.command.DLT                   # DLT 확인
 ```
 
