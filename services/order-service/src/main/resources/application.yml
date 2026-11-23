@@ -52,7 +52,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   # 분산 트레이싱 (ADR 0013). OTLP 로 Tempo 에 보낸다 (infra/docker-compose.yml, Grafana http://localhost:3000)
   tracing:
     sampling:

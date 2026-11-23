@@ -8,7 +8,8 @@
 # - Kafka Connect (Debezium) REST : http://localhost:8088  (커넥터 등록은 scripts/register-connectors.sh)
 #   커넥터를 등록하지 않으면 아무것도 발행하지 않는다. relay 모드는 docs/PROGRESS.md 7절 참고
 # - Tempo      : OTLP http://localhost:4328 (서비스 trace 수신), API http://localhost:3210
-# - Grafana    : http://localhost:3000 (trace 보기, 익명 접근)
+# - Grafana    : http://localhost:3000 (trace·대시보드, 익명 접근)
+# - Prometheus : http://localhost:9091 (메트릭, 경보 규칙)
 # 포트는 infra/.env 로 바꿀 수 있다 (.env.example 참고). 계정·비밀번호는 로컬 개발용 값이다.
 name: commerce-saga
 
@@ -146,7 +147,34 @@ services:
       - "${OTLP_HTTP_PORT:-4328}:4318"
     # 이미지에 셸·wget 이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:3210/ready
 
-  # trace 보기: Explore → Tempo 에서 trace id 로 찾거나 service.name 으로 검색 (로컬 개발용 익명 관리자)
+  # 메트릭·경보 (ADR 0013). 호스트에서 뜬 서비스의 /actuator/prometheus 와 kafka-exporter 를 긁고 경보 규칙(prometheus/rules)을 평가한다
+  # 호스트 포트는 다른 Prometheus 와 겹치지 않게 9091
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/-/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  # 컨슈머 그룹 lag·토픽 오프셋 (서비스가 죽어 있어도 브로커 기준으로 보인다)
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.11.0
+    command: ["--kafka.server=kafka:29092"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # trace(Explore → Tempo), 메트릭·경보(대시보드 "commerce-saga", Alerting). 로컬 개발용 익명 관리자
   grafana:
     image: grafana/grafana:13.2.6
     environment:
@@ -155,6 +183,7 @@ services:
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:

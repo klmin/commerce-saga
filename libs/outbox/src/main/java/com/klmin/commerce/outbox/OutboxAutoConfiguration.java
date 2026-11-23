@@ -19,6 +19,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 import javax.sql.DataSource;
+import java.time.Clock;
+import java.time.Duration;
 
 @AutoConfiguration(afterName = {
         "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
@@ -34,6 +36,19 @@ public class OutboxAutoConfiguration {
         // 스케줄러 relay 를 끄면 Debezium 이 WAL 로 발행하므로 넣고 바로 지운다
         return new OutboxWriter(JdbcClient.create(dataSource), jsonMapper.getIfAvailable(JsonMapper::new),
                 !props.enabled(), traceContext.getIfAvailable(() -> OutboxTraceContext.NONE));
+    }
+
+    /** Micrometer 가 있으면 outbox 적체·slot WAL 적체를 메트릭으로 내보낸다 (/actuator/prometheus) */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "io.micrometer.core.instrument.MeterRegistry")
+    static class MetricsConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        OutboxMetrics outboxMetrics(DataSource dataSource, ObjectProvider<Clock> clock) {
+            return new OutboxMetrics(JdbcClient.create(dataSource), clock.getIfAvailable(Clock::systemUTC),
+                    Duration.ofSeconds(2));
+        }
     }
 
     /** Micrometer Tracing 이 있으면 outbox 에 넣는 시점의 traceparent 를 저장한다 */

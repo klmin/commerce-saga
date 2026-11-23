@@ -1,6 +1,6 @@
-# ADR 0013. 관측성: Saga 한 건을 trace 하나로, outbox 를 거쳐도 trace 문맥을 잇는다
+# ADR 0013. 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보
 
-- 상태: 채택 (트레이싱). 메트릭·경보는 후속 1의 다음 PR에서 이 ADR에 덧붙인다
+- 상태: 채택 (트레이싱: PR #27, 메트릭·경보: 후속 1 O-2)
 - 날짜: 2026-11-23
 
 ## 배경
@@ -42,8 +42,47 @@ HTTP 요청 (traceparent)                      ┌─ inventory-service ──�
 - 서비스: `spring-boot-starter-opentelemetry`(Micrometer Tracing + OTel 브리지 + OTLP exporter). 표준(W3C trace context, OTLP)만 쓰므로 수집 백엔드는 바꿀 수 있다
 - 로컬·CI: Grafana Tempo 2.10 단일 바이너리 + Grafana (`infra/docker-compose.yml`). Tempo를 고른 이유는 다음 PR의 메트릭(Prometheus)과 같은 Grafana에서 trace ↔ 메트릭을 오가기 위해서다. Jaeger도 OTLP를 받으므로 비교 대상이었지만 UI가 따로 생긴다
 - 샘플링: 로컬·CI는 전부(1.0). 운영이라면 `TRACING_SAMPLING_PROBABILITY`로 낮추거나 tail sampling(Collector)으로 오류·느린 trace만 남긴다
-- OTLP 메트릭 export는 끈다(starter가 가져오는 레지스트리). 메트릭은 다음 PR에서 Prometheus가 긁어 간다
+- OTLP 메트릭 export는 끈다(starter가 가져오는 레지스트리). 메트릭은 Prometheus가 긁어 간다(아래)
 - 호스트 포트는 Tempo API 3210, OTLP 4328. 같은 PC에서 다른 관측성 스택이 표준 포트(3200, 4318)를 쓰고 있어도 겹치지 않게 비켜 뒀다
+
+### 메트릭·경보: 정합성이 깨지기 전 신호를 본다 (후속 1 O-2)
+
+trace는 "이 주문이 어떻게 지나갔나"를 답하지만, "지금 어딘가 막혀 있나"는 메트릭과 경보가 답한다. 3단계에서 "경보는 후속 관측성 작업"으로 남긴 것들(결제 `UNKNOWN`, 환불 대기, 보상 무한 재전송, slot 적체, lag)을 여기서 경보로 만든다.
+
+**어디서 재나.** 서비스는 자기 DB만 본다는 경계를 그대로 지킨다.
+
+| 메트릭 | 출처 | 의미 |
+|---|---|---|
+| `commerce_saga_active{state,phase}`, `commerce_saga_oldest_active_age_seconds{state,phase}` | order-service (`SagaMetrics`, Saga 테이블 집계) | 끝나지 않은 단계별 Saga 수, 가장 오래된 것이 시작한 지 얼마나 됐나 |
+| `commerce_saga_timeout_resends_total`, `commerce_saga_timeout_give_ups_total` | order-service (Saga 기록 집계) | 단계 타임아웃 재전송·포기 누적 |
+| `commerce_payment_unknown`, `commerce_payment_oldest_unknown_age_seconds`, `commerce_payment_refund_pending`, `commerce_payment_oldest_refund_pending_age_seconds` | payment-service (`PaymentMetrics`) | PG 결과를 모르는 결제, 취소 요청 + 승인이라 환불을 기다리는 결제 |
+| `commerce_outbox_pending_rows`, `commerce_outbox_oldest_pending_age_seconds`, `commerce_outbox_replication_slot_lag_bytes` | outbox를 쓰는 네 서비스 (`OutboxMetrics`, libs/outbox 자동 설정) | 스케줄러 relay 적체, 자기 DB slot이 붙잡은 WAL(`restart_lsn` 기준: 오래 열린 트랜잭션이 있으면 `confirmed_flush_lsn`이 앞서 가도 그 뒤 WAL은 못 지운다) |
+| `kafka_consumergroup_lag`, `kafka_topic_partition_current_offset{topic=~".+[.]DLT"}` | kafka-exporter (브로커 기준) | 컨슈머 그룹 lag, DLT에 쌓인 메시지. 서비스가 죽어 있어도 보인다 |
+
+- 서비스 메트릭은 `/actuator/prometheus`(`micrometer-registry-prometheus`). 값은 스크레이프 때 집계 쿼리로 읽고 2초 동안 재사용한다(게이지마다 쿼리하지 않게). 쿼리는 진행 중 Saga·보정 대상 부분 인덱스와 같은 조건이라 끝난 행이 쌓여도 비싸지지 않는다. 타임아웃 이벤트 수는 Saga 기록 전체를 세므로 기록이 아주 많아지면 카운터로 바꾼다
+- 메트릭 이름 앞에 `commerce_`를 붙여 JVM·HTTP·Kafka 클라이언트 기본 메트릭과 구분한다. 주문 id 같은 high cardinality 값은 태그로 넣지 않는다(trace에만)
+- 집계 쿼리를 애플리케이션이 Micrometer를 모르게 두었다: `adapter.in.metrics`(MeterBinder) → `port.in`(`GetSagaStatsUseCase`) → `port.out` → 영속성 어댑터. 헥사고날 규칙(ArchUnit) 그대로
+
+**경보 규칙** (`infra/prometheus/rules/commerce.yml`). 문턱값은 로컬·CI 시나리오(단계 타임아웃 10초)에서 바로 보이도록 짧게 잡았다. 운영 값은 오른쪽 열처럼 늘린다.
+
+| 경보 | 조건 (이 저장소) | 운영이라면 | 무엇을 의심하나 |
+|---|---|---|---|
+| `ServiceDown` | `up == 0` 30초 | 1~2분 | 서비스 프로세스 다운 (시나리오 4) |
+| `SagaStuck` | 정방향 Saga가 시작 후 60초 넘게 안 끝남 | 단계 타임아웃 × (재전송+1) 보다 조금 길게 (기본 2~3분) | 참여 서비스·relay 장애 |
+| `SagaCompensationStuck` | 보상 단계가 120초 넘게 안 끝남 | 5~10분 | 보상 커맨드가 계속 실패 (재고·포인트가 묶임) |
+| `SagaTimeoutGiveUp` | 최근 5분 포기 횟수 증가 | 같음 | 응답이 없어 주문이 취소됨 |
+| `PaymentResultUnknown` | `UNKNOWN`이 기록 후 30초 넘음 | 5분 | PG 장애·지연 (시나리오 2) |
+| `PaymentRefundPending` | 환불 대기가 60초 넘음 | 10분 | 돈은 나갔는데 주문은 취소된 상태 |
+| `DeadLetterMessage` | `*.DLT` 끝 오프셋이 5분 안에 증가 | 같음 | 처리 불가 메시지 (시나리오 6) |
+| `ConsumerLagHigh` | 그룹·토픽 lag > 20 이 30초 | 처리량에 맞춰 | 컨슈머 다운, 분류 안 된 영구 오류로 파티션 막힘 |
+| `OutboxBacklog` | 미발행 outbox가 30초 넘음 | 1~2분 | 스케줄러 relay가 Kafka에 못 보냄 |
+| `ReplicationSlotLag` | slot이 WAL 100 MB 넘게 붙잡음 1분 | 디스크 크기에 맞춰 (예: 여유 공간의 10%) | Debezium 커넥터 중단·막힘 (시나리오 5, ADR 0004 위험 2) |
+
+- 수집: Prometheus 3.15(compose, 호스트 포트 9091, 다른 Prometheus와 겹치지 않게). 서비스는 호스트에서 뜨므로 `host.docker.internal`(리눅스 CI는 `host-gateway`)로 긁는다
+- lag·DLT는 서비스 메트릭(Kafka 클라이언트 `records-lag`) 대신 kafka-exporter를 쓴다. 서비스가 죽으면 서비스 메트릭도 같이 사라지는데, 그때가 lag를 봐야 할 때라서다. kafka-exporter 1.11은 Kafka Connect 그룹의 할당 정보를 해석하지 못해 오류 로그를 남기지만, 서비스 컨슈머 그룹 lag는 정상으로 나온다
+- 경보 전달(Alertmanager → 메일·메신저)은 두지 않았다. Prometheus·Grafana에서 firing을 확인하는 데까지가 범위다. 운영이면 Alertmanager로 심각도별 라우팅을 둔다
+- Grafana 대시보드 `commerce-saga`(프로비저닝): firing 경보 표, 단계별 진행 중 Saga·가장 오래된 나이, 재전송·포기, 결제 `UNKNOWN`·환불 대기, 그룹별 lag, DLT, outbox·slot 적체
+- 시나리오 12가 장애를 넣고 경보가 실제로 firing 되는지 CI에서 확인한다
 
 ## 결과
 
@@ -53,3 +92,5 @@ HTTP 요청 (traceparent)                      ┌─ inventory-service ──�
   - 문맥 없이 시작하는 작업은 새 trace가 된다: 단계 타임아웃 재전송(`SagaTimeoutService`), 결제 보정 후 응답(`PaymentReconcileService`), traceparent가 없던 예전 메시지. 이때도 리스너 span에 orderId가 붙어 있어 주문 id 검색으로 같은 주문의 trace들을 모아 볼 수 있다. 재전송까지 원래 trace에 잇고 싶다면 Saga 행에 처음 traceparent를 저장해 두는 방법이 있다(필요해지면)
   - DB 쿼리(JDBC) span은 없다. 서비스 안에서 느린 곳은 지금은 처리 span 길이로만 본다
   - Tempo는 로컬 디스크·24시간 보존이다. 운영이면 오브젝트 스토리지와 보존 기간을 정한다
+  - 경보 문턱값은 시연용으로 짧다(위 표). Prometheus 규칙 파일은 환경 변수를 받지 않으므로 운영에서는 규칙 파일을 따로 둔다
+  - 메트릭 게이지는 스크레이프마다 DB 집계 쿼리를 한 번 돈다(2초 캐시). 인스턴스가 여럿이면 같은 값이 인스턴스마다 나오므로 경보는 `max`로 묶는다

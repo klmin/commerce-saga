@@ -112,6 +112,23 @@ class OutboxWriterIntegrationTest {
                 .contains("traceparent[character varying]:'" + traceparent + "'"));
     }
 
+    @Test
+    void 메트릭은_미발행_행과_slot_이_붙잡은_WAL_을_보여준다() {
+        var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        new OutboxMetrics(jdbc, java.time.Clock.systemUTC(), java.time.Duration.ZERO).bindTo(registry);
+        var scheduler = new OutboxWriter(jdbc, json);
+
+        tx.executeWithoutResult(status -> {
+            scheduler.append("inventory.command", "order-1", "ReserveStock", Map.of("a", 1));
+            scheduler.append("inventory.command", "order-2", "ReserveStock", Map.of("a", 1));
+        });
+
+        assertThat(registry.get("commerce.outbox.pending.rows").gauge().value()).isEqualTo(2.0);
+        assertThat(registry.get("commerce.outbox.oldest.pending.age").timeGauge().value()).isGreaterThanOrEqualTo(0.0);
+        // setUp 의 test_decoding slot 은 아무도 읽지 않으므로 방금 쓴 WAL 을 붙잡고 있다
+        assertThat(registry.get("commerce.outbox.replication.slot.lag").gauge().value()).isPositive();
+    }
+
     private String traceparentOf(UUID id) {
         return jdbc.sql("select traceparent from outbox where id = ?").param(id).query(String.class).list().getFirst();
     }
