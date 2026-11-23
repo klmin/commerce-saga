@@ -45,7 +45,23 @@ CI `e2e`가 두 relay 모드에서 시나리오 10 다음에 돈다. 시나리�
 
 ## 실제 결과
 
-CI `e2e` 결과는 머지 후 다음 PR에서 채운다.
+CI `e2e` 실행 로그 ([PR #34 첫 실행, 2026-11-23](https://github.com/klmin/commerce-saga/actions/runs/45192845056), GitHub Actions ubuntu-latest). scheduler 모드(debezium 모드도 같은 결과로 PASS, 계정 확인까지 94ms):
+
+```
+== 13a. 가입하면 포인트 계정이 생긴다
+  ok  가입 signup_1795443745_28419 → userId 1001
+  ok  포인트 계정 생성 53ms 안에 확인, 잔액 1000P (가입 축하)
+== 13b. 그 포인트로 주문
+  ok  주문 …b9a1485e COMPLETED, 잔액 1000 → 700P
+== 13c. 계정은 하나
+  ok  point_accounts 사용자 1001 행 1개
+  ok  시드 계정(1~4) 그대로
+PASS: 시나리오 13 (가입 → 포인트 계정)
+```
+
+가입부터 계정 확인까지 scheduler 53ms, Debezium 94ms. 이 실행은 시나리오 3(오프셋 되감기)이 메시지가 없던 `auth.events` 파티션 때문에 실패했고, 고친 뒤 재실행([run 45194339865](https://github.com/klmin/commerce-saga/actions/runs/45194339865))에서 시나리오 3·13 모두 두 모드 통과.
+
+Next 화면으로도 확인했다(F-1, 로컬): 회원가입 → 바로 로그인 → "포인트 계정을 만드는 중" → 새로고침하면 1,000P (`frontend/e2e/auth.spec.ts`).
 
 ## 한계
 
