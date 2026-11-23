@@ -32,3 +32,11 @@ where not exists (select from pg_roles where rolname = 'notification_svc')\gexec
 select 'create database notification_db owner notification_svc'
 where not exists (select from pg_database where datname = 'notification_db')\gexec
 revoke all on database notification_db from public;
+
+-- Debezium outbox 커넥터(infra/connect)가 서비스 계정으로 자기 DB 의 WAL 을 읽는다 (logical replication).
+-- 접속 DB 가 자기 DB 로만 허용되므로 다른 서비스 DB 의 변경은 읽을 수 없다. outbox 테이블 소유자라 publication 도 만들 수 있다.
+-- 알림 서비스는 outbox 가 없어 주지 않는다. 이미 있는 볼륨에도 up 할 때마다 다시 적용된다(멱등)
+alter role order_svc with replication;
+alter role inventory_svc with replication;
+alter role point_svc with replication;
+alter role payment_svc with replication;

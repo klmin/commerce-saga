@@ -33,6 +33,17 @@ jobs:
           echo "$topics"
           for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT; do echo "$topics" | grep -qx "$t"; done
 
+      # connect 이미지(apache/kafka + Debezium 플러그인)가 뜨고 Postgres 커넥터를 로드했는지
+      - name: Kafka Connect·Debezium 플러그인 확인
+        run: |
+          plugins=$(curl -sf http://localhost:8088/connector-plugins)
+          echo "$plugins"
+          echo "$plugins" | grep -q '"class":"io.debezium.connector.postgresql.PostgresConnector"'
+          for s in order inventory point payment; do
+            r=$(docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD=postgres postgres psql -U postgres -tAc "select rolreplication from pg_roles where rolname = '${s}_svc'")
+            [ "$r" = "t" ] || { echo "${s}_svc 에 replication 권한 없음"; exit 1; }
+          done
+
       - name: 서비스 DB 분리 확인
         run: |
           pg() { docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD="$2" postgres psql -h localhost -U "$1" -d "$3" -tAc 'select 1'; }

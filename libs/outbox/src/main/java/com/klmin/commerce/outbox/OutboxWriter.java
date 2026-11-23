@@ -12,6 +12,10 @@ import java.util.UUID;
  * <p>
  * 비즈니스 데이터 변경과 같은 트랜잭션에서만 호출할 수 있다({@link Propagation#MANDATORY}).
  * 트랜잭션 밖에서 부르면 예외가 나므로 "DB 는 커밋됐는데 메시지는 없다" 같은 이중 쓰기가 생기지 않는다.
+ * <p>
+ * Debezium relay 모드({@code deleteAfterInsert = true})에서는 같은 트랜잭션에서 넣고 바로 지운다.
+ * Debezium 은 WAL 의 INSERT 를 읽어 발행하므로 행이 테이블에 남을 필요가 없고(DELETE 는 Outbox Event Router 가 버린다),
+ * 테이블이 쌓이지 않아 따로 정리할 일이 없다. 트랜잭션이 롤백되면 INSERT 도 WAL 에서 커밋되지 않아 발행되지 않는다.
  */
 public class OutboxWriter {
 
@@ -20,12 +24,24 @@ public class OutboxWriter {
             values (?, ?, ?, ?, ?::jsonb)
             """;
 
+    private static final String DELETE = "delete from outbox where id = ?";
+
     private final JdbcClient jdbc;
     private final JsonMapper json;
+    private final boolean deleteAfterInsert;
 
     public OutboxWriter(JdbcClient jdbc, JsonMapper json) {
+        this(jdbc, json, false);
+    }
+
+    /**
+     * @param deleteAfterInsert true 면 넣은 행을 같은 트랜잭션에서 지운다 (Debezium relay). 스케줄러 relay 는
+     *                          테이블에서 행을 읽어 발행하므로 false 여야 한다
+     */
+    public OutboxWriter(JdbcClient jdbc, JsonMapper json, boolean deleteAfterInsert) {
         this.jdbc = jdbc;
         this.json = json;
+        this.deleteAfterInsert = deleteAfterInsert;
     }
 
     /**
@@ -41,6 +57,9 @@ public class OutboxWriter {
         jdbc.sql(INSERT)
                 .params(id, topic, key, type, json.writeValueAsString(payload))
                 .update();
+        if (deleteAfterInsert) {
+            jdbc.sql(DELETE).params(id).update();
+        }
         return id;
     }
 }

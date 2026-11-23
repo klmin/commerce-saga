@@ -5,6 +5,8 @@
 # - PostgreSQL : localhost:5432  (wal_level=logical, 서비스별 DB·계정은 postgres/init 참고)
 # - Kafka      : localhost:9092  (KRaft 단일 노드, 컨테이너끼리는 kafka:29092)
 # - Kafka UI   : http://localhost:8989
+# - Kafka Connect (Debezium) REST : http://localhost:8088  (커넥터 등록은 scripts/register-connectors.sh)
+#   커넥터를 등록하지 않으면 아무것도 발행하지 않는다. relay 모드는 docs/PROGRESS.md 7절 참고
 # 포트는 infra/.env 로 바꿀 수 있다 (.env.example 참고). 계정·비밀번호는 로컬 개발용 값이다.
 name: commerce-saga
 
@@ -40,7 +42,7 @@ services:
     restart: "no"
 
   kafka:
-    image: apache/kafka:4.3.2
+    image: apache/kafka:4.4.0
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -69,7 +71,7 @@ services:
 
   # 토픽 생성 후 종료한다. 메시지 키가 orderId 라 파티션 수 = 주문 처리 병렬도
   kafka-init:
-    image: apache/kafka:4.3.2
+    image: apache/kafka:4.4.0
     depends_on:
       kafka:
         condition: service_healthy
@@ -82,11 +84,38 @@ services:
         done
     restart: "no"
 
+  # Debezium outbox relay. 브로커와 같은 apache/kafka 이미지 위에 Debezium Postgres 플러그인을 얹는다 (connect/Dockerfile)
+  # 서비스마다 커넥터 하나(connect/<서비스>-outbox.json)가 자기 DB 의 outbox 를 읽어 aggregatetype 토픽으로 보낸다
+  connect:
+    build: ./connect
+    image: commerce-saga/connect:local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres-init:
+        condition: service_completed_successfully
+    environment:
+      # 커넥터 설정의 ${env:...} 가 읽는 DB 비밀번호 (로컬 개발용 값, postgres/init 과 같음)
+      ORDER_DB_PASSWORD: order_svc
+      INVENTORY_DB_PASSWORD: inventory_svc
+      POINT_DB_PASSWORD: point_svc
+      PAYMENT_DB_PASSWORD: payment_svc
+    ports:
+      # 8083 은 point-service 가 쓰므로 호스트에는 8088 로 연다
+      - "${CONNECT_PORT:-8088}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8083/connector-plugins"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+
   kafka-ui:
     image: kafbat/kafka-ui:v1.5.1
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://connect:8083
     ports:
       - "${KAFKA_UI_PORT:-8989}:8080"
     # 일회성 init 컨테이너들의 완료를 기다린다. 이렇게 의존해 두면 `up --wait` 가 그 종료(exit 0)를

@@ -27,8 +27,17 @@ public class OutboxAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    OutboxWriter outboxWriter(DataSource dataSource, ObjectProvider<JsonMapper> jsonMapper) {
-        return new OutboxWriter(JdbcClient.create(dataSource), jsonMapper.getIfAvailable(JsonMapper::new));
+    OutboxWriter outboxWriter(DataSource dataSource, ObjectProvider<JsonMapper> jsonMapper, OutboxRelayProperties props) {
+        // 스케줄러 relay 를 끄면 Debezium 이 WAL 로 발행하므로 넣고 바로 지운다
+        return new OutboxWriter(JdbcClient.create(dataSource), jsonMapper.getIfAvailable(JsonMapper::new),
+                !props.enabled());
+    }
+
+    /** Debezium relay 모드: 스케줄러 대신 커넥터가 WAL 로 발행한다. slot 이 없으면 기동 때 경고 */
+    @Bean
+    @ConditionalOnProperty(prefix = "outbox.relay", name = "enabled", havingValue = "false")
+    DebeziumSlotCheck debeziumSlotCheck(DataSource dataSource) {
+        return new DebeziumSlotCheck(JdbcClient.create(dataSource));
     }
 
     /** 스케줄러 relay. Debezium 으로 발행할 때는 outbox.relay.enabled=false */

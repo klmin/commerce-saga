@@ -1,6 +1,7 @@
 name: e2e
 
-# 인프라(docker-compose) + 네 서비스(inventory, point, payment, order)를 실제로 띄우고 Saga 스모크 테스트를 돌린다
+# 인프라(docker-compose) + 네 서비스(inventory, point, payment, order)를 실제로 띄우고 Saga 스모크 테스트를 돌린다.
+# outbox relay 두 모드(scheduler: libs/outbox 스케줄러, debezium: Kafka Connect + Outbox Event Router)에서 같은 시나리오를 돌린다
 on:
   push:
     branches: [main]
@@ -17,8 +18,16 @@ concurrency:
 
 jobs:
   saga:
+    name: saga (${{ matrix.relay }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        relay: [scheduler, debezium]
+    env:
+      # 서비스 application.yml 의 outbox.relay.enabled. debezium 모드는 스케줄러를 끄고 outbox 를 넣고 바로 지운다
+      OUTBOX_RELAY_ENABLED: ${{ matrix.relay == 'scheduler' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -50,6 +59,11 @@ jobs:
             done
             curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }
           done
+
+      # Flyway 가 outbox 테이블을 만든 뒤(서비스 기동 후) 등록한다. 서비스는 위 env 로 스케줄러 relay 가 꺼져 있다
+      - name: Debezium 커넥터 등록
+        if: matrix.relay == 'debezium'
+        run: bash scripts/register-connectors.sh
 
       # notification-service 는 일부러 띄우지 않는다 (알림 장애 중에도 주문이 완료되는지)
       - name: 스모크 테스트
@@ -91,6 +105,20 @@ jobs:
       - name: poison message 격리 후 DLT 재처리 (시나리오 6)
         run: bash scripts/smoke-poison.sh
 
+      # 스케줄러가 아니라 Debezium 이 발행했다는 증거: outbox 는 넣고 바로 지워져 비어 있고(스케줄러가 읽을 행이 없음),
+      # 커넥터는 계속 RUNNING, 서비스 DB 마다 replication slot 이 살아 있다
+      - name: Debezium 모드 확인 (outbox 비어 있음, 커넥터 RUNNING)
+        if: matrix.relay == 'debezium'
+        run: |
+          bash scripts/register-connectors.sh status
+          bash scripts/register-connectors.sh status | grep -v "RUNNING RUNNING" && { echo "커넥터가 RUNNING 이 아님"; exit 1; }
+          for s in order inventory point payment; do
+            n=$(docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d ${s}_db -tAc "select count(*) from outbox")
+            echo "${s}_db outbox rows=$n"
+            [ "$n" = "0" ] || { echo "${s}_db outbox 에 행이 남음"; exit 1; }
+          done
+          docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD=postgres postgres psql -U postgres -tAc "select slot_name, database, active from pg_replication_slots"
+
       - name: Logs
         if: always()
         run: |
@@ -98,3 +126,7 @@ jobs:
             echo "===== $svc"
             tail -n 150 logs/$svc.log || true
           done
+          if [ "$OUTBOX_RELAY_ENABLED" = "false" ]; then
+            echo "===== connect"
+            docker compose -f infra/docker-compose.yml logs --tail 150 connect || true
+          fi

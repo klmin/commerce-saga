@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #17 머지 후)
-- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B 완료, 다음은 3-C-1(Debezium relay 교체)**
+- 마지막 갱신: 2026-11-23 (3-C-1 PR)
+- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C-1(Debezium relay) 완료, 다음은 3-C-2(시나리오 5·7, ADR 0004)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 4절 **3-C-1**. main에서 `feat/debezium-relay` 같은 브랜치를 만든다
+2. 다음 작업은 아래 4절 **3-C-2**. main에서 `feat/debezium-scenarios` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -25,7 +25,7 @@
 - Codex 리뷰: PR을 열면 Codex가 자동 리뷰한다. 이후 push마다 `codex-review-on-push.yml`이 `@codex review` 댓글을 달아 재리뷰를 요청한다. 결과는 `chatgpt-codex-connector[bot]`의 리뷰·댓글로 온다. 지적 없으면 "Didn't find any major issues" 류, 지적이 있으면 P1/P2 배지가 달린 인라인 코멘트
   - `gh pr view <번호> --comments`, `gh api repos/klmin/commerce-saga/pulls/<번호>/comments`, `gh api repos/klmin/commerce-saga/pulls/<번호>/reviews`
   - 반드시 **마지막 커밋에 대한** 리뷰인지 확인한다 (리뷰의 `commit_id`)
-- CI: `gh pr checks <번호>` → backend, saga(e2e), analyze(CodeQL), request-review 전부 pass. e2e는 4~5분
+- CI: `gh pr checks <번호>` → backend, saga (scheduler)·saga (debezium)(e2e), compose-up(infra), analyze(CodeQL), request-review 전부 pass. e2e는 모드마다 5~6분(병렬)
 - 머지: `gh pr merge <번호> --squash --delete-branch`
 - 머지 후 이 문서 3절 PR 표와 맨 위 "마지막 갱신·현재 위치"를 다음 PR에서 갱신한다
 
@@ -75,7 +75,7 @@ flowchart LR
 
 - 서비스 5개, 서비스마다 자기 DB·계정 (Postgres 하나에 DB 분리). 서비스끼리 HTTP 호출 없음, Kafka 메시지만
 - Saga: `RESERVING_STOCK → USING_POINT → PAYING → COMPLETED`, 실패 시 `REFUNDING_POINT → RELEASING_STOCK → CANCELLED` (ADR 0003)
-- 모든 발행은 outbox (비즈니스 변경 + outbox = 한 트랜잭션). relay는 지금 **스케줄러**(`libs/outbox`, `FOR UPDATE SKIP LOCKED`), 3-C에서 Debezium으로 교체
+- 모든 발행은 outbox (비즈니스 변경 + outbox = 한 트랜잭션). relay는 두 모드: **스케줄러**(`libs/outbox`, `FOR UPDATE SKIP LOCKED`, 기본) 또는 **Debezium**(Kafka Connect + Outbox Event Router, `OUTBOX_RELAY_ENABLED=false`). 기본 모드는 3-C-2(ADR 0004)에서 정한다
 - 메시지: key = orderId, value = payload JSON, 헤더 `id`(= outbox id) · `type` (ADR 0005)
 - 멱등 두 겹: 같은 메시지 재전달은 `processed_message`, 내용이 같은 재요청은 주문별 기록 (ADR 0006)
 - 실패: 일시 오류는 제자리 무한 재시도, 영구 오류는 `<토픽>.DLT` → `tools/dlt-replay`로 재처리. retry 토픽은 순서 때문에 안 씀 (ADR 0012)
@@ -93,33 +93,34 @@ flowchart LR
 | #15 | 3-A 보강: 같은 메시지 동시 처리 통합 테스트 (inventory 커밋·롤백, point 커밋) |
 | #16 | 이 문서에 새 세션 이어받기 안내(0절), 3-C를 두 PR로 나눔 |
 | #17 | 브리프 목적 문구를 기술 중심으로 정리 |
-| (이번 PR) | 3-E에 ADR 0000 대안 비교 항목 추가 |
+| #18 | README 진행 상태를 3단계 기준으로 갱신 |
+| #19 | 3-E에 ADR 0000 대안 비교 항목 추가 |
+| (이번 PR) | 3-C-1 Debezium relay: Kafka 4.4.0, Kafka Connect + Debezium Outbox Event Router, 서비스별 커넥터·등록 스크립트, `OUTBOX_RELAY_ENABLED` 모드 전환, e2e matrix(scheduler/debezium) |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 자동으로 돈다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
 ## 4. 남은 일 (3단계)
 
-### 3-C. Debezium relay (다음 작업)
+### 3-C. Debezium relay
 
-PR 두 개로 나눈다. 예상 3-C-1 3~4시간, 3-C-2 2~3시간(리뷰·CI 포함). 가장 불확실한 부분은 Debezium 설정(replication 권한, slot, 헤더 형식)을 로컬과 CI에서 맞추는 것.
+PR 두 개로 나눴다. 3-C-1(relay 교체)은 완료, 다음은 **3-C-2(시나리오·ADR)**.
 
-- **3-C-1 relay 교체**: 아래 목록 중 Kafka 버전 맞추기 ~ e2e matrix까지. 끝나면 e2e가 scheduler/debezium 두 모드 모두 시나리오 0·1·3·6·8 통과
-- **3-C-2 시나리오·ADR**: 시나리오 5·7, ADR 0004
+**3-C-1에서 한 것 (결정·확인 사항)**
+- Kafka 4.3.2 → 4.4.0: compose(kafka, kafka-init), 서비스·`tools/dlt-replay` Testcontainers, Kafka Connect를 한 버전으로. Dependabot PR #3은 이 PR 머지 후 닫는다
+- Kafka Connect: Debezium 공식 이미지 대신 **`apache/kafka:4.4.0` + Debezium 3.7.1 Postgres 플러그인**(Maven Central, sha512 검증)으로 직접 빌드 (`infra/connect/Dockerfile`). Connect 런타임이 브로커와 같은 버전이 된다. 브로커를 올릴 때 이 FROM도 같이 올린다. 호스트 포트 8088(8083은 point-service)
+- 커넥터: 서비스마다 하나(`infra/connect/<서비스>-outbox.json`, order·inventory·point·payment). slot `<서비스>_outbox_slot`, publication `<서비스>_outbox_pub`(filtered, outbox 테이블만). DB 비밀번호는 `${env:...}`(EnvVarConfigProvider)로 Connect 컨테이너 환경 변수에서 읽는다
+- replication 권한: `infra/postgres/init`에서 서비스 계정에 `alter role … with replication` (up 때마다 다시 적용, 멱등). 접속 DB가 자기 DB로만 허용돼 다른 서비스 WAL은 못 읽는다
+- 모드 전환: `outbox.relay.enabled`(`OUTBOX_RELAY_ENABLED`). false면 스케줄러가 꺼지고 `OutboxWriter`가 **같은 트랜잭션에서 넣고 바로 지운다**. Debezium은 WAL의 INSERT를 발행하고 DELETE는 Event Router가 버린다. 롤백되면 WAL에도 없다 (`OutboxWriterIntegrationTest`가 test_decoding slot으로 확인)
+- 헤더: Connect 헤더 변환기를 `SimpleHeaderConverter`로 고정해 `id`·`type`이 **따옴표 없는 문자열**로 나간다(로컬에서 kafka-console-consumer로 확인). 그래서 컨슈머 코드는 그대로다. `JsonConverter`로 두면 `"\"…\""`가 되어 `type` 매칭까지 깨지므로 바꾸지 않는다. Debezium이 `__debezium.context.*` 헤더를 더 붙이지만 컨슈머는 무시한다
+- `snapshot.mode=initial`: 커넥터를 처음 등록할 때 outbox에 남은 행(스케줄러 모드에서 아직 못 보낸 것)도 발행된다(로컬에서 확인). 그 행은 테이블에 남으므로 전환 후 확인하고 지운다
+- e2e matrix `saga (scheduler)` / `saga (debezium)`: 같은 시나리오 0·1·3·6·8 + IDOR. debezium 모드는 끝에 outbox 0행 + 커넥터 RUNNING + slot 활성을 확인해 스케줄러가 아니라 Debezium이 발행했음을 보인다
 
-세부:
-- 시작할 때 Kafka 이미지 4.3.2 → 4.4.0(Dependabot PR #3, 브랜치 `dependabot/docker_compose/infra/apache/kafka-4.4.0`)을 compose·Testcontainers·Kafka Connect 버전과 함께 맞춘다. 3-C-1 PR에 포함하고 Dependabot PR #3은 그 뒤 닫는다
-- compose에 Kafka Connect + Debezium Postgres 커넥터 추가 (Postgres는 이미 `wal_level=logical`)
-- 서비스별 outbox 커넥터 JSON(`infra/connect/`) + 등록 스크립트(`scripts/register-connectors.sh`)
-  - Outbox Event Router: `route.by.field=aggregatetype`(토픽), `aggregateid`가 key, `id`·`type`을 헤더로, `table.expand.json.payload=true`
-  - 서비스별 DB 계정에 replication 권한, 커넥터마다 slot·publication 이름 분리
-- 서비스 설정 `outbox.relay.enabled=false`로 스케줄러 끄기 (프로필 또는 환경 변수)
-- 컨슈머 코드는 바꾸지 않는다 (헤더 이름을 맞춰 둠). Debezium이 헤더 값을 JSON 문자열로 감싸 보내는지 실제로 확인하고, 그렇다면 `Messages.messageId`에서 따옴표 처리
-- e2e를 Debezium 모드로도 돌리기 (matrix: scheduler / debezium)
-- 시나리오 5: 커넥터 중단 → 재시작 후 유실 0 + 중단 중 `pg_replication_slots` WAL 적체 관찰, heartbeat
+**3-C-2 남은 것**
+- 시나리오 5: 커넥터 중단 → 재시작 후 유실 0 + 중단 중 `pg_replication_slots` WAL 적체 관찰, heartbeat(`heartbeat.interval.ms`, 트래픽 없는 DB의 slot 진행)
 - 시나리오 7: 스케줄러 vs Debezium, Saga 완료 지연·DB 부하 비교 (k6). 측정이 어려우면 ADR에 글로
-- ADR 0004 (relay 교체, 측정 근거)
+- ADR 0004 (relay 교체, 측정 근거, 기본 모드를 Debezium으로 바꿀지 결정. 지금 기본은 스케줄러)
 
 ### 3-D. 타임아웃·장애 복구
 - **멈춘 Saga 정리**: 같은 단계에 N분 넘게 있는 Saga를 찾아 커맨드 재전송(새 메시지 id, 참여 서비스는 주문별 기록으로 처음 결과 재응답) → 그래도 안 되면 역순 보상. 지금은 커맨드가 DLT로 가거나 응답이 안 오면 Saga가 그 단계에서 **계속 기다리는 구멍**이 있다
@@ -139,7 +140,8 @@ PR 두 개로 나눈다. 예상 3-C-1 3~4시간, 3-C-2 2~3시간(리뷰·CI 포�
 
 - 멈춘 Saga 자동 정리 없음 → 3-D
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
-- 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 교체로 해소 (ADR 0005)
+- 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
+- Debezium 모드에서 커넥터가 멈추면 replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 3-C-2 시나리오 5, 경보는 후속 관측성 작업
 - 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 4단계
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). lag 경보는 후속 관측성 작업에서
 
@@ -163,6 +165,18 @@ scripts/smoke-redelivery.sh snapshot|verify                 # 시나리오 3 (�
 scripts/smoke-poison.sh                                     # 시나리오 6
 scripts/dlt.sh list inventory.command.DLT                   # DLT 확인
 ```
+
+Debezium relay 모드로 돌리기 (infra 는 위와 같이 띄우면 connect 도 뜬다):
+
+```bash
+OUTBOX_RELAY_ENABLED=false ./gradlew :services:order-service:bootRun   # 네 서비스 모두 이렇게 (스케줄러 끄고 넣고 바로 지우기)
+scripts/register-connectors.sh                              # 서비스가 한 번 떠서 outbox 테이블이 생긴 뒤. RUNNING 까지 기다림
+scripts/register-connectors.sh status                       # 커넥터·태스크 상태 (Kafka UI 의 Kafka Connect 메뉴에서도 보인다)
+```
+
+- 순서: 서비스 기동(Flyway가 outbox 생성) → 커넥터 등록 → 트래픽. 이 모드는 outbox를 넣고 바로 지우므로 **slot이 생기기 전에 쓴 메시지는 발행되지 않는다**. slot이 없으면 서비스가 기동 때 WARN을 남긴다(`DebeziumSlotCheck`)
+- 커넥터를 등록한 채로 서비스를 스케줄러 모드로 띄우면 두 relay가 같은 메시지를 두 번 보낸다(id 같음 → 컨슈머가 걸러 결과는 같지만 의도한 상태가 아님). 모드를 바꿀 때는 커넥터를 지우거나(`curl -X DELETE localhost:8088/connectors/<이름>`) `down -v`로 새로 시작한다
+- 커넥터를 지워도 slot은 DB에 남아 WAL을 붙잡는다. 다시 등록하지 않을 거면 `select pg_drop_replication_slot('<서비스>_outbox_slot')`
 
 - 실행 jar(`java -jar`)는 JDK 25가 필요하다. PATH의 java가 더 낮으면 JDK 25 경로로 직접 실행하거나 `JAVA_HOME`을 지정한다 (`bootRun`은 Gradle 툴체인이 알아서 맞춘다)
 - Windows Git Bash에서 `docker compose exec … /opt/kafka/…`는 경로가 윈도 경로로 바뀌므로 `MSYS_NO_PATHCONV=1` (스크립트에는 이미 들어 있다)

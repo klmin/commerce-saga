@@ -11,4 +11,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("tools.jackson.core:jackson-databind")
     implementation("org.slf4j:slf4j-api")
+
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
+    testRuntimeOnly("org.postgresql:postgresql")
 }

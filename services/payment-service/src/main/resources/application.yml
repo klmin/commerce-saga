@@ -24,9 +24,11 @@ spring:
       group-id: ${spring.application.name}
       auto-offset-reset: earliest
 
-# 스케줄러 outbox relay (libs/outbox)
+# outbox relay (libs/outbox). 기본은 스케줄러 relay.
+# Debezium 으로 발행할 때는 OUTBOX_RELAY_ENABLED=false 로 띄우고 커넥터를 등록한다 (scripts/register-connectors.sh)
 outbox:
   relay:
+    enabled: ${OUTBOX_RELAY_ENABLED:true}
     fixed-delay: 200ms
     batch-size: 100
 
