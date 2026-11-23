@@ -82,11 +82,12 @@ echo "== 5. 커넥터 중단 → 주문 → 재개 후 유실 0"
 avail_before=$(stock "$PRODUCT_ID" | field available)
 reserved_before=$(stock "$PRODUCT_ID" | field reserved)
 points_before=$(points "$USER_ID")
-lag_before=$(slot_lag_bytes order_outbox_slot)
 
 for c in $CONNECTORS; do curl -sf -X PUT "$CONNECT_URL/connectors/$c/stop" > /dev/null; done
 wait_until "connectors STOPPED" all_connectors STOPPED
 wait_until "order slot inactive" slot_inactive
+# 기준값은 커넥터가 완전히 멈춘 뒤에 읽는다 (멈추기 전에 읽으면 그사이 커넥터가 확인 위치를 옮겨 기준이 흔들린다)
+lag_before=$(slot_lag_bytes order_outbox_slot)
 echo "  ok  커넥터 STOPPED, order_outbox_slot active=f"
 
 order_ids=""
@@ -104,7 +105,7 @@ done
 expect_eq "중단 중 order_db outbox 행 수 (넣고 바로 지움)" 0 "$(psql_q order_db 'select count(*) from outbox')"
 expect_eq "중단 중 포인트 잔액 (변화 없음)" "$points_before" "$(points "$USER_ID")"
 lag_during=$(slot_lag_bytes order_outbox_slot)
-echo "  slot 적체 (order_outbox_slot): 중단 전 ${lag_before} B → 중단 중 ${lag_during} B"
+echo "  slot 적체 (order_outbox_slot): 중단 직후 ${lag_before} B → 중단 중 ${lag_during} B"
 if [ "$lag_during" -le "$lag_before" ]; then
   echo "FAIL: 중단 중 slot 적체가 늘지 않음" >&2
   exit 1

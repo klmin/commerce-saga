@@ -10,7 +10,8 @@
 #   2. 지연: 진행 중인 Saga 를 최대 CONCURRENCY 건으로 유지하며 주문 ORDERS 건. 한 묶음(CONCURRENCY 건)을 넣고
 #      모두 끝난 뒤 다음 묶음을 넣는다 (CONCURRENCY=1 이면 Saga 하나씩 직렬). 주문 생성 → COMPLETED 시간은
 #      서버 시각(orders.updated_at - created_at)이라 스크립트의 폴링 간격 오차가 없다
-#   3. 부하 중 커밋: 2 의 구간 커밋 수에서 같은 길이의 유휴분(1 의 비율)을 뺀 값을 주문 수로 나눈다
+#   3. 부하 중 커밋: 2 의 구간 커밋 수에서 측정기 자신의 조회(완료 확인 등) 커밋과 같은 길이의 유휴분(1 의 비율)을
+#      뺀 값을 주문 수로 나눈다
 #
 # Postgres 누적 통계(pg_stat_*)는 백엔드가 모아 두었다가 늦게 반영한다 (쉬는 연결은 최대 10초 뒤).
 # 그래서 스냅숏 전에 STATS_SETTLE_SECONDS 만큼 기다린다. 지연 측정 종료와 통계 수집 시점은 분리돼 있다
@@ -30,11 +31,20 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 DBS="order_db inventory_db point_db payment_db"
 
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
-psql_q() { docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d "$1" -tAc "$2"; }
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# 측정기 자신이 서비스 DB 에 여는 트랜잭션(psql -c 한 번 = 커밋 하나)을 DB 별로 세어 측정값에서 뺀다
+probe() { echo >> "$tmp/probe_$1"; }
+probes() { [ -f "$tmp/probe_$1" ] && wc -l < "$tmp/probe_$1" | tr -d " " || echo 0; }
+reset_probes() { rm -f "$tmp"/probe_*; }
+psql_q() { probe "$1"; docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d "$1" -tAc "$2"; }
 now_s() { date +%s.%N | cut -c1-14; }
 calc() { awk "BEGIN{printf \"%.1f\", $1}"; }
 
 snapshot() { # -> "db:commits:scans ..." (커밋 수, outbox 테이블을 읽은 횟수 seq + index). 시점을 맞추려고 exec 한 번에 읽는다
+  local db
+  for db in $DBS; do probe "$db"; done   # outbox 스캔 수를 읽는 조회가 그 DB 에 커밋 하나를 남긴다
   docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres sh -c '
     for db in '"$DBS"'; do
       c=$(psql -U postgres -d postgres -tAc "select xact_commit from pg_stat_database where datname = '"'"'$db'"'"'")
@@ -57,8 +67,11 @@ echo "== 7. relay 측정 (mode=$mode, orders=$ORDERS, concurrency=$CONCURRENCY)"
 
 # 1. 유휴 부하 (앞선 작업의 통계가 반영된 뒤 시작)
 sleep "$STATS_SETTLE_SECONDS"
+reset_probes
 t0=$(now_s); before=$(snapshot)
 sleep "$IDLE_SECONDS"
+declare -A idle_probes
+for db in $DBS; do idle_probes[$db]=$(probes "$db"); done
 t1=$(now_s); after=$(snapshot)
 idle_secs=$(calc "$t1 - $t0")
 echo "  유휴 (${idle_secs}s)"
@@ -66,7 +79,7 @@ printf '    %-13s %10s %10s %14s\n' db commits "commits/s" "outbox scans"
 declare -A idle_rate_c idle_rate_s
 total_c=0; total_s=0
 for db in $DBS; do
-  dc=$(delta "$before" "$after" "$db" 2); ds=$(delta "$before" "$after" "$db" 3)
+  dc=$(( $(delta "$before" "$after" "$db" 2) - idle_probes[$db] )); ds=$(delta "$before" "$after" "$db" 3)
   idle_rate_c[$db]=$(calc "$dc / $idle_secs"); idle_rate_s[$db]=$(calc "$ds / $idle_secs")
   total_c=$(( total_c + dc )); total_s=$(( total_s + ds ))
   printf '    %-13s %10d %10s %14d\n' "$db" "$dc" "${idle_rate_c[$db]}" "$ds"
@@ -76,9 +89,8 @@ printf '    %-13s %10d %10s %14d\n' total "$total_c" "$(calc "$total_c / $idle_s
 # 2. 지연: 묶음 단위로 넣고 그 묶음이 끝나면 다음 묶음 (진행 중인 Saga 최대 CONCURRENCY 건)
 sleep "$STATS_SETTLE_SECONDS"
 mark=$(psql_q order_db "select now()")
+reset_probes
 t0=$(now_s); before=$(snapshot)
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
 sent=0
 while [ "$sent" -lt "$ORDERS" ]; do
   batch=$(( ORDERS - sent < CONCURRENCY ? ORDERS - sent : CONCURRENCY ))
@@ -115,6 +127,8 @@ psql_q order_db "
 
 # 3. 부하 중 커밋: 통계 반영을 기다린 뒤 수집하고, 구간 길이만큼의 유휴분을 뺀다
 sleep "$STATS_SETTLE_SECONDS"
+declare -A load_probes
+for db in $DBS; do load_probes[$db]=$(probes "$db"); done
 t1=$(now_s); after=$(snapshot)
 win=$(calc "$t1 - $t0")
 echo "  부하 구간 (${win}s, 통계 반영 대기 ${STATS_SETTLE_SECONDS}s 포함, 유휴분 = 유휴 비율 × 구간)"
@@ -122,6 +136,7 @@ printf '    %-13s %10s %10s %12s %14s\n' db commits "유휴분" "주문당" "out
 total_c=0; total_net=0; total_s=0
 for db in $DBS; do
   dc=$(delta "$before" "$after" "$db" 2); ds=$(delta "$before" "$after" "$db" 3)
+  dc=$(( dc - load_probes[$db] ))   # 측정기의 완료 확인·지연 조회 커밋 제외
   net=$(calc "$dc - ${idle_rate_c[$db]} * $win")
   total_c=$(( total_c + dc )); total_s=$(( total_s + ds )); total_net=$(calc "$total_net + $net")
   printf '    %-13s %10d %10s %12s %14d\n' "$db" "$dc" "$(calc "${idle_rate_c[$db]} * $win")" "$(calc "$net / $ORDERS")" "$ds"
