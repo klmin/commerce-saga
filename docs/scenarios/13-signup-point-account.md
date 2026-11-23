@@ -31,7 +31,7 @@ point-service AuthEventsListener
 1. 인프라, 다섯 서비스, auth-service, gateway를 띄운다 (Debezium 모드면 `scripts/register-connectors.sh`가 `auth-outbox`도 등록)
 2. `scripts/smoke-signup-points.sh`
 
-CI `e2e`가 두 relay 모드에서 시나리오 10 다음에 돈다. 시나리오 9의 가입(smoke-auth)도 같은 흐름으로 계정을 만든다.
+CI `e2e`가 두 relay 모드에서 시나리오 10 다음에 돈다. 시나리오 9의 가입(smoke-auth)도 같은 흐름으로 계정을 만든다. 시나리오 3(오프셋 되감기)은 point-service 그룹의 `auth.events`도 처음으로 되감아, 이미 처리한 `UserRegistered`가 다시 와도 포인트가 바뀌지 않는지 함께 본다. 이때 메시지가 한 번도 없던 `auth.events` 파티션은 커밋 오프셋이 없어 lag가 `-`로 나오므로 따라잡은 것으로 본다(첫 CI 실행에서 이 때문에 시나리오 3이 실패해 고쳤다).
 
 ## 기대 결과
 

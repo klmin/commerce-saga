@@ -121,7 +121,7 @@ jobs:
             for i in $(seq 1 30); do pgrep -f "$svc-.*\.jar" > /dev/null || break; sleep 1; done
           done
           bash scripts/rewind-offsets.sh inventory-service inventory.command,order.events
-          bash scripts/rewind-offsets.sh point-service point.command
+          bash scripts/rewind-offsets.sh point-service point.command,auth.events
           bash scripts/rewind-offsets.sh payment-service payment.command
           bash scripts/rewind-offsets.sh order-service inventory.reply,point.reply,payment.reply
           for svc in $services; do
