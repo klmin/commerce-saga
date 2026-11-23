@@ -56,7 +56,7 @@ trace는 "이 주문이 어떻게 지나갔나"를 답하지만, "지금 어딘�
 | `commerce_saga_active{state,phase}`, `commerce_saga_oldest_active_age_seconds{state,phase}` | order-service (`SagaMetrics`, Saga 테이블 집계) | 끝나지 않은 단계별 Saga 수, 가장 오래된 것이 시작한 지 얼마나 됐나 |
 | `commerce_saga_timeout_resends_total`, `commerce_saga_timeout_give_ups_total` | order-service (Saga 기록 집계) | 단계 타임아웃 재전송·포기 누적 |
 | `commerce_payment_unknown`, `commerce_payment_oldest_unknown_age_seconds`, `commerce_payment_refund_pending`, `commerce_payment_oldest_refund_pending_age_seconds` | payment-service (`PaymentMetrics`) | PG 결과를 모르는 결제, 취소 요청 + 승인이라 환불을 기다리는 결제 |
-| `commerce_outbox_pending_rows`, `commerce_outbox_oldest_pending_age_seconds`, `commerce_outbox_replication_slot_lag_bytes` | outbox를 쓰는 네 서비스 (`OutboxMetrics`, libs/outbox 자동 설정) | 스케줄러 relay 적체, 자기 DB slot이 붙잡은 WAL |
+| `commerce_outbox_pending_rows`, `commerce_outbox_oldest_pending_age_seconds`, `commerce_outbox_replication_slot_lag_bytes` | outbox를 쓰는 네 서비스 (`OutboxMetrics`, libs/outbox 자동 설정) | 스케줄러 relay 적체, 자기 DB slot이 붙잡은 WAL(`restart_lsn` 기준: 오래 열린 트랜잭션이 있으면 `confirmed_flush_lsn`이 앞서 가도 그 뒤 WAL은 못 지운다) |
 | `kafka_consumergroup_lag`, `kafka_topic_partition_current_offset{topic=~".+[.]DLT"}` | kafka-exporter (브로커 기준) | 컨슈머 그룹 lag, DLT에 쌓인 메시지. 서비스가 죽어 있어도 보인다 |
 
 - 서비스 메트릭은 `/actuator/prometheus`(`micrometer-registry-prometheus`). 값은 스크레이프 때 집계 쿼리로 읽고 2초 동안 재사용한다(게이지마다 쿼리하지 않게). 쿼리는 진행 중 Saga·보정 대상 부분 인덱스와 같은 조건이라 끝난 행이 쌓여도 비싸지지 않는다. 타임아웃 이벤트 수는 Saga 기록 전체를 세므로 기록이 아주 많아지면 카운터로 바꾼다
