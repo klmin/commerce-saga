@@ -94,15 +94,15 @@ t0=$(now_s); before=$(snapshot)
 sent=0
 while [ "$sent" -lt "$ORDERS" ]; do
   batch=$(( ORDERS - sent < CONCURRENCY ? ORDERS - sent : CONCURRENCY ))
-  rm -f "$tmp"/*
+  rm -rf "$tmp/ids"; mkdir -p "$tmp/ids"   # 주문 id 파일만 정리 (probe_* 카운터는 구간 끝까지 유지)
   for j in $(seq 1 "$batch"); do
     product=$(( ((sent + j) % 3) + 1 ))
     curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $USER_ID" \
       -d "{\"lines\":[{\"productId\":$product,\"quantity\":1,\"unitPrice\":100}],\"pointAmount\":10}" \
-      | field orderId > "$tmp/$j" &
+      | field orderId > "$tmp/ids/$j" &
   done
   wait
-  ids=$(for f in "$tmp"/*; do id=$(cat "$f"); [ -n "$id" ] && printf "'%s'\n" "$id"; done | paste -sd, -)
+  ids=$(for f in "$tmp"/ids/*; do id=$(cat "$f"); [ -n "$id" ] && printf "'%s'\n" "$id"; done | paste -sd, -)
   [ "$(echo "$ids" | tr ',' '\n' | grep -c .)" -eq "$batch" ] || { echo "FAIL: 주문 생성 실패" >&2; exit 1; }
   deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
   while [ "$(psql_q order_db "select count(*) from orders where id in ($ids) and status in ('COMPLETED', 'CANCELLED')")" -lt "$batch" ]; do
