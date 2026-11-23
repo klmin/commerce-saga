@@ -3,7 +3,7 @@
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
 - 마지막 갱신: 2026-11-23 (PR #31 머지 후, 후속 2 남은 계획 정리 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료. 다음은 A-3 프론트용 백엔드 보강 → F-1 Next.js(템플릿 가져오기)**
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료. 다음은 A-3-1 → A-3-2(프론트용 백엔드 보강) → F-1 Next.js(템플릿 가져오기) → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 "후속 2 진행" 표의 **A-3(프론트가 쓸 백엔드 보강) → F-1(Next.js, 템플릿 가져오기)**. 먼저 "프론트엔드 준비 메모"를 읽는다. A-3 범위 중 사용자 확인이 필요하다고 적힌 항목(상품 카탈로그·가격, 관리자 DLT API)은 시작할 때 사용자에게 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. 다음 작업은 아래 "후속 2 진행" 표의 **A-3-1 → A-3-2 → F-1 → F-2** 순서. 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -203,8 +203,9 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | 0 | Spring Boot 4.1.2 → 4.2.0 (Spring Cloud 2026.0 = Gateway 5.1 이 Boot 4.2 기준, 4.1 에 맞는 릴리스 없음) | 완료 PR #29 |
 | A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 완료 PR #30 |
 | A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 완료 PR #31 |
-| A-3 | 프론트가 쓸 백엔드 보강: 내 주문 목록, 가입 시 포인트 계정(`UserRegistered`, auth-service outbox), 주문 `Idempotency-Key`(브리프 시나리오 10), 내 결제 목록. 범위는 아래 "프론트엔드 준비 메모" | 다음 (추천 순서, 사용자 확인) |
-| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-3 다음. 템플릿은 가져오기로 결정(아래 메모) |
+| A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 다음 |
+| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | A-3-1 다음 |
+| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-3-2 다음. 템플릿 가져오기(아래 메모) |
 | F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
@@ -236,15 +237,22 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 
 | # | 없는 것 | 왜 필요 | 제안 | 결정 |
 |---|---|---|---|---|
-| 1 | 내 주문 목록 (`GET /orders?before=&size=`) | 주문 목록 화면 | order-service, 알림처럼 커서 페이징, DTO 직접 조회 | A-3 에서 (추천) |
-| 2 | 가입한 사용자의 포인트 계정 | 지금은 시드 1~4만 계정이 있어, 새로 가입하면 포인트를 쓰는 주문이 실패한다 | auth-service 에 outbox 를 붙여 `UserRegistered`(`auth.events`, 키 = userId) → point-service 가 멱등하게 계정 생성(가입 축하 포인트). 분산 정합성 주제와도 맞음 | A-3 에서 (추천) |
-| 3 | 주문 `Idempotency-Key` (브리프 시나리오 10) | 결제 버튼 두 번·새로고침에도 주문 1건 | order-service 에 `(user_id, idempotency_key)` 유니크 + 같은 키면 처음 주문 반환. 시나리오 10 문서·스크립트 | A-3 에서 (추천) |
-| 4 | 내 결제 목록 (`GET /payments`) | 결제 내역 화면 | payment-service, 커서 페이징 | A-3 또는 F-2 |
-| 5 | 상품 카탈로그(이름·가격) | 상품 목록·주문 화면. 지금은 재고(수량)만 있고 **가격을 클라이언트가 보낸다**(`unitPrice`) | (a) 프론트에 상품 1~5 를 고정 목록으로 두고 가격 문제는 한계로 기록 (b) product 정보를 inventory 에 넣고 주문 시 가격을 서버가 정함(주문 Saga 변경 큼) (c) 후속 4(검색, product-service) 때 | **사용자 확인** (추천 a, 가격 신뢰 문제는 README 한계에) |
-| 6 | 관리자 DLT 조회·재처리 API | 관리자 화면 | 지금은 CLI(`tools/dlt-replay`)뿐. HTTP 로 내려면 어느 서비스가 맡을지(새 admin 서비스 vs 도구를 서버로) 정해야 함 | **사용자 확인** (추천: F-2 관리자 화면은 결제 장애 주입만, DLT 는 Kafka UI 링크) |
-| 7 | 포인트 사용 내역 | 포인트 화면 | point-service `point_usages` 를 내 것만 조회 | F-2 때 필요하면 |
+| 1 | 내 주문 목록 (`GET /orders?before=&size=`) | 주문 목록 화면 | order-service, 알림처럼 커서 페이징, DTO 직접 조회 | A-3-1 |
+| 2 | 가입한 사용자의 포인트 계정 | 지금은 시드 1~4만 계정이 있어, 새로 가입하면 포인트를 쓰는 주문이 실패한다 | auth-service 에 outbox 를 붙여 `UserRegistered`(`auth.events`, 키 = userId) → point-service 가 멱등하게 계정 생성(가입 축하 포인트). 분산 정합성 주제와도 맞음 | A-3-2 |
+| 3 | 주문 `Idempotency-Key` (브리프 시나리오 10) | 결제 버튼 두 번·새로고침에도 주문 1건 | order-service 에 `(user_id, idempotency_key)` 유니크 + 같은 키면 처음 주문 반환. 시나리오 10 문서·스크립트 | A-3-1 |
+| 4 | 내 결제 목록 (`GET /payments`) | 결제 내역 화면 | payment-service, 커서 페이징 | A-3-1 |
+| 5 | 상품 카탈로그(이름·가격) | 상품 목록·주문 화면. 지금은 재고(수량)만 있고 **가격을 클라이언트가 보낸다**(`unitPrice`) | (a) 프론트에 상품 1~5 를 고정 목록으로 두고 가격 문제는 한계로 기록 (b) product 정보를 inventory 에 넣고 주문 시 가격을 서버가 정함(주문 Saga 변경 큼) (c) 후속 4(검색, product-service) 때 | **(a) 로 결정**: 프론트에 상품 1~5 고정 목록(이름·가격), 가격을 클라이언트가 보내는 문제는 README·PROGRESS 한계에 적는다 |
+| 6 | 관리자 DLT 조회·재처리 API | 관리자 화면 | 지금은 CLI(`tools/dlt-replay`)뿐. HTTP 로 내려면 어느 서비스가 맡을지(새 admin 서비스 vs 도구를 서버로) 정해야 함 | **결정**: F-2 관리자 화면은 결제 장애 주입만, DLT 는 Kafka UI 링크와 `scripts/dlt.sh` 안내 |
+| 7 | 포인트 사용 내역 | 포인트 화면 | point-service `point_usages` 를 내 것만 조회 | F-2 (point-service 에 조회 API 추가) |
 
-A-3 를 한 PR 로 할지 (1·2·3) / (4·7) 로 나눌지는 시작할 때 사용자에게 묻는다.
+A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2(2, 서비스 간 이벤트라 따로).
+
+**그 밖에 정해 둔 것 (추천안)**
+- `Idempotency-Key`: 헤더 필수 아님(없으면 지금처럼), 있으면 `(user_id, idempotency_key)` 유니크. 같은 키 + 같은 본문이면 처음 주문을 `200` 으로, 같은 키 + 다른 본문이면 `422`. 키 보존 기간 정리 작업은 한계로
+- 목록 API 는 알림과 같은 커서 페이징(`before` = 마지막 id, `size` 1~50, 최신순). UUIDv7 id 라 시간순 정렬과 같다
+- 가입 축하 포인트: 1,000P. `UserRegistered` 가 늦거나 중복돼도 계정은 하나(`user_id` 유니크, `processed_message`). 포인트 계정이 아직 없을 때 주문하면 지금처럼 포인트 단계 실패 → 보상
+- F-1 CI: `frontend` 워크플로(lint, typecheck, Vitest, `next build`)만 PR 마다. Playwright 는 로컬 시나리오로 두고, 전체 스택 + Next 를 띄우는 CI e2e 는 F-2 끝에 판단
+- F-1 화면 범위: 로그인·회원가입·로그아웃, 상품 목록(고정), 주문 생성, 내 주문 목록, 주문 상세(Saga 단계 타임라인·보상 경로). F-2: 포인트(잔액·내역), 결제 내역, 알림, 로그인 기기 관리, 관리자(결제 장애 주입)
 
 **F-1 템플릿: 가져온다 (사용자 결정).** 사용자 공개 저장소 `klmin/hexagonal-spring-next-template` 의 `frontend/`(확인 시점 main `61c6ebc`, 2026-11-23)를 이 저장소 `frontend/` 로 **파일만 복사**한다(git 이력 X, 가져온 커밋은 ADR 0011 에 적음).
 - 들어 있는 것: Next 16.4 App Router·서버 액션, React 19.3, `server-only` API 클라이언트(`src/lib/api/client.ts`, Problem Details → `ApiError`, 10초 타임아웃, 요청 시점 env), zod env(`src/lib/env.ts`, `BACKEND_URL`), Tailwind 4 + **shadcn/ui 이미 설정됨**(`components.json`, button·card·input·label·textarea), Vitest + Testing Library, Playwright(`e2e/`), ESLint·Prettier, Dockerfile, Node 22/24+
