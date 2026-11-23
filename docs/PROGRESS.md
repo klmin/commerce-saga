@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #28 머지 후, Spring Boot 4.2 업그레이드 PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료: O-1 분산 트레이싱(PR #27), O-2 메트릭·경보(PR #28). 다음은 후속 2(인증 + 프론트엔드), 그 전에 Spring Boot 4.2.0 으로 올림(이번 PR)**
+- 마지막 갱신: 2026-11-23 (PR #29 머지 후, 후속 2 A-1 auth-service PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2 업그레이드(PR #29), A-1 auth-service(이번 PR). 다음은 A-2 Gateway + 서비스 JWT 검증**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 1절 표의 **후속 2(인증 + 프론트엔드)**. 아래 "후속 2 설계 메모"대로 시작하고(ADR 0008 인증, 0011 프론트엔드를 먼저 남김), 메모에 없는 결정(PR 나누는 법, Spring Cloud 릴리스 등)은 사용자에게 먼저 묻는다. main에서 `feat/auth-service` 같은 브랜치를 만든다
+2. 다음 작업은 **후속 2의 A-2 (Spring Cloud Gateway + 서비스 JWT 검증)**. 아래 "후속 2 진행" 절의 PR 순서와 "후속 2 설계 메모"대로 한다. 인증 설계는 [ADR 0008](adr/0008-auth-self-issued-jwt.md)에 남겼다. 프론트(F-1)를 시작할 때 템플릿 위치를 사용자에게 묻는다(이 PC에 없음). main에서 `feat/gateway` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -45,7 +45,7 @@
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
-| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 관측성 다음 |
+| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 auth-service) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
@@ -106,9 +106,10 @@ flowchart LR
 | #26 | 3-E 정리: 브리프 5절 진행 순서(1~3단계 = 완성, 후속 1~4), ADR 0000(왜 MSA인가, 메인 Saga 방식 대안 비교), 시나리오 3·6 CI 결과, README 아키텍처 3단계 기준 |
 | #27 | 후속 1 O-1 분산 트레이싱: OTel(OTLP) → Tempo + Grafana, outbox `traceparent` 컬럼 → Kafka 헤더 → 리스너 observation(relay 두 모드 같은 방식), 리스너 span 에 orderId·메시지 타입, 시나리오 11, ADR 0013 |
 | #28 | 후속 1 O-2 메트릭·경보: 서비스 `/actuator/prometheus`(Saga·결제·outbox·slot 메트릭, 자기 DB 기준), kafka-exporter(lag·DLT), Prometheus 경보 규칙 10개, Grafana 대시보드, 시나리오 12, ADR 0013 메트릭·경보 부분 |
-| (이번 PR) | Spring Boot 4.1.2 → 4.2.0 (Kafka 클라이언트 4.4.0 = 브로커와 같은 버전, spring-kafka 4.2), Gradle 9.9.2. 후속 2 Gateway에 쓸 Spring Cloud 2026.0(Gateway 5.1)이 Boot 4.2 기준이라 먼저 올림. 시나리오 12 CI 결과 |
+| #29 | Spring Boot 4.1.2 → 4.2.0 (Kafka 클라이언트 4.4.0 = 브로커와 같은 버전, spring-kafka 4.2), Gradle 9.9.2. 후속 2 Gateway에 쓸 Spring Cloud 2026.0(Gateway 5.1)이 Boot 4.2 기준이라 먼저 올림. 시나리오 12 CI 결과 |
+| (이번 PR) | 후속 2 A-1 auth-service: 회원가입·로그인(BCrypt, 아이디별 5회 실패 잠금), access token JWT RS256 + JWKS, refresh token `familyId.secret` 회전(Redis Lua compare-and-set)·동시 refresh 유예·재사용 탐지 시 family 폐기, 로그아웃·전체 로그아웃·로그인 기기 관리, Redis(6380), 시나리오 9(인증 부분), ADR 0008 |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·11·12와 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증)·11·12와 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -182,7 +183,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 배포 순서: 서비스(마이그레이션) 먼저, 커넥터 설정 나중(`table.field.additional.missing=error`라 컬럼이 없으면 커넥터 실패). 로컬에서 커넥터 재등록 직후 첫 주문은 재시작 때문에 10초 넘게 걸려 타임아웃 재전송이 한 번 났다
 - 한계: 단계 타임아웃 재전송·결제 보정 후 응답·traceparent 없는 예전 메시지는 새 trace로 시작(주문 id 검색으로는 모임). JDBC span 없음
 
-**O-2 메트릭·경보 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**O-2 메트릭·경보 (PR #28) 에서 한 것 (결정·확인 사항)**
 - 서비스: `micrometer-registry-prometheus`(service-conventions) + actuator `prometheus` 노출. 서비스 메트릭은 이름 앞에 `commerce_`
   - order-service `SagaMetrics`: `commerce_saga_active{state,phase}`, `commerce_saga_oldest_active_age_seconds{state,phase}`(시작 후 나이), `commerce_saga_timeout_resends_total`, `commerce_saga_timeout_give_ups_total`
   - payment-service `PaymentMetrics`: `commerce_payment_unknown`, `..._oldest_unknown_age_seconds`(**`created_at`부터**: `updated_at`부터 재면 `CancelPayment`가 나이를 0으로 되돌려 경보가 안 울렸다, 시나리오 12에서 발견), `commerce_payment_refund_pending`, `..._oldest_refund_pending_age_seconds`(취소 요청 시각부터)
@@ -193,7 +194,28 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 12 (`scripts/smoke-alerts.sh`, CI 두 모드, 시나리오 11 다음): 12a 깨진 메시지 → `payment.command.DLT` → `DeadLetterMessage`, 12b PG 지연 45초 → `SagaTimeoutGiveUp`·`PaymentResultUnknown` firing → 환불 후 해제. 경보가 이미 firing 중일 수 있어 메트릭 값 증가도 함께 확인. 로컬 Debezium 모드 PASS
 - 테스트: `SagaStatsPersistenceAdapterTest`, `PaymentStatsPersistenceAdapterTest`, `OutboxWriterIntegrationTest`(OutboxMetrics)
 
-### 후속 2 설계 메모 (2026-11-23 사용자와 정리, 시작할 때 ADR로 남긴다)
+### 후속 2 진행 (PR 4개, 2026-11-23 사용자 합의)
+
+| 순서 | PR | 상태 |
+|---|---|---|
+| 0 | Spring Boot 4.1.2 → 4.2.0 (Spring Cloud 2026.0 = Gateway 5.1 이 Boot 4.2 기준, 4.1 에 맞는 릴리스 없음) | 완료 PR #29 |
+| A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 이번 PR |
+| A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 다음 |
+| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-2 다음. 템플릿 위치를 사용자에게 묻는다 |
+| F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
+
+**A-1 auth-service 에서 한 것 (결정·확인 사항)**
+- 새 서비스 `services/auth-service` (8086, `auth_db`/`auth_svc`, Redis 6380). 헥사고날 그대로, 기능 패키지 `auth` 하나. Kafka·outbox 없음(다른 서비스와 메시지를 주고받지 않음)
+- API: `POST /auth/signup`·`login`·`refresh`·`logout`·`logout-all`, `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `GET /.well-known/jwks.json`. 기기 관리·전체 로그아웃은 auth-service 자신의 공개키로 access token 을 검증(Spring Security resource server)
+- access token: RS256 15분, `iss`·`sub`·`roles`·`kid`. 서명 키 `AUTH_JWT_PRIVATE_KEY_LOCATION`(PKCS#8 PEM) + `AUTH_JWT_KEY_ID`, 비우면 기동 때 임시 키(로컬·CI). 키 교체는 `auth.jwt.retired-keys` 로 이전 공개키를 JWKS 에 남김
+- refresh token: `familyId.secret`(UUIDv4 + 32바이트 base64url), httpOnly·Secure·SameSite=Lax·Path=/auth 쿠키로만. Redis 에는 secret SHA-256 해시만. 회전은 Lua compare-and-set, 동시 refresh 유예(기본 20s)는 **access token 만 주고 쿠키는 그대로**(메모의 "같은 새 토큰 다시 주기"는 새 secret 원문을 서버에 둬야 해서 바꿈). 유예 뒤 옛 secret 은 재사용 탐지 → 그 family 삭제(브리프의 "전체 세션 폐기"를 그 기기로 좁힘, ADR 0008)
+- 수명: sliding 14일(쓸 때마다 연장), 절대 30일. 역할·정지 여부는 refresh 마다 DB 에서 다시 읽음
+- 로그인: BCrypt, 비밀번호 8~64자·72바이트 이하, 아이디 영문 소문자·숫자·밑줄 4~30자(대소문자 무시). 없는 아이디도 더미 해시 비교. 아이디별 15분 안 5회 실패 → 15분 `429` + `Retry-After`
+- 시드 사용자는 두지 않았다. 가입하면 id 1 부터 나와 포인트 시드(사용자 1~4)와 맞는다. 관리자(ADMIN) 계정 만드는 법과 e2e 의 로그인 사용자는 A-2 에서 정한다
+- 테스트 68개: `RefreshFamilyTest`, `RefreshTokenTest`, `UserTest`, `AuthServiceTest`(인메모리 포트), `AuthControllerTest`(쿠키 속성), `AuthIntegrationTest`(Postgres + Redis, JWKS 서명 검증, 동시 refresh 8개 → 회전 1번), ArchUnit
+- 시나리오 9 인증 부분 `scripts/smoke-auth.sh` (CI 두 모드, 서비스 기동 직후, `AUTH_REFRESH_GRACE=2s`). 로컬 PASS. Prometheus 가 auth-service(8086)도 긁는다(`ServiceDown` 대상)
+
+### 후속 2 설계 메모 (2026-11-23 사용자와 정리. 인증 부분은 ADR 0008 로 남김)
 
 **인증: 자체 JWT auth-service (Spring Authorization Server는 쓰지 않음)**
 - 로그인은 자체 회원(아이디·비밀번호) 하나, 클라이언트는 우리 Next 앱뿐이다. OAuth2/OIDC(SAS, Keycloak)는 외부 앱에 로그인 제공·소셜 로그인·여러 앱 SSO가 필요할 때 의미가 있어 지금은 과하다. password grant가 폐기돼 SAS로는 Next 화면에서 바로 로그인할 수 없다는 점도 이유. 필요해지면 서비스 쪽(resource server)은 그대로 두고 auth-service만 바꾼다
@@ -230,7 +252,8 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 `ReplicationSlotLag`. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
-- 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 후속 2(인증)
+- 결제 장애 주입 API(`PUT /admin/payment-faults`)는 인증 없음 → 후속 2(인증) A-2 Gateway 역할 검사(`/api/admin/**`)
+- 인증: 이미 나간 access token 은 최대 15분 유효(즉시 차단 없음). 로그인 잠금은 아이디 기준이라 남이 내 계정을 15분 잠글 수 있음(IP 제한은 Gateway rate limit). 동시 refresh 유예(20초) 안의 옛 refresh token 은 access token 을 받을 수 있음(회전은 못 함) (ADR 0008)
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). `ConsumerLagHigh` 경보로 잡는다
 - trace: 단계 타임아웃 재전송·결제 보정 후 응답은 원래 trace 에 잇지 못하고 새 trace 로 시작한다(주문 id 검색으로 모임). 이으려면 Saga 행에 처음 traceparent 를 저장 (ADR 0013)
 - 경보 문턱값은 시연용(짧음), 경보 전달(Alertmanager)은 없음. 운영 값은 ADR 0013 표
@@ -247,9 +270,9 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 ## 7. 로컬에서 이어서 돌리기
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Prometheus(9091)·Grafana(3000)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Prometheus(9091)·Grafana(3000), Redis(6380)
 ./gradlew build                                             # 전체 빌드·테스트
-./gradlew :services:inventory-service:bootRun               # 8082 (point 8083, payment 8084, order 8081, notification 8085)
+./gradlew :services:inventory-service:bootRun               # 8082 (point 8083, payment 8084, order 8081, notification 8085, auth 8086)
 scripts/smoke-saga.sh                                       # 시나리오 0·1 + IDOR
 scripts/smoke-redelivery.sh snapshot|verify                 # 시나리오 3 (순서는 스크립트 머리말)
 scripts/smoke-poison.sh                                     # 시나리오 6
@@ -260,6 +283,8 @@ scripts/smoke-payment-timeout.sh                            # 시나리오 2 (or
 scripts/dlt.sh list inventory.command.DLT                   # DLT 확인
 scripts/smoke-tracing.sh                                    # 시나리오 11 (trace 는 Grafana http://localhost:3000 → Explore → Tempo)
 scripts/smoke-alerts.sh                                     # 시나리오 12 (경보는 http://localhost:9091/alerts, 대시보드는 Grafana commerce-saga)
+AUTH_REFRESH_GRACE=2s ./gradlew :services:auth-service:bootRun   # 동시 refresh 유예를 짧게 (기본 20s)
+GRACE_WAIT=3 scripts/smoke-auth.sh                          # 시나리오 9 인증 (가입·로그인·회전·재사용 탐지·잠금)
 ```
 
 Debezium relay 모드로 돌리기 (infra 는 위와 같이 띄우면 connect 도 뜬다):

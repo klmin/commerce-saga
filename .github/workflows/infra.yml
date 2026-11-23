@@ -52,8 +52,13 @@ jobs:
           pg point_svc point_svc point_db
           pg payment_svc payment_svc payment_db
           pg notification_svc notification_svc notification_db
+          pg auth_svc auth_svc auth_db
           # 다른 서비스 DB 에는 접속할 수 없어야 한다
           if pg order_svc order_svc inventory_db; then echo "order_svc 가 inventory_db 에 접속됨"; exit 1; fi
+          if pg auth_svc auth_svc order_db; then echo "auth_svc 가 order_db 에 접속됨"; exit 1; fi
+
+      - name: Redis 확인 (auth-service)
+        run: docker compose -f infra/docker-compose.yml exec -T redis redis-cli ping | grep -qx PONG
 
       - name: Logs
         if: failure()

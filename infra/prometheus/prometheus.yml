@@ -21,6 +21,8 @@ scrape_configs:
         labels: {service: payment-service}
       - targets: ['host.docker.internal:8085']
         labels: {service: notification-service}
+      - targets: ['host.docker.internal:8086']
+        labels: {service: auth-service}
 
   # 컨슈머 그룹 lag, 토픽 끝 오프셋(DLT 적재 확인). 서비스가 죽어 있어도 브로커 기준으로 보인다
   - job_name: kafka
