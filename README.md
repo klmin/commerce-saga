@@ -6,7 +6,7 @@
 - DB 저장과 메시지 발행의 이중 쓰기 → **Transactional Outbox** + relay (스케줄러 → **Debezium CDC**)
 - at-least-once 전달로 같은 메시지가 여러 번 온다 → **멱등 처리**, 늦은 응답에 단계가 되돌아가지 않는 상태 머신
 
-> 진행 중: 3단계(신뢰성). 멱등 컨슈머·DLT 재처리 완료, Debezium relay 추가(스케줄러와 선택), 다음은 Debezium 장애 시나리오·relay 비교. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md).
+> 진행 중: 3단계(신뢰성). 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정, 운영 기준 모드로 결정) 완료, 다음은 타임아웃·장애 복구. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md).
 
 ## 아키텍처 (2단계)
 
@@ -79,16 +79,19 @@ scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메�
 | 0 | [기본 흐름: 주문 → 재고 예약 → 확정 / 품절 거절 / 남의 주문 조회 404](docs/scenarios/00-basic-flow.md) | 통과 (CI `e2e`) |
 | 1 | [결제 실패 → 포인트 환불 → 재고 해제 (보상 순서)](docs/scenarios/01-payment-failure-compensation.md) | 통과 (CI `e2e`) |
 | 3 | [중복 전달: 오프셋 되감기 → 재고·포인트·응답 중복 0건](docs/scenarios/03-duplicate-delivery.md) | 통과 (로컬, CI `e2e`) |
+| 5 | [Debezium 커넥터 중단 → 재개 후 유실 0, slot WAL 적체와 heartbeat](docs/scenarios/05-connector-outage.md) | 통과 (로컬, CI `e2e` debezium) |
 | 6 | [poison message → DLT 격리(파티션 안 막힘) → 원인 확인 → 재처리 한 번만 반영](docs/scenarios/06-poison-message-dlt.md) | 통과 (로컬, CI `e2e`) |
+| 7 | [relay 비교: 스케줄러 vs Debezium, Saga 완료 지연·DB 부하](docs/scenarios/07-relay-comparison.md) | 측정 (로컬, CI `e2e`) |
 | 8 | [알림 서비스 다운 → 주문은 정상 완료, 복구 후 밀린 이벤트 처리](docs/scenarios/08-notification-down.md) | 통과 (CI `e2e`) |
 
-이후 단계: 결제 타임아웃 보정, 서비스 다운 복구, Debezium 커넥터 중단, relay 지연 비교 ([브리프 6절](docs/commerce-msa-portfolio-brief.md#6-보여줄-시나리오-docsscenarios)).
+이후 단계: 결제 타임아웃 보정, 서비스 다운 복구 ([브리프 6절](docs/commerce-msa-portfolio-brief.md#6-보여줄-시나리오-docsscenarios)).
 
 ## 설계 결정 (ADR)
 
 - [0001 모노레포 + 서비스별 독립 실행·배포](docs/adr/0001-monorepo-independent-deploy.md)
 - [0002 영속성: 도메인 모델과 JPA 엔티티 분리](docs/adr/0002-persistence-domain-jpa-separation.md)
 - [0003 메인 주문 Saga는 오케스트레이션, 후속 처리는 코레오그래피](docs/adr/0003-orchestration-for-main-saga.md)
+- [0004 Outbox relay: 운영 기준은 Debezium(CDC), 코드 기본값은 스케줄러 유지](docs/adr/0004-debezium-outbox-relay.md)
 - [0005 Kafka 메시지 키 = orderId, 커맨드·응답·이벤트 토픽 분리, 스키마 호환 규칙](docs/adr/0005-message-key-and-topic-rules.md)
 - [0006 멱등 컨슈머: 메시지 ID 기록 + 주문별 기록, 두 겹](docs/adr/0006-idempotent-consumer.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
@@ -101,7 +104,7 @@ libs/          messaging-contract(메시지 스키마), outbox(저장 + relay)
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)
-scripts/       스모크 테스트, 오프셋 되감기, DLT 조회·재처리, (이후) 커넥터 등록·부하·장애 주입
+scripts/       스모크 테스트, 오프셋 되감기, DLT 조회·재처리, 커넥터 등록·중단 시나리오, relay 측정
 docs/          ADR, 시나리오
 ```
 

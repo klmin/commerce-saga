@@ -105,6 +105,15 @@ jobs:
       - name: poison message 격리 후 DLT 재처리 (시나리오 6)
         run: bash scripts/smoke-poison.sh
 
+      # 커넥터를 멈춘 동안 낸 주문이 재개 후 모두 완료되는지(유실 0), 그동안 slot 이 WAL 을 붙잡는지, heartbeat 로 다시 줄어드는지
+      - name: 커넥터 중단 후 재개, 유실 0 (시나리오 5)
+        if: matrix.relay == 'debezium'
+        run: bash scripts/smoke-connector-outage.sh
+
+      # 검증이 아니라 측정. 두 모드의 결과를 로그로 남겨 ADR 0004 근거로 쓴다
+      - name: relay 지연·DB 부하 측정 (시나리오 7)
+        run: bash scripts/measure-relay.sh
+
       # 스케줄러가 아니라 Debezium 이 발행했다는 증거: outbox 는 넣고 바로 지워져 비어 있고(스케줄러가 읽을 행이 없음),
       # 커넥터는 계속 RUNNING, 서비스 DB 마다 replication slot 이 살아 있다
       - name: Debezium 모드 확인 (outbox 비어 있음, 커넥터 RUNNING)
