@@ -82,6 +82,10 @@ services:
         for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$t" --partitions 3 --replication-factor 1
         done
+        # Debezium 커넥터 heartbeat (heartbeat.interval.ms). 트래픽이 없는 DB 의 slot 위치를 앞으로 옮긴다 (시나리오 5)
+        for c in order-outbox inventory-outbox point-outbox payment-outbox; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "__debezium-heartbeat.$$c" --partitions 1 --replication-factor 1
+        done
     restart: "no"
 
   # Debezium outbox relay. 브로커와 같은 apache/kafka 이미지 위에 Debezium Postgres 플러그인을 얹는다 (connect/Dockerfile)
