@@ -1,0 +1,61 @@
+server:
+  port: ${SERVER_PORT:8086}
+
+spring:
+  application:
+    name: auth-service
+  # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
+    username: ${AUTH_DB_USERNAME:auth_svc}
+    password: ${AUTH_DB_PASSWORD:auth_svc}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
+  # refresh token family, 로그인 실패 횟수 (ADR 0008)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+
+auth:
+  policy:
+    access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:15m}
+    # 쓸 때마다 이만큼 연장한다. 연장해도 처음 로그인부터 refresh-absolute-ttl 을 넘지 않는다
+    refresh-token-ttl: ${AUTH_REFRESH_TOKEN_TTL:14d}
+    refresh-absolute-ttl: ${AUTH_REFRESH_ABSOLUTE_TTL:30d}
+    # 여러 탭이 같은 refresh token 으로 거의 동시에 refresh 할 때 재사용(탈취)으로 오인하지 않는 유예
+    refresh-grace: ${AUTH_REFRESH_GRACE:20s}
+    login-max-failures: ${AUTH_LOGIN_MAX_FAILURES:5}
+    login-lock: ${AUTH_LOGIN_LOCK:15m}
+  jwt:
+    issuer: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+    # 서명 키(PKCS#8 PEM). 비우면 기동할 때 임시 키를 만든다(로컬 개발용, 재시작하면 이전 토큰은 무효)
+    key-id: ${AUTH_JWT_KEY_ID:}
+    private-key-location: ${AUTH_JWT_PRIVATE_KEY_LOCATION:}
+  cookie:
+    # 로컬 http 에서 확인할 때만 false
+    secure: ${AUTH_COOKIE_SECURE:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  # 분산 트레이싱 (ADR 0013)
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4328/v1/traces}
+  otlp:
+    metrics:
+      export:
+        enabled: false

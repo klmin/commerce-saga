@@ -10,6 +10,7 @@
 # - Tempo      : OTLP http://localhost:4328 (서비스 trace 수신), API http://localhost:3210
 # - Grafana    : http://localhost:3000 (trace·대시보드, 익명 접근)
 # - Prometheus : http://localhost:9091 (메트릭, 경보 규칙)
+# - Redis      : localhost:6380 (auth-service 의 refresh token·로그인 실패 횟수. 6379 는 흔히 다른 Redis 가 써서 피함)
 # 포트는 infra/.env 로 바꿀 수 있다 (.env.example 참고). 계정·비밀번호는 로컬 개발용 값이다.
 name: commerce-saga
 
@@ -27,6 +28,18 @@ services:
       - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # auth-service 의 refresh token family·로그인 실패 횟수 (ADR 0008). 잃어도 다시 로그인하면 되므로 영속화하지 않는다
+  redis:
+    image: redis:8.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 2s
       timeout: 3s
       retries: 30

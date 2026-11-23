@@ -51,17 +51,19 @@ flowchart LR
 - 멱등 컨슈머 두 겹: 같은 메시지의 재전달은 `processed_message`(헤더 `id`)로 건너뛰고, 내용이 같은 재요청은 주문별 처리 기록(예약·사용·결제)으로 한 번만 반영한다 ([ADR 0006](docs/adr/0006-idempotent-consumer.md)). 처리할 수 없는 메시지는 `<토픽>.DLT`
 - 분산 트레이싱: outbox 행에 넣는 시점의 `traceparent`를 저장하고 relay가 Kafka 헤더로 옮겨, 주문 한 건이 서비스를 몇 개 지나도 trace 하나 ([ADR 0013](docs/adr/0013-observability.md))
 - 메트릭·경보: 서비스마다 자기 DB 기준의 Saga·결제·outbox 메트릭(`/actuator/prometheus`), kafka-exporter 로 lag·DLT, Prometheus 경보 규칙(`infra/prometheus/rules`), Grafana 대시보드 ([ADR 0013](docs/adr/0013-observability.md))
+- 인증(후속 2 진행 중): auth-service 가 access token(JWT RS256, 15분)을 발급하고 공개키를 JWKS 로 낸다. refresh token 은 httpOnly 쿠키, 쓸 때마다 회전하고 옛 토큰을 다시 쓰면 그 기기 세션을 버린다 ([ADR 0008](docs/adr/0008-auth-self-issued-jwt.md)). 주문 등 API 는 아직 `X-User-Id` (Gateway·서비스 JWT 검증은 다음 PR)
 - 서비스 내부는 헥사고날 + DDD 애그리거트 ([ADR 0002](docs/adr/0002-persistence-domain-jpa-separation.md)), 서비스별 DB·계정 분리 ([ADR 0001](docs/adr/0001-monorepo-independent-deploy.md))
 
 ## 실행
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Tempo·Prometheus(9091)·Grafana(http://localhost:3000)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Tempo·Prometheus(9091)·Grafana(http://localhost:3000), Redis(6380)
 ./gradlew :services:inventory-service:bootRun              # 8082   (각각 다른 터미널에서)
 ./gradlew :services:point-service:bootRun                  # 8083
 ./gradlew :services:payment-service:bootRun                # 8084
 ./gradlew :services:order-service:bootRun                  # 8081
 ./gradlew :services:notification-service:bootRun           # 8085 (선택)
+./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
 ```
 
 ```bash
@@ -73,6 +75,7 @@ scripts/smoke-saga.sh                                      # 정상·품절·결
 scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메시지와 원인 (replay 로 재처리)
 scripts/smoke-tracing.sh                                   # 주문 한 건 = trace 하나 (Grafana → Explore → Tempo 에서 trace 보기)
 scripts/smoke-alerts.sh                                    # 장애 → 경보 firing (Grafana 대시보드 commerce-saga)
+scripts/smoke-auth.sh                                      # 가입·로그인·refresh 회전·재사용 탐지 (auth-service 를 AUTH_REFRESH_GRACE=2s 로 띄우면 GRACE_WAIT=3 로 빨리)
 ```
 
 - JDK 25는 Gradle 툴체인이 자동으로 받는다
@@ -94,6 +97,7 @@ scripts/smoke-alerts.sh                                    # 장애 → 경보 f
 | 6 | [poison message → DLT 격리(파티션 안 막힘) → 원인 확인 → 재처리 한 번만 반영](docs/scenarios/06-poison-message-dlt.md) | 통과 (로컬, CI `e2e`) |
 | 7 | [relay 비교: 스케줄러 vs Debezium, Saga 완료 지연·DB 부하](docs/scenarios/07-relay-comparison.md) | 측정 (로컬, CI `e2e`) |
 | 8 | [알림 서비스 다운 → 주문은 정상 완료, 복구 후 밀린 이벤트 처리](docs/scenarios/08-notification-down.md) | 통과 (CI `e2e`) |
+| 9 | [인증: refresh token 회전, 옛 토큰 재사용 → 그 기기 세션 폐기, 로그인 잠금](docs/scenarios/09-auth-refresh-reuse.md) (IDOR 부분은 Gateway·JWT PR) | 통과 (로컬, CI `e2e`) |
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
 
@@ -107,13 +111,14 @@ scripts/smoke-alerts.sh                                    # 장애 → 경보 f
 - [0005 Kafka 메시지 키 = orderId, 커맨드·응답·이벤트 토픽 분리, 스키마 호환 규칙](docs/adr/0005-message-key-and-topic-rules.md)
 - [0006 멱등 컨슈머: 메시지 ID 기록 + 주문별 기록, 두 겹](docs/adr/0006-idempotent-consumer.md)
 - [0007 Saga 타임아웃과 결제 타임아웃 보정: 재전송 후 포기하면 역순 보상, 결제는 PG 조회로 확정하고 늦은 승인은 자동 환불](docs/adr/0007-saga-timeout.md)
+- [0008 인증: 자체 auth-service 가 JWT(RS256 + JWKS) 발급, refresh token 은 회전(RTR)하고 재사용하면 그 기기 세션 폐기](docs/adr/0008-auth-self-issued-jwt.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
 
 ## 구성
 
 ```
-services/      order(오케스트레이터), inventory, point, payment(가짜 PG), notification
+services/      order(오케스트레이터), inventory, point, payment(가짜 PG), notification, auth(회원·로그인·JWT 발급)
 libs/          messaging-contract(메시지 스키마), outbox(저장 + relay)
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
@@ -124,4 +129,4 @@ docs/          ADR, 시나리오
 
 ## 기술 스택
 
-Java 25, Spring Boot 4.2, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, OpenTelemetry(OTLP) + Grafana Tempo, Prometheus + Grafana, Testcontainers, ArchUnit
+Java 25, Spring Boot 4.2, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, OpenTelemetry(OTLP) + Grafana Tempo, Prometheus + Grafana, Spring Security(OAuth2 Resource Server, JWT RS256), Redis, Testcontainers, ArchUnit

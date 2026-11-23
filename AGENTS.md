@@ -6,7 +6,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 
 커머스 주문(주문·재고·포인트·결제)을 MSA로 나누고, 서비스 간 정합성을 **Saga + Transactional Outbox + Kafka (+ Debezium)** 로 맞추는 포트폴리오 프로젝트. 배경과 설계 결정은 [docs/commerce-msa-portfolio-brief.md](docs/commerce-msa-portfolio-brief.md), 결정 기록은 `docs/adr/`.
 
-- Java 25, Spring Boot 4.2, Gradle Kotlin DSL 멀티모듈 모노레포
+- Java 25, Spring Boot 4.2, Gradle Kotlin DSL 멀티모듈 모노레포. 인증은 Spring Security (OAuth2 Resource Server, JWT RS256) + Redis (후속 2)
 - PostgreSQL(서비스별 DB), Flyway, Kafka(KRaft), Spring for Apache Kafka, Debezium(Kafka Connect, 3단계)
 - 테스트: JUnit 5, ArchUnit, Testcontainers(Postgres, Kafka)
 
@@ -18,7 +18,7 @@ libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 �
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 build-logic/               공통 빌드 설정 (convention plugin)
-infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect)
+infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect, Redis, Tempo·Prometheus·Grafana)
 scripts/                   커넥터 등록, 부하 생성, 장애 주입, 스모크 테스트
 docs/adr/                  설계 결정 기록
 docs/scenarios/            시나리오별 재현 방법·결과
@@ -31,6 +31,7 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | point-service | 포인트 차감 / 환불 |
 | payment-service | 가짜 PG (지연·실패·타임아웃 주입) |
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
+| auth-service | 회원가입·로그인, access token(JWT RS256) 발급·JWKS, refresh token 회전(Redis). 메시지를 주고받지 않음 (ADR 0008) |
 
 ## 명령
 
@@ -151,6 +152,10 @@ common/error, common/web, common/config
 - 소유권·권한
   - 주문·포인트 등 사용자 리소스를 ID로 조회·취소할 때 현재 사용자(`X-User-Id` / JWT subject)와 소유자를 비교하는지. 빠뜨리면 IDOR (P0)
   - 메시지에 토큰이나 비밀값이 실리지 않는지
+- 인증 (auth-service, ADR 0008)
+  - refresh token 은 httpOnly 쿠키로만 오가고 서버(Redis)에는 secret 해시만 있는지. 비밀번호·토큰이 로그·예외 메시지·`toString` 에 남지 않는지
+  - refresh 회전이 compare-and-set(현재 secret 이 그대로일 때만 교체)인지. 아니면 동시 refresh 가 둘 다 회전해 family 가 갈라진다 (P1)
+  - 이미 회전된 옛 secret 재사용을 탐지해 family 를 지우는지, 기기 관리 API 가 토큰의 `sub` 와 family 소유자를 비교하는지 (P0)
 - 동시성
   - 재고·포인트 차감이 동시 요청에서 음수가 되지 않는지 (조건부 UPDATE, 낙관적 락 등)
 - 민감정보
