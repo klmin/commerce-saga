@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #20, 3-C-1)
+- 마지막 갱신: 2026-11-23 (PR #21 머지 후, UUIDv7 전환 PR)
 - 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C-1(Debezium relay) 완료, 다음은 3-C-2(시나리오 5·7, ADR 0004)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -96,7 +96,8 @@ flowchart LR
 | #18 | README 진행 상태를 3단계 기준으로 갱신 |
 | #19 | 3-E에 ADR 0000 대안 비교 항목 추가 |
 | #20 | 3-C-1 Debezium relay: Kafka 4.4.0, Kafka Connect + Debezium Outbox Event Router, 서비스별 커넥터·등록 스크립트, `OUTBOX_RELAY_ENABLED` 모드 전환, e2e matrix(scheduler/debezium) |
-| (이번 PR) | 후속 2 범위에 프론트엔드 추가, 인증(자체 JWT·RTR)·Gateway·프론트 설계 메모 |
+| #21 | 후속 2 범위에 프론트엔드 추가, 인증(자체 JWT·RTR)·Gateway·프론트 설계 메모 |
+| (이번 PR) | 주문·결제·outbox(메시지) id 생성을 UUIDv4 → UUIDv7 (`uuid-creator`). 컬럼·메시지 계약 변경 없음, 사용자 id 는 bigint 유지 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다.
 
