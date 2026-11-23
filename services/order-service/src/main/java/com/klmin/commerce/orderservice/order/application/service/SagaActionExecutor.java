@@ -39,6 +39,7 @@ final class SagaActionExecutor {
             case SagaAction.Pay pay -> commandPort.pay(orderId, saga.userId(), pay.amount());
             case SagaAction.RefundPoint ignored -> commandPort.refundPoint(orderId);
             case SagaAction.ReleaseStock ignored -> commandPort.releaseStock(orderId);
+            case SagaAction.CancelPayment cancel -> commandPort.cancelPayment(orderId, saga.userId(), cancel.amount());
             case SagaAction.Complete ignored -> {
                 Order order = loadOrder(orderId);
                 if (order.complete(now)) {

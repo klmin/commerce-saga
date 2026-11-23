@@ -3,6 +3,7 @@ package com.klmin.commerce.orderservice.order.adapter.out.messaging;
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.inventory.ReleaseStock;
 import com.klmin.commerce.contract.inventory.ReserveStock;
+import com.klmin.commerce.contract.payment.CancelPayment;
 import com.klmin.commerce.contract.payment.Pay;
 import com.klmin.commerce.contract.point.RefundPoint;
 import com.klmin.commerce.contract.point.UsePoint;
@@ -51,5 +52,11 @@ class SagaCommandOutboxAdapter implements SagaCommandPort {
     @Override
     public void pay(UUID orderId, long userId, long amount) {
         outboxWriter.append(Topics.PAYMENT_COMMAND, orderId.toString(), Pay.TYPE, new Pay(orderId, userId, amount));
+    }
+
+    @Override
+    public void cancelPayment(UUID orderId, long userId, long amount) {
+        outboxWriter.append(Topics.PAYMENT_COMMAND, orderId.toString(), CancelPayment.TYPE,
+                new CancelPayment(orderId, userId, amount));
     }
 }

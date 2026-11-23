@@ -8,4 +8,7 @@ public interface SendPaymentReplyPort {
     void paymentApproved(UUID orderId, UUID paymentId);
 
     void paymentFailed(UUID orderId, String reason);
+
+    /** 결제 취소를 접수했다 (환불이 필요하면 결제 서비스가 끝까지 한다) */
+    void paymentCancelled(UUID orderId);
 }

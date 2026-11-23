@@ -6,6 +6,7 @@ package com.klmin.commerce.orderservice.order.domain;
  * 정방향:  RESERVING_STOCK -> USING_POINT -> PAYING -> COMPLETED
  *          (포인트 0 이면 USING_POINT, 결제 금액 0 이면 PAYING 건너뜀)
  * 보상:    (실패) -> REFUNDING_POINT -> RELEASING_STOCK -> CANCELLED
+ *          (결제 결과를 끝내 못 받아 포기하면 CANCELLING_PAYMENT 부터: 결제 취소 -> 포인트 환불 -> 재고 해제)
  *          (포인트를 차감하지 않았으면 REFUNDING_POINT 건너뜀, 재고 예약 실패면 바로 CANCELLED)
  * </pre>
  */
@@ -14,6 +15,7 @@ public enum SagaState {
     USING_POINT,
     PAYING,
     COMPLETED,
+    CANCELLING_PAYMENT,
     REFUNDING_POINT,
     RELEASING_STOCK,
     CANCELLED;
@@ -23,6 +25,6 @@ public enum SagaState {
     }
 
     public boolean isCompensating() {
-        return this == REFUNDING_POINT || this == RELEASING_STOCK;
+        return this == CANCELLING_PAYMENT || this == REFUNDING_POINT || this == RELEASING_STOCK;
     }
 }

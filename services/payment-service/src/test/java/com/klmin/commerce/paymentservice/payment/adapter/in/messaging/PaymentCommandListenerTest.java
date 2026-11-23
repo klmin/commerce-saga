@@ -2,8 +2,11 @@ package com.klmin.commerce.paymentservice.payment.adapter.in.messaging;
 
 import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
+import com.klmin.commerce.contract.payment.CancelPayment;
 import com.klmin.commerce.contract.payment.Pay;
 import com.klmin.commerce.paymentservice.common.error.NonRetryableMessageException;
+import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentCommand;
+import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentUseCase;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PayCommand;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PayUseCase;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -23,7 +26,8 @@ class PaymentCommandListenerTest {
     private static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
 
     private final PayUseCase pay = mock(PayUseCase.class);
-    private final PaymentCommandListener listener = new PaymentCommandListener(pay, new JsonMapper());
+    private final CancelPaymentUseCase cancel = mock(CancelPaymentUseCase.class);
+    private final PaymentCommandListener listener = new PaymentCommandListener(pay, cancel, new JsonMapper());
 
     private static ConsumerRecord<String, String> record(String id, String type, String value) {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(Topics.PAYMENT_COMMAND, 0, 0L, "k", value);
@@ -50,6 +54,25 @@ class PaymentCommandListenerTest {
     }
 
     @Test
+    void cancelPayment_passesMessageIdAndCommand() {
+        UUID orderId = UUID.randomUUID();
+
+        listener.onMessage(record(MESSAGE_ID.toString(), CancelPayment.TYPE, body(orderId)));
+
+        verify(cancel).cancel(MESSAGE_ID, new CancelPaymentCommand(orderId, 1L, 1500L));
+        verifyNoInteractions(pay);
+    }
+
+    @Test
+    void cancelPayment_withNonPositiveAmount_isNonRetryable() {
+        String zero = "{\"orderId\":\"" + UUID.randomUUID() + "\",\"userId\":1,\"amount\":0}";
+
+        assertThatThrownBy(() -> listener.onMessage(record(MESSAGE_ID.toString(), CancelPayment.TYPE, zero)))
+                .isInstanceOf(NonRetryableMessageException.class);
+        verifyNoInteractions(cancel);
+    }
+
+    @Test
     void missingOrInvalidIdHeader_isNonRetryable() {
         assertThatThrownBy(() -> listener.onMessage(record(null, Pay.TYPE, body(UUID.randomUUID()))))
                 .isInstanceOf(NonRetryableMessageException.class);
@@ -62,6 +85,6 @@ class PaymentCommandListenerTest {
     void unknownType_isNonRetryable() {
         assertThatThrownBy(() -> listener.onMessage(record(MESSAGE_ID.toString(), "Refund", body(UUID.randomUUID()))))
                 .isInstanceOf(NonRetryableMessageException.class);
-        verifyNoInteractions(pay);
+        verifyNoInteractions(pay, cancel);
     }
 }

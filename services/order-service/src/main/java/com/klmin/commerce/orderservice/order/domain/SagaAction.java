@@ -20,6 +20,10 @@ public sealed interface SagaAction {
     record ReleaseStock() implements SagaAction {
     }
 
+    /** 결제 취소 (결제 결과를 끝내 못 받아 포기). 승인됐으면 결제 서비스가 환불한다 */
+    record CancelPayment(long amount) implements SagaAction {
+    }
+
     /** 주문 완료 처리 + OrderCompleted 이벤트 */
     record Complete() implements SagaAction {
     }

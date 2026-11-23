@@ -272,6 +272,11 @@ class OrderServiceTest {
         }
 
         @Override
+        public void cancelPayment(UUID orderId, long userId, long amount) {
+            log.add("cancelPayment:" + orderId + ":" + userId + ":" + amount);
+        }
+
+        @Override
         public void orderCompleted(Order order) {
             log.add("completed:" + order.id());
         }

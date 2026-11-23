@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #23 머지 후, 3-D-1 PR)
-- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C(Debezium relay, 시나리오 5·7, ADR 0004), 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007) 완료, 다음은 3-D-2(결제 타임아웃 보정·늦은 승인 자동 환불, 시나리오 2)**
+- 마지막 갱신: 2026-11-23 (PR #24 머지 후, 3-D-2 PR)
+- 현재 위치: **3단계(신뢰성) 진행 중. 3-A(+보강), 3-B, 3-C(Debezium relay, 시나리오 5·7, ADR 0004), 3-D(멈춘 Saga 정리, 결제 타임아웃 보정·늦은 승인 자동 환불, 시나리오 2·4, ADR 0007) 완료, 다음은 3-E(정리 후 `v0.3-reliability` 태그)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 4절 **3-D-2**. main에서 `feat/payment-timeout` 같은 브랜치를 만든다
+2. 다음 작업은 아래 4절 **3-E**. main에서 `docs/v0.3-wrap-up` 같은 브랜치를 만든다
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -100,9 +100,10 @@ flowchart LR
 | #21 | 후속 2 범위에 프론트엔드 추가, 인증(자체 JWT·RTR)·Gateway·프론트 설계 메모 |
 | #22 | 주문·결제·outbox(메시지) id 생성을 UUIDv4 → UUIDv7 (`uuid-creator`). 컬럼·메시지 계약 변경 없음, 사용자 id 는 bigint 유지 |
 | #23 | 3-C-2: 시나리오 5(커넥터 중단 → 유실 0, slot WAL 적체, heartbeat)·7(relay 지연·DB 부하 측정), ADR 0004(운영 기준 Debezium, 코드 기본값 스케줄러), 커넥터 `poll.interval.ms=100`·heartbeat |
-| (이번 PR) | 3-D-1: 멈춘 Saga 정리(단계 타임아웃 → 새 메시지 id로 재전송 → 정방향은 포기 후 역순 보상, 결제·보상은 계속 재전송), 시나리오 4(참여 서비스 다운), ADR 0007 |
+| #24 | 3-D-1: 멈춘 Saga 정리(단계 타임아웃 → 새 메시지 id로 재전송 → 정방향은 포기 후 역순 보상, 결제·보상은 계속 재전송), 시나리오 4(참여 서비스 다운), ADR 0007 |
+| (이번 PR) | 3-D-2: 결제 타임아웃 보정(PG 타임아웃 → `UNKNOWN` → PG 조회로 확정), 결제 단계 포기 시 `CancelPayment`(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`), 취소된 주문의 승인 결제 PG 환불(늦은 승인 자동 환불), 시나리오 2, ADR 0007 결제 부분 |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·3·4·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8과 IDOR 검사를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -133,7 +134,7 @@ PR 두 개로 나눴다. 3-C-1(relay 교체, PR #20), 3-C-2(시나리오·ADR) �
 
 ### 3-D. 타임아웃·장애 복구
 
-PR 두 개로 나눈다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007)은 이 PR, 3-D-2(결제 타임아웃 보정)는 다음.
+PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR #24), 3-D-2(결제 타임아웃 보정, 시나리오 2) 모두 완료.
 
 **3-D-1에서 한 것 (결정·확인 사항)**
 - order-service 단계 타임아웃 `saga.timeout.*` (기본 `step-timeout=30s`, `max-resends=3`, `scan-interval=5s`, 환경 변수 `SAGA_STEP_TIMEOUT` 등). 판단은 도메인 `OrderSaga.onTimeout`, 실행은 `SagaTimeoutService`, 주기 실행은 `adapter.in.scheduler.SagaTimeoutScheduler`(Debezium 모드에서도 돌도록 `@EnableScheduling`을 따로 켬)
@@ -145,11 +146,15 @@ PR 두 개로 나눈다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007)은 
 - CI e2e는 order-service를 `SAGA_STEP_TIMEOUT=10s`, `SAGA_MAX_RESENDS=3`, `SAGA_TIMEOUT_SCAN_INTERVAL=1s`로 띄운다. 시나리오 5(커넥터 중단 약 20초)는 포기(약 40초) 전에 재개된다. 시나리오 7 유휴 커밋에는 이 스캔(1초에 한 번, order_db)이 더해진다
 - 발견: 프로세스를 강제 종료하면 Kafka가 그 컨슈머를 `session.timeout.ms`(45초) 뒤에야 빼서, 다시 뜬 인스턴스가 파티션을 늦게 받는다(로컬 26초). 그사이 재전송을 다 쓰면 복구될 장애도 보상으로 끝난다. `step-timeout × (max-resends+1)`은 재기동 + 45초보다 길게 (ADR 0007, 시나리오 4 문서)
 
-**3-D-2에서 할 것**
-- **결제 타임아웃 보정**: payment-service가 PG 호출에 타임아웃을 두고, 타임아웃이면 결제를 `UNKNOWN`으로 기록(응답 안 함). 주기적으로 PG 조회(가짜 PG에 조회 API 추가)해 승인·거절이 확정되면 그때 기록 + 응답. 가짜 PG의 `DELAY`는 PG 쪽에서 계속 진행되도록(클라이언트 타임아웃 후에도 승인됨) 바꾼다
-- **결제 단계 포기 + 늦은 승인 자동 환불**: order-service가 `PAYING`에서도 일정 시간 뒤 포기하고 새 커맨드 `CancelPayment`를 보낸다(새 상태 `CANCELLING_PAYMENT`, 응답 `PaymentCancelled`, 계약은 추가만). payment-service는 취소 요청을 기록하고 응답한다. 이미 승인됐거나 나중에 PG 조회 결과가 승인이면 PG 환불(가짜 PG에 환불 API)까지 payment-service가 끝까지 책임진다 (drive 세션 제안 3)
-- 배포 순서: 새 응답 타입을 받는 order-service가 먼저 (계약에 없는 타입은 DLT)
-- 시나리오 2 (지연 < 포기 시간 → 조회로 확정 후 완료 / 지연 > 포기 시간 → 취소 + 늦은 승인 자동 환불), ADR 0007에 결제 부분 덧붙이기
+**3-D-2에서 한 것 (결정·확인 사항)**
+- payment-service: PG 클라이언트 타임아웃(`fake-pg.client-timeout`, `PG_CLIENT_TIMEOUT`, 기본 3초)을 넘으면 결제를 `UNKNOWN`으로 기록하고 **응답하지 않는다**. 결제 보정(`PaymentReconcileService`, `payment.reconcile.*`, 기본 2초 주기)이 PG 조회로 승인·거절을 확정한 뒤 그때 응답한다. 거래가 `not-found-after`(기본 2분) 동안 없으면 거절로 확정한다
+- 가짜 PG: 승인을 PG 쪽 스레드(가상 스레드)에서 처리해 클라이언트가 타임아웃으로 포기해도 계속 진행된다(`DELAY`). `inquire`·`refund` 추가, 원장 `refunded` 컬럼
+- order-service: `PAYING`은 `max-payment-resends`(기본 10, `SAGA_PAYMENT_MAX_RESENDS`)까지 `Pay`를 다시 묻고, 넘으면 `CANCELLING_PAYMENT` → `CancelPayment`. `PaymentCancelled`를 받으면 포인트 환불 → 재고 해제 → `CANCELLED`(사유는 결제 타임아웃). 이 상태에서 늦게 온 승인·거절은 무시한다. 도메인 정책 값 객체 `SagaTimeoutPolicy`
+- payment-service `CancelPayment`: PG를 부르지 않고 취소 요청만 기록하고 바로 응답한다. 결제가 없으면 `CANCELLED`를 남겨 늦게 온 `Pay`를 막는다. "취소 요청 + 승인"(처음부터 승인, 또는 `UNKNOWN`이었다가 늦게 승인 확인)은 보정 작업이 PG 환불 → `REFUNDED`로 바꾼다. 승인 응답은 보내지 않는다
+- 메시지 계약 추가만: `CancelPayment`(payment.command), `PaymentCancelled`(payment.reply). 배포는 order-service 먼저(payment.reply의 모르는 타입은 DLT)
+- Flyway payment `V4__payment_timeout.sql`: `payments.cancel_requested`·`updated_at`, 보정 대상 부분 인덱스, `fake_pg_transactions.refunded`. 결제 상태에 `UNKNOWN`·`CANCELLED`·`REFUNDED` 추가
+- 시나리오 2 (`scripts/smoke-payment-timeout.sh`, CI 두 모드): 2a PG 지연 6초(> 클라이언트 3초) → `UNKNOWN` → 조회로 승인 → `COMPLETED` / 2b PG 지연 45초(> Saga 결제 대기 약 30초) → 결제 취소·포인트 환불·재고 해제 → `CANCELLED` → PG 늦은 승인 → 자동 환불(`REFUNDED`, 원장 `refunded=true`)
+- CI e2e는 `SAGA_PAYMENT_MAX_RESENDS=2`, `PAYMENT_RECONCILE_INTERVAL=1s`를 더 둔다. 시나리오 7 유휴 커밋에 결제 보정 조회(1초에 한 번, payment_db)도 더해진다
 
 ### 3-E. 정리 후 `v0.3-reliability` 태그
 - 브리프 5절을 합의된 순서로 수정 (v0.3 = 완성, 후속 순서는 위 표)
@@ -190,7 +195,7 @@ PR 두 개로 나눈다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007)은 
 
 ## 5. 알려진 한계·나중 일
 
-- 결제 서비스가 오래 다운되거나 PG 결과가 계속 애매하면 Saga가 `PAYING`에서 계속 기다린다(재고·포인트가 묶임, 결제를 포기하지 않으므로) → 3-D-2
+- 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그만 남는다. `UNKNOWN`·환불 대기 경보는 후속 관측성 작업
 - 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그만 남긴다. 경보는 후속 관측성 작업
 - `processed_message` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
@@ -218,6 +223,8 @@ scripts/smoke-redelivery.sh snapshot|verify                 # 시나리오 3 (�
 scripts/smoke-poison.sh                                     # 시나리오 6
 SAGA_STEP_TIMEOUT=10s SAGA_MAX_RESENDS=3 SAGA_TIMEOUT_SCAN_INTERVAL=1s ./gradlew :services:order-service:bootRun  # 단계 타임아웃을 짧게 (기본 30s·3·5s)
 scripts/smoke-service-down.sh                               # 시나리오 4 (point-service 를 내렸다 올림. Windows 는 POINT_STOP_CMD·POINT_START_CMD)
+PG_CLIENT_TIMEOUT=3s PAYMENT_RECONCILE_INTERVAL=1s ./gradlew :services:payment-service:bootRun   # 결제 보정 주기를 짧게
+scripts/smoke-payment-timeout.sh                            # 시나리오 2 (order-service 는 SAGA_PAYMENT_MAX_RESENDS=2 도)
 scripts/dlt.sh list inventory.command.DLT                   # DLT 확인
 ```
 

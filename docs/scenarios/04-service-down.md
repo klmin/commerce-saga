@@ -54,6 +54,26 @@ CI `e2e`가 두 relay 모드(scheduler, debezium)에서 시나리오 6 다음에
 PASS
 ```
 
+CI [2026-11-23 실행](https://github.com/klmin/commerce-saga/actions/runs/45136811780) (PR #24, 두 relay 모드 모두 PASS, `SAGA_STEP_TIMEOUT=10s`, `SAGA_MAX_RESENDS=3`, `pkill` 정상 종료). scheduler 모드:
+
+```
+== 4a. point-service 짧은 장애 → 재전송 → 복구 후 COMPLETED
+  ok  장애 중 Saga 단계 = USING_POINT
+  ok  장애 중 주문 상태 = PENDING
+  ok  복구 후 주문 …1c9b885d COMPLETED
+  ok  포인트 잔액 (재전송해도 한 번만 차감) = 9900
+  ok  상품 3 available = 99
+== 4b. point-service 긴 장애 → 재전송 포기 → 역순 보상 → 복구 후 CANCELLED
+  ok  재전송 3번 후 포기, REFUNDING_POINT
+  ok  보상 중 주문 상태 (보상 끝날 때까지) = PENDING
+  ok  복구 후 주문 …b05441d3 CANCELLED
+  ok  포인트 잔액 (차감 후 환불) = 9900
+  ok  상품 3 available (해제) = 99
+  ok  상품 3 reserved (해제) = 0
+```
+
+CI는 정상 종료라 재전송 횟수를 늘리지 않아도 4a가 재전송 3번 안에 복구됐다(로컬 강제 종료와의 차이).
+
 4b에서 복구된 point-service의 로그를 보면, 밀린 `UsePoint`(처음 것은 차감, 재전송분은 "중복 포인트 사용 커맨드, 이전 결과 재응답")가 처리된 뒤 `RefundPoint`가 처리된다.
 
 ## 발견한 것: 강제 종료면 복구가 세션 타임아웃만큼 늦다

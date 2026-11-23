@@ -1,12 +1,15 @@
 package com.klmin.commerce.paymentservice.payment.application.service;
 
+import com.klmin.commerce.paymentservice.payment.application.PaymentGatewayTimeoutException;
 import com.klmin.commerce.paymentservice.payment.application.PaymentNotFoundException;
+import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentCommand;
+import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentUseCase;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentQuery;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentUseCase;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PayCommand;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PayUseCase;
-import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Settings;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase;
+import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Settings;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayFaultPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort.GatewayResult;
@@ -23,13 +26,13 @@ import java.util.UUID;
 /**
  * 결제. 흐름: (0) 같은 메시지의 재전달이면 건너뜀 (1) 이미 처리한 주문이면 기록된 결과 재응답
  * (2) PG 승인 요청 - 트랜잭션 밖
- * (3) 결과 기록 + 응답 outbox - 한 트랜잭션.
+ * (3) 결과 기록 + 응답 outbox - 한 트랜잭션. PG 타임아웃이면 UNKNOWN 으로만 기록하고 응답하지 않는다
+ * (결제 보정이 PG 조회로 확정한 뒤 응답, ADR 0007).
  * <p>
  * (2) 후 (3) 전에 죽으면 메시지가 재처리되어 PG 를 다시 부르지만, PG 가 orderId 로 멱등이라 두 번 승인되지 않는다.
- * 결과를 알 수 없는 타임아웃(PG 는 승인했을 수 있음)을 조회로 보정하는 것은 3단계(시나리오 2).
  */
 @Service
-class PaymentService implements PayUseCase, GetPaymentUseCase, PaymentFaultUseCase {
+class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseCase, PaymentFaultUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
@@ -63,8 +66,19 @@ class PaymentService implements PayUseCase, GetPaymentUseCase, PaymentFaultUseCa
             recorder.replyInvalid(messageId, command.orderId(), "invalid command: amount must be positive");
             return;
         }
-        GatewayResult result = gateway.approve(command.orderId(), command.userId(), command.amount());
+        GatewayResult result;
+        try {
+            result = gateway.approve(command.orderId(), command.userId(), command.amount());
+        } catch (PaymentGatewayTimeoutException e) {
+            recorder.recordUnknown(messageId, command);
+            return;
+        }
         recorder.record(messageId, command, result);
+    }
+
+    @Override
+    public void cancel(UUID messageId, CancelPaymentCommand command) {
+        recorder.cancel(messageId, command);
     }
 
     @Override

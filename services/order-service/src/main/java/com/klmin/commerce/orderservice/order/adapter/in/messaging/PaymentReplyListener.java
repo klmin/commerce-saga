@@ -2,6 +2,7 @@ package com.klmin.commerce.orderservice.order.adapter.in.messaging;
 
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.payment.PaymentApproved;
+import com.klmin.commerce.contract.payment.PaymentCancelled;
 import com.klmin.commerce.contract.payment.PaymentFailed;
 import com.klmin.commerce.orderservice.common.error.NonRetryableMessageException;
 import com.klmin.commerce.orderservice.order.application.port.in.HandleSagaReplyUseCase;
@@ -36,6 +37,9 @@ class PaymentReplyListener {
                 yield new SagaReplyCommand(Messages.requireOrderId(m.orderId(), record),
                         SagaEventType.PAYMENT_FAILED, m.reason());
             }
+            case PaymentCancelled.TYPE -> SagaReplyCommand.of(Messages.requireOrderId(
+                    Messages.read(json, record, PaymentCancelled.class).orderId(), record),
+                    SagaEventType.PAYMENT_CANCELLED);
             case null -> throw new NonRetryableMessageException("type header missing: " + Messages.describe(record));
             default -> throw new NonRetryableMessageException(
                     "unknown type " + type + ": " + Messages.describe(record));
