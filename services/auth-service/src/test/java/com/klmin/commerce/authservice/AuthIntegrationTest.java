@@ -111,7 +111,7 @@ class AuthIntegrationTest {
                 .content("{\"loginId\":\"%s\",\"password\":\"password1\"}".formatted(loginId))).andReturn());
         String familyKey = "auth:family:" + first.substring(0, first.indexOf('.'));
 
-        String second = refreshCookie(mvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", first)))
+        String second = refreshCookie(mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", first)))
                 .andExpect(status().isOk()).andReturn());
         assertThat(second).isNotEqualTo(first);
         assertThat(redis.hasKey(familyKey)).isTrue();
@@ -120,11 +120,11 @@ class AuthIntegrationTest {
 
         // 유예(20초)를 지난 것처럼 직전 secret 의 유예를 끝낸다
         redis.opsForHash().put(familyKey, "previousValidUntil", "0");
-        mvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", first)))
+        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", first)))
                 .andExpect(status().isUnauthorized());
 
         assertThat(redis.hasKey(familyKey)).isFalse();
-        mvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", second)))
+        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", second)))
                 .andExpect(status().isUnauthorized());
     }
 

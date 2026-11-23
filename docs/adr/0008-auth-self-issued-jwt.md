@@ -82,7 +82,7 @@ family 와 목록을 함께 바꾸는 일(로그인, 회전, 삭제, 전체 삭�
 
 - refresh token 은 `Set-Cookie: refresh_token=…; HttpOnly; Secure; SameSite=Lax; Path=/auth` 로만 주고받는다. 응답 본문에 넣지 않는다. 브라우저 JS 가 읽을 수 없고(XSS 로 못 훔침), `/auth` 요청에만 실린다
 - access token 은 응답 본문. Next 서버가 받아 자기 httpOnly 쿠키로 보관하고 API 호출 때 `Authorization` 헤더에 넣는다 (프론트 PR). 브라우저 localStorage 에 두지 않는다
-- CSRF 토큰은 쓰지 않는다. 쿠키로 인증되는 상태 변경은 refresh·로그아웃뿐이고, `SameSite=Lax` 쿠키는 다른 사이트에서 보낸 POST 에 실리지 않는다. 나머지 API 는 `Authorization` 헤더로만 인증한다
+- CSRF: 쿠키로 인증되는 요청은 refresh·로그아웃뿐이다(나머지 API 는 `Authorization` 헤더로만 인증). 이 둘은 두 겹으로 막는다. (1) 쿠키가 `SameSite=Lax` 라 다른 사이트에서 보낸 POST 에 실리지 않는다. (2) `X-Requested-With` 헤더가 있어야 한다(값 상관없음, 없으면 `403`). 다른 사이트의 폼은 헤더를 붙일 수 없고, 다른 출처의 fetch 가 헤더를 붙이면 CORS preflight 에서 막힌다(CORS 를 열지 않음). 세션이 없어 동기화 토큰 방식은 쓰지 않는다. Spring Security CSRF 검사를 끄지 않고 "헤더 없는 refresh·로그아웃"에만 걸리게 했다
 
 ## 결과
 

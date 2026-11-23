@@ -70,6 +70,8 @@ class RedisRefreshFamilyAdapter implements RefreshFamilyPort {
 
     private static final String FAMILY_PREFIX = "auth:family:";
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RedisRefreshFamilyAdapter.class);
+
     private final StringRedisTemplate redis;
 
     RedisRefreshFamilyAdapter(StringRedisTemplate redis) {
@@ -91,7 +93,14 @@ class RedisRefreshFamilyAdapter implements RefreshFamilyPort {
         if (hash.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(toFamily(familyId, hash));
+        try {
+            return Optional.of(toFamily(familyId, hash));
+        } catch (RuntimeException e) {
+            // 값이 깨진 family 는 믿을 수 없으니 지우고 없는 것으로 본다 (다시 로그인)
+            log.warn("refresh token family 값이 올바르지 않아 지움: {}", e.getClass().getSimpleName());
+            redis.delete(familyKey(familyId));
+            return Optional.empty();
+        }
     }
 
     @Override

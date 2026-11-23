@@ -12,7 +12,7 @@
    ```
 2. `GRACE_WAIT=3 scripts/smoke-auth.sh` (유예가 기본 20초면 `GRACE_WAIT` 없이)
    - **9a** 가입 → 같은 아이디 `409` → 로그인. access token 은 본문, refresh token 은 `HttpOnly` 쿠키(본문에 없음). access token 헤더의 `kid` 가 JWKS 에 있고 JWKS 에 개인키 성분(`d`)이 없다. 기기 목록은 access token 이 있어야 하고 지금 기기가 `current: true`
-   - **9b** refresh → 새 refresh token(같은 family, 다른 secret). 바로 다시 옛 토큰으로 refresh(유예 안 = 여러 탭 동시 refresh) → access token 만 주고 쿠키는 그대로
+   - **9b** CSRF 헤더(`X-Requested-With`) 없이 쿠키만으로 refresh → `403`. 헤더를 붙여 refresh → 새 refresh token(같은 family, 다른 secret). 바로 다시 옛 토큰으로 refresh(유예 안 = 여러 탭 동시 refresh) → access token 만 주고 쿠키는 그대로
    - **9c** 유예가 지난 뒤 옛 토큰 → `401`. 같은 family 의 새 토큰도 `401` (훔친 쪽이든 원래 사용자든 다시 로그인)
    - **9d** 기기 두 개로 로그인 → 하나 로그아웃 → 그 기기 `401`, 다른 기기는 refresh `200`
    - **9e** 틀린 비밀번호 5번 → 맞는 비밀번호도 `429` + `Retry-After`
@@ -39,6 +39,7 @@ CI `e2e` 가 두 relay 모드 모두 서비스 기동 직후 이 스크립트를
   ok  access token(sub=3, kid=dev-6d4f5505) 본문, refresh token httpOnly 쿠키, JWKS 에 같은 kid
   ok  기기 목록(access token 필요, 없으면 401)
 == 9b. refresh 회전, 동시 refresh 유예
+  ok  CSRF 헤더 없는 refresh → 403 (쿠키만으로는 안 됨)
   ok  rt1 → rt2 회전 (같은 family …e0ffeb79)
   ok  유예 안에 rt1 다시 → access token 만 (쿠키 그대로)
 == 9c. 유예가 지난 뒤 옛 토큰 재사용 → family 폐기 (3초 대기)

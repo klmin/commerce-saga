@@ -32,7 +32,15 @@ class RedisLoginAttemptAdapter implements LoginAttemptPort {
     @Override
     public Optional<Duration> lockedFor(String loginId, int maxFailures) {
         String count = redis.opsForValue().get(key(loginId));
-        if (count == null || Long.parseLong(count) < maxFailures) {
+        if (count == null) {
+            return Optional.empty();
+        }
+        long failures = failures(count);
+        if (failures < 0) {
+            redis.delete(key(loginId)); // 깨진 값(만료도 없을 수 있음)이 계정을 영영 잠그지 않게 지운다
+            return Optional.empty();
+        }
+        if (failures < maxFailures) {
             return Optional.empty();
         }
         Long ttl = redis.getExpire(key(loginId), TimeUnit.MILLISECONDS);
@@ -47,6 +55,15 @@ class RedisLoginAttemptAdapter implements LoginAttemptPort {
     @Override
     public void reset(String loginId) {
         redis.delete(key(loginId));
+    }
+
+    // INCR 로만 쓰는 값이라 숫자가 아니면 깨진 것 (-1)
+    private static long failures(String count) {
+        try {
+            return Long.parseLong(count);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     private static String key(String loginId) {

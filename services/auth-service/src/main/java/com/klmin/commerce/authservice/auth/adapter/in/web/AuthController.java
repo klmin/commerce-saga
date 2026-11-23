@@ -111,8 +111,13 @@ class AuthController {
         return response.body(TokenResponse.from(result, clock.instant()));
     }
 
+    // 우리가 서명한 토큰이라 sub 는 항상 숫자지만, 아니면 500 이 아니라 401
     private static long userId(Jwt jwt) {
-        return Long.parseLong(jwt.getSubject());
+        try {
+            return Long.parseLong(jwt.getSubject());
+        } catch (NumberFormatException e) {
+            throw new InvalidAccessTokenException();
+        }
     }
 
     record SignUpRequest(
@@ -139,6 +144,11 @@ class AuthController {
     }
 
     record TokenResponse(String accessToken, String tokenType, long expiresIn, Instant expiresAt) {
+
+        @Override
+        public String toString() {
+            return "TokenResponse[tokenType=" + tokenType + ", expiresIn=" + expiresIn + ", expiresAt=" + expiresAt + "]";
+        }
 
         static TokenResponse from(TokenResult result, Instant now) {
             long expiresIn = Math.max(0, Duration.between(now, result.accessTokenExpiresAt()).toSeconds());

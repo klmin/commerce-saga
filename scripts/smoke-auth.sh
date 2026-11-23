@@ -16,6 +16,8 @@ set -euo pipefail
 AUTH_URL=${AUTH_URL:-http://localhost:8086}
 GRACE_WAIT=${GRACE_WAIT:-21}
 PASSWORD='smoke-pass-1'
+# 쿠키로 인증하는 refresh·로그아웃은 이 헤더가 있어야 한다 (CSRF 방어, ADR 0008)
+CSRF='X-Requested-With: fetch'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
@@ -69,22 +71,24 @@ expect 401 GET /auth/sessions
 ok "기기 목록(access token 필요, 없으면 401)"
 
 echo "== 9b. refresh 회전, 동시 refresh 유예"
-expect 200 POST /auth/refresh -H "$(cookie "$rt1")"
+expect 403 POST /auth/refresh -H "$(cookie "$rt1")"
+ok "CSRF 헤더 없는 refresh → 403 (쿠키만으로는 안 됨)"
+expect 200 POST /auth/refresh -H "$CSRF" -H "$(cookie "$rt1")"
 rt2=$(set_cookie)
 [ -n "$rt2" ] && [ "$rt2" != "$rt1" ] || fail "refresh 후 새 refresh token 이 없음"
 [ "${rt2%%.*}" = "${rt1%%.*}" ] || fail "회전했는데 family 가 바뀜"
 family=${rt1%%.*}
 ok "rt1 → rt2 회전 (같은 family …${family: -8})"
-expect 200 POST /auth/refresh -H "$(cookie "$rt1")"
+expect 200 POST /auth/refresh -H "$CSRF" -H "$(cookie "$rt1")"
 [ -z "$(set_cookie)" ] || fail "유예 안의 직전 토큰인데 쿠키를 다시 줌"
 [ -n "$(body_field accessToken)" ] || fail "유예 응답에 access token 이 없음"
 ok "유예 안에 rt1 다시 → access token 만 (쿠키 그대로)"
 
 echo "== 9c. 유예가 지난 뒤 옛 토큰 재사용 → family 폐기 (${GRACE_WAIT}초 대기)"
 sleep "$GRACE_WAIT"
-expect 401 POST /auth/refresh -H "$(cookie "$rt1")"
+expect 401 POST /auth/refresh -H "$CSRF" -H "$(cookie "$rt1")"
 ok "rt1 재사용 → 401"
-expect 401 POST /auth/refresh -H "$(cookie "$rt2")"
+expect 401 POST /auth/refresh -H "$CSRF" -H "$(cookie "$rt2")"
 ok "같은 family 의 rt2 도 401 (다시 로그인해야 함)"
 
 echo "== 9d. 로그아웃은 그 기기만"
@@ -92,9 +96,9 @@ login "$user" phone
 phone=$(set_cookie)
 login "$user" tablet
 tablet=$(set_cookie)
-expect 204 POST /auth/logout -H "$(cookie "$phone")"
-expect 401 POST /auth/refresh -H "$(cookie "$phone")"
-expect 200 POST /auth/refresh -H "$(cookie "$tablet")"
+expect 204 POST /auth/logout -H "$CSRF" -H "$(cookie "$phone")"
+expect 401 POST /auth/refresh -H "$CSRF" -H "$(cookie "$phone")"
+expect 200 POST /auth/refresh -H "$CSRF" -H "$(cookie "$tablet")"
 ok "phone 로그아웃 → phone 401, tablet 은 refresh 200"
 
 echo "== 9e. 로그인 실패 5번 → 잠금"

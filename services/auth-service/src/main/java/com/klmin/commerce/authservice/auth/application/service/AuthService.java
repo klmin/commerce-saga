@@ -137,8 +137,8 @@ public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUse
                     throw new InvalidRefreshTokenException();
                 }
                 case REUSE_DETECTED -> {
-                    log.warn("이미 회전된 refresh token 재사용, family 폐기 (userId={}, familyId={})",
-                            family.userId(), family.familyId());
+                    // familyId 는 refresh token 의 일부라 남기지 않는다. userId 는 서버에 저장된 값
+                    log.warn("이미 회전된 refresh token 재사용, 그 기기 세션 폐기 (userId={})", family.userId());
                     families.delete(family);
                     throw new InvalidRefreshTokenException();
                 }

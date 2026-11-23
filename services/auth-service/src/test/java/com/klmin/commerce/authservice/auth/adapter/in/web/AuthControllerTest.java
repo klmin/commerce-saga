@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -130,11 +131,11 @@ class AuthControllerTest {
                 .willReturn(new TokenResult("a1", Instant.now().plusSeconds(900), "next-token", Duration.ofDays(14)))
                 .willReturn(new TokenResult("a2", Instant.now().plusSeconds(900), null, null));
 
-        mvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", REFRESH)))
+        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", REFRESH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("a1"))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refresh_token=next-token")));
-        mvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", REFRESH)))
+        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", REFRESH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("a2"))
                 .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
@@ -144,18 +145,32 @@ class AuthControllerTest {
     void refresh_실패는_401_Problem_Details() throws Exception {
         given(refresh.refresh(null)).willThrow(new InvalidRefreshTokenException());
 
-        mvc.perform(post("/auth/refresh"))
+        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail").value("다시 로그인해 주세요."));
     }
 
     @Test
     void 로그아웃은_쿠키를_지운다() throws Exception {
-        mvc.perform(post("/auth/logout").cookie(new Cookie("refresh_token", REFRESH)))
+        mvc.perform(post("/auth/logout").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", REFRESH)))
                 .andExpect(status().isNoContent())
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, allOf(containsString("refresh_token=;"),
                         containsString("Max-Age=0"))));
         verify(logout).logout(REFRESH);
+    }
+
+    @Test
+    void 쿠키로_인증하는_refresh_로그아웃은_CSRF_헤더가_없으면_403_이고_처리하지_않는다() throws Exception {
+        mvc.perform(post("/auth/refresh").cookie(new Cookie("refresh_token", REFRESH)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/auth/logout").cookie(new Cookie("refresh_token", REFRESH)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(refresh, logout);
+        // 로그인·가입은 쿠키로 인증하지 않아 헤더가 없어도 된다
+        given(signUp.signUp(any())).willReturn(1L);
+        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"alice\",\"password\":\"password1\"}"))
+                .andExpect(status().isCreated());
     }
 
     @Test
