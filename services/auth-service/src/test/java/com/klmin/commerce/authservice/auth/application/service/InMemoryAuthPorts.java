@@ -86,6 +86,16 @@ final class InMemoryAuthPorts {
         }
     }
 
+    /** 발행한 회원 이벤트를 기록한다 (outbox 대역) */
+    static final class UserEvents implements com.klmin.commerce.authservice.auth.application.port.out.UserEventPort {
+        final java.util.List<String> log = new java.util.ArrayList<>();
+
+        @Override
+        public void userRegistered(long userId, Instant registeredAt) {
+            log.add("UserRegistered:" + userId + "@" + registeredAt);
+        }
+    }
+
     static final class Hasher implements PasswordHasher {
         int dummyMatches;
 

@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-23 (PR #32 머지 후, A-3-1 order·payment 조회 보강·주문 Idempotency-Key PR)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1(내 주문·결제 목록, 주문 Idempotency-Key) 이번 PR. 다음은 A-3-2(가입 → 포인트 계정) → F-1 Next.js(템플릿 가져오기) → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-23 (PR #33 머지 후, A-3-2 가입 → 포인트 계정 PR)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33) 완료, A-3-2(가입 → 포인트 계정) 이번 PR. 다음은 F-1 Next.js(템플릿 가져오기) → F-2. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 "후속 2 진행" 표의 **A-3-1 → A-3-2 → F-1 → F-2** 순서. 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. 다음 작업은 아래 "후속 2 진행" 표의 **F-1 → F-2** 순서 (A-3-1·A-3-2 완료). 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -110,9 +110,10 @@ flowchart LR
 | #30 | 후속 2 A-1 auth-service: 회원가입·로그인(BCrypt, 아이디별 5회 실패 잠금), access token JWT RS256 + JWKS, refresh token `familyId.secret` 회전(Redis Lua compare-and-set)·동시 refresh 유예·재사용 탐지 시 family 폐기, 로그아웃·전체 로그아웃·로그인 기기 관리, Redis(6380), 시나리오 9(인증 부분), ADR 0008 |
 | #31 | 후속 2 A-2: Spring Cloud Gateway(:8000, WebFlux, 라우팅·JWT 1차 검증·`/api/admin/**` ADMIN·사용자별 rate limit), 다섯 서비스 resource server(`X-User-Id` → JWT `sub`, `@CurrentUserId`), auth-service 개발용 시드 사용자, 스크립트 토큰화(`scripts/lib/auth.sh`), 시나리오 9 Gateway·소유권 부분(`smoke-gateway.sh`), 빌드 설정 분리(`boot-app-conventions`) |
 | #32 | 문서: 후속 2 남은 계획(A-3 백엔드 보강 목록, F-1 템플릿 가져오기 결정·프론트엔드 준비 메모), 시나리오 9 CI 결과(PR #31) |
-| (이번 PR) | 후속 2 A-3-1: 내 주문 목록 `GET /orders`·내 결제 목록 `GET /payments`(커서 페이징, DTO 직접 조회, 인덱스 `(user_id, id)`), 주문 `Idempotency-Key`(`order_idempotency_keys` 선점, 같은 키 = 처음 주문 200, 다른 본문 422), 시나리오 10(`smoke-idempotency.sh`, CI 두 모드) |
+| #33 | 후속 2 A-3-1: 내 주문 목록 `GET /orders`·내 결제 목록 `GET /payments`(커서 페이징, DTO 직접 조회, 인덱스 `(user_id, id)`), 주문 `Idempotency-Key`(`order_idempotency_keys` 선점, 같은 키 = 처음 주문 200, 다른 본문 422), 시나리오 10(`smoke-idempotency.sh`, CI 두 모드) |
+| (이번 PR) | 후속 2 A-3-2: auth-service outbox(V2) → `auth.events` `UserRegistered`(키 userId) → point-service `AuthEventsListener` 가 멱등하게 계정 생성(가입 축하 1,000P, `processed_message` + `on conflict (user_id) do nothing`), Debezium `auth-outbox` 커넥터·`auth_svc` replication, 시나리오 13(`smoke-signup-points.sh`, CI 두 모드), 시나리오 10 CI 결과(PR #33) |
 
-CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·10·11·12를 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
+CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·10·11·12·13을 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
 멱등 선점 원리(3-A 보강에서 테스트로 증명): 트랜잭션 첫 줄의 `insert ... on conflict (message_id) do nothing`이 선점 역할을 한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건(건너뜀), 롤백하면 1건(이어받아 처리). 테스트는 앞 트랜잭션을 커밋 직전에 멈춰 두고 늦은 쪽이 실제로 끝나지 않고 기다리는지까지 확인한다.
 
@@ -204,9 +205,9 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | 0 | Spring Boot 4.1.2 → 4.2.0 (Spring Cloud 2026.0 = Gateway 5.1 이 Boot 4.2 기준, 4.1 에 맞는 릴리스 없음) | 완료 PR #29 |
 | A-1 | auth-service: 회원·로그인·JWT 발급·JWKS·refresh 회전·기기 관리, Redis, ADR 0008, 시나리오 9(인증) | 완료 PR #30 |
 | A-2 | Spring Cloud Gateway(라우팅, JWT 1차 검증, `/api/admin/**` = ADMIN, 사용자별 rate limit) + 각 서비스 resource server(`X-User-Id` → JWT `sub`), 시나리오 9 IDOR 부분, e2e 스크립트를 로그인 토큰으로 | 완료 PR #31 |
-| A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 이번 PR |
-| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 다음 |
-| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | A-3-2 다음. 템플릿 가져오기(아래 메모) |
+| A-3-1 | order·payment 조회 보강: 내 주문 목록, 내 결제 목록, 주문 `Idempotency-Key`(브리프 시나리오 10, 문서·스크립트·CI) | 완료 PR #33 |
+| A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 이번 PR |
+| F-1 | Next.js 기본 구성(ADR 0011) + 로그인·회원가입·주문 생성·목록·상세(Saga 타임라인) | 다음. 템플릿 가져오기(아래 메모) |
 | F-2 | 나머지 화면(포인트, 결제 내역, 알림, 로그인 기기 관리) + 관리자(결제 장애 주입, DLT 조회·재처리) | 마지막 |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
@@ -230,9 +231,9 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 스크립트: `scripts/lib/auth.sh`(`-H "$(auth 1)"`, 관리자 `auth 100`, 토큰 10분 파일 캐시 `TOKEN_CACHE_DIR`). 기존 시나리오 스크립트 9개를 모두 토큰으로 바꿨다(서비스 URL 직접 호출은 그대로). auth-service를 다시 띄우면(임시 키) 캐시를 지운다
 - 시나리오 9f~9i `scripts/smoke-gateway.sh`(CI 두 모드, smoke-saga 다음, `GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10`). 로컬 Debezium 모드에서 smoke-gateway·smoke-saga·smoke-auth·smoke-tracing PASS
 - 테스트: `GatewayRoutingTest` 6개(JDK HttpServer가 서비스·JWKS 흉내, Redis Testcontainers), 서비스 `@WebMvcTest`는 `@Import(SecurityConfig)` + `jwt()`로 바꾸고 토큰 없으면 401, 결제 장애 주입 ADMIN 확인 추가
-- 한계: 가입한 사용자는 포인트 계정이 없다(포인트 시드 1~4만). 가입을 알리는 이벤트(`UserRegistered`)는 필요해지면 auth-service에 outbox를 붙여서 (ADR 0008)
+- 한계(A-2 당시): 가입한 사용자는 포인트 계정이 없었다(포인트 시드 1~4만). → A-3-2 에서 `UserRegistered`(auth.events)로 해결
 
-**A-3-1 order·payment 조회 보강, 주문 Idempotency-Key (이번 PR) 에서 한 것 (결정·확인 사항)**
+**A-3-1 order·payment 조회 보강, 주문 Idempotency-Key (PR #33) 에서 한 것 (결정·확인 사항)**
 - 내 주문 목록 `GET /orders?before=<orderId>&size=`(Gateway `/api/orders`), 내 결제 목록 `GET /payments?before=<paymentId>&size=`(Gateway `/api/payments`, 정확 경로를 라우트에 추가). 알림과 같은 커서 페이징(`size` 1~50, 기본 20, 최신순, 다음 쪽은 마지막 id). 경로에 사용자 id 없이 토큰 `sub`로만 거른다
 - 헥사고날 그대로: `port.in` `ListMyOrdersUseCase`·`ListMyPaymentsUseCase`(조회 DTO `OrderSummaryResult`·`PaymentSummaryResult`) → 조회 전용 서비스(`OrderQueryService`·`PaymentQueryService`) → `port.out` `Load*SummariesPort` → JdbcClient 어댑터. 주문 줄은 주문 id 목록으로 한 번에 읽어 쿼리 2개(N+1 없음). 결제 목록은 PG 거래 id를 내보내지 않는다. 결제 응답에 `updatedAt` 필드 추가
 - Flyway order V6 / payment V6: `(user_id, id)` 인덱스, 기존 `(user_id)` 인덱스는 앞부분이라 삭제
@@ -241,6 +242,16 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 10 `scripts/smoke-idempotency.sh`(CI 두 모드, smoke-gateway 다음, 사용자 3): 같은 키 두 번, 동시 5번, 다른 본문 422, 두 주문 COMPLETED·포인트 2건분만 차감, 목록 커서·다른 사용자에게 안 보임
 - 테스트: `OrderServiceTest`(키 6개), `OrderQueryAndIdempotencyIntegrationTest`(Postgres, 같은 키 8개 동시 → 주문·Saga·키 각 1행, 목록 커서), `PaymentSummaryPersistenceAdapterTest`, 컨트롤러 테스트, `GatewayRoutingTest`(목록 경로)
 - 한계: 키 보존 기간 정리 작업 없음. 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
+
+**A-3-2 가입 → 포인트 계정 (이번 PR) 에서 한 것 (결정·확인 사항)**
+- 메시지 계약(추가만): `UserRegistered(userId, registeredAt)`, 토픽 `Topics.AUTH_EVENTS = "auth.events"`(auth-service 소유). 키는 `userId`(주문과 상관없는 사용자 단위 사실이라 orderId 규칙의 예외, AGENTS.md 에 적음). 개인정보·비밀값은 싣지 않는다
+- auth-service: `libs/outbox`·`messaging-contract`·Kafka 의존 추가, Flyway `V2__outbox.sql`(traceparent 포함, 다른 서비스와 같은 모양), `port.out` `UserEventPort` → `adapter.out.messaging` `UserEventOutboxAdapter`. `signUp` 에서 사용자 저장 직후 같은 트랜잭션으로 outbox. 구독하는 토픽은 없다. A-1 때 "Kafka·outbox 없음"이던 것을 바꿨다
+- point-service: `AuthEventsListener`(이벤트 토픽: 관심 없는 타입 건너뜀, type 헤더 없음·본문·id·userId 이상은 DLT) → `OpenPointAccountUseCase` → `PointAccountService`(새 서비스 클래스, `PointService` 생성자는 그대로): `processed_message` 선점 → `PointAccount.open(userId, 가입 축하)` → `PointAccountPort.insertIfAbsent`(`on conflict (user_id) do nothing`). 이미 있는 계정(시드 등)은 그대로, 쓴 잔액을 되돌리지 않는다. 가입 축하 포인트 `point.account.signup-bonus`(`POINT_SIGNUP_BONUS`, 기본 1,000)
+- 인프라: kafka-init 에 `auth.events`·`auth.events.DLT`·`__debezium-heartbeat.auth-outbox`, `infra/connect/auth-outbox.json`(slot `auth_outbox_slot`), Connect 에 `AUTH_DB_PASSWORD`, `auth_svc` replication 권한, `register-connectors.sh` 기본 목록에 추가, e2e Debezium 확인에 `auth_db` outbox 0행. 기존 로컬 볼륨은 `docker compose up` 때 postgres-init 이 권한을 다시 적용한다
+- 시나리오 13 `scripts/smoke-signup-points.sh`(CI 두 모드, 시나리오 10 다음): 가입 → 몇 초 안에 1,000P 계정 → 300P 써서 주문 COMPLETED → 700P, 계정 행 1개·시드 그대로
+- 테스트: `AuthServiceTest`·`AuthIntegrationTest`(outbox 행, 중복 가입은 행 없음. relay 는 `fixed-delay=1h` 로 돌지 않게), `PointAccountServiceTest`, `AuthEventsListenerTest`, `PointIntegrationTest`(Kafka 재전달·중복·늦은 이벤트)
+- 시나리오 10 문서에 PR #33 CI 결과
+- 한계: 가입 축하 지급은 `point_usages` 에 남지 않는다(F-2 포인트 내역 때 지급 기록을 따로). 가입 직후 계정이 생기기 전에 포인트를 쓰는 주문은 지금처럼 포인트 단계 실패 → 보상. 탈퇴·정지 이벤트 없음. 머지된 ADR 0008 의 "가입한 사용자에게 포인트 계정 없음" 한계는 고치지 않고 이 문서·시나리오 13 에 해결을 적는다
 
 ### 프론트엔드 준비 메모 (2026-11-23 정리, A-3·F-1 시작 전에 읽기)
 

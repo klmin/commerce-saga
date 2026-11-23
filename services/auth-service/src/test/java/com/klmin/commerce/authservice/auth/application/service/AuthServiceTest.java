@@ -35,6 +35,7 @@ class AuthServiceTest {
     private InMemoryAuthPorts.Users users;
     private InMemoryAuthPorts.Hasher hasher;
     private InMemoryAuthPorts.Families families;
+    private InMemoryAuthPorts.UserEvents events;
     private AuthService service;
 
     @BeforeEach
@@ -43,8 +44,9 @@ class AuthServiceTest {
         users = new InMemoryAuthPorts.Users();
         hasher = new InMemoryAuthPorts.Hasher();
         families = new InMemoryAuthPorts.Families();
+        events = new InMemoryAuthPorts.UserEvents();
         service = new AuthService(users, hasher, new InMemoryAuthPorts.AccessTokens(), new InMemoryAuthPorts.Generator(),
-                families, new InMemoryAuthPorts.LoginAttempts(clock), POLICY, clock);
+                families, new InMemoryAuthPorts.LoginAttempts(clock), events, POLICY, clock);
     }
 
     @Test
@@ -56,6 +58,17 @@ class AuthServiceTest {
                 .isInstanceOf(DuplicateLoginIdException.class);
         assertThatThrownBy(() -> service.signUp(new SignUpCommand("bobby", "short")))
                 .isInstanceOf(DomainValidationException.class);
+    }
+
+    @Test
+    void 가입에_성공했을_때만_UserRegistered_를_한_번_남긴다() {
+        long id = service.signUp(new SignUpCommand("carol", "password1"));
+
+        assertThatThrownBy(() -> service.signUp(new SignUpCommand("carol", "password2")))
+                .isInstanceOf(DuplicateLoginIdException.class);
+        assertThatThrownBy(() -> service.signUp(new SignUpCommand("dave", "short")))
+                .isInstanceOf(DomainValidationException.class);
+        assertThat(events.log).containsExactly("UserRegistered:" + id + "@2026-11-23T00:00:00Z");
     }
 
     @Test

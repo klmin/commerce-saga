@@ -24,6 +24,19 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+  # 가입 이벤트(auth.events) 발행만 한다. 구독하는 토픽은 없다 (outbox relay 가 보낸다)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+
+# outbox relay (libs/outbox). 기본은 스케줄러 relay.
+# Debezium 으로 발행할 때는 OUTBOX_RELAY_ENABLED=false 로 띄우고 커넥터를 등록한다 (scripts/register-connectors.sh)
+outbox:
+  relay:
+    enabled: ${OUTBOX_RELAY_ENABLED:true}
+    fixed-delay: 200ms
+    batch-size: 100
 
 auth:
   policy:

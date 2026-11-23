@@ -12,4 +12,12 @@ public interface PointAccountPort {
     Optional<PointAccount> findByIdForUpdate(long userId);
 
     void update(PointAccount account);
+
+    /**
+     * 계정이 없을 때만 만든다 (user_id 유니크, insert ... on conflict do nothing). 같은 사용자 계정을 동시에 만들어도
+     * 하나만 생긴다.
+     *
+     * @return 만들었으면 true, 이미 있으면 false
+     */
+    boolean insertIfAbsent(PointAccount account);
 }

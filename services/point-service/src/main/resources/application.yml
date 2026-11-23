@@ -64,3 +64,8 @@ management:
     metrics:
       export:
         enabled: false
+
+# 가입(auth.events UserRegistered) 하면 만드는 포인트 계정의 시작 잔액 (후속 2 A-3-2)
+point:
+  account:
+    signup-bonus: ${POINT_SIGNUP_BONUS:1000}

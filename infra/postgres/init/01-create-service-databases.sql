@@ -33,7 +33,7 @@ select 'create database notification_db owner notification_svc'
 where not exists (select from pg_database where datname = 'notification_db')\gexec
 revoke all on database notification_db from public;
 
--- 회원·로그인 (후속 2). outbox 가 없어 replication 권한은 주지 않는다
+-- 회원·로그인 (후속 2). 가입 이벤트 outbox 가 있어 아래에서 replication 권한도 준다 (A-3-2)
 select 'create role auth_svc with login password ''auth_svc'''
 where not exists (select from pg_roles where rolname = 'auth_svc')\gexec
 select 'create database auth_db owner auth_svc'
@@ -47,3 +47,4 @@ alter role order_svc with replication;
 alter role inventory_svc with replication;
 alter role point_svc with replication;
 alter role payment_svc with replication;
+alter role auth_svc with replication;

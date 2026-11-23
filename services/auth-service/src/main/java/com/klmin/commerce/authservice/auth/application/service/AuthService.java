@@ -21,6 +21,7 @@ import com.klmin.commerce.authservice.auth.application.port.out.LoginAttemptPort
 import com.klmin.commerce.authservice.auth.application.port.out.PasswordHasher;
 import com.klmin.commerce.authservice.auth.application.port.out.RefreshFamilyPort;
 import com.klmin.commerce.authservice.auth.application.port.out.RefreshTokenGenerator;
+import com.klmin.commerce.authservice.auth.application.port.out.UserEventPort;
 import com.klmin.commerce.authservice.auth.application.port.out.UserPort;
 import com.klmin.commerce.authservice.auth.domain.PasswordPolicy;
 import com.klmin.commerce.authservice.auth.domain.RefreshFamily;
@@ -56,18 +57,20 @@ public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUse
     private final RefreshTokenGenerator refreshTokens;
     private final RefreshFamilyPort families;
     private final LoginAttemptPort loginAttempts;
+    private final UserEventPort userEvents;
     private final AuthPolicy policy;
     private final Clock clock;
 
     public AuthService(UserPort users, PasswordHasher passwordHasher, AccessTokenPort accessTokens,
                        RefreshTokenGenerator refreshTokens, RefreshFamilyPort families, LoginAttemptPort loginAttempts,
-                       AuthPolicy policy, Clock clock) {
+                       UserEventPort userEvents, AuthPolicy policy, Clock clock) {
         this.users = users;
         this.passwordHasher = passwordHasher;
         this.accessTokens = accessTokens;
         this.refreshTokens = refreshTokens;
         this.families = families;
         this.loginAttempts = loginAttempts;
+        this.userEvents = userEvents;
         this.policy = policy;
         this.clock = clock;
     }
@@ -80,7 +83,10 @@ public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUse
         if (users.findByLoginId(user.loginId()).isPresent()) {
             throw new DuplicateLoginIdException();
         }
-        return users.save(user).id();
+        long userId = users.save(user).id();
+        // 사용자 저장 + UserRegistered outbox = 한 트랜잭션. 가입이 롤백되면 이벤트도 없다 (point 가 계정을 만든다)
+        userEvents.userRegistered(userId, user.createdAt());
+        return userId;
     }
 
     /**

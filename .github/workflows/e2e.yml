@@ -98,6 +98,10 @@ jobs:
       - name: 주문 Idempotency-Key·내 주문·결제 목록 (시나리오 10)
         run: bash scripts/smoke-idempotency.sh
 
+      # 가입 → auth.events(UserRegistered, outbox) → point-service 가 계정 생성(가입 축하 포인트) → 그 포인트로 주문
+      - name: 가입 → 포인트 계정 (시나리오 13)
+        run: bash scripts/smoke-signup-points.sh
+
       - name: 알림 서비스 기동 후 밀린 이벤트 처리 확인 (시나리오 8)
         run: |
           nohup java -jar services/notification-service/build/libs/notification-service-*.jar > logs/notification-service.log 2>&1 &
@@ -166,7 +170,7 @@ jobs:
         run: |
           bash scripts/register-connectors.sh status
           bash scripts/register-connectors.sh status | grep -v "RUNNING RUNNING" && { echo "커넥터가 RUNNING 이 아님"; exit 1; }
-          for s in order inventory point payment; do
+          for s in order inventory point payment auth; do
             n=$(docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d ${s}_db -tAc "select count(*) from outbox")
             echo "${s}_db outbox rows=$n"
             [ "$n" = "0" ] || { echo "${s}_db outbox 에 행이 남음"; exit 1; }
