@@ -13,6 +13,8 @@
 #       Saga 가 결제를 포기하고 CancelPayment → 포인트 환불 → 재고 해제 → CANCELLED.
 #       그 뒤 PG 가 승인하면 결제 서비스가 PG 조회로 알아채고 승인 응답 없이 PG 환불한다 (REFUNDED, 원장 refunded=true)
 set -euo pipefail
+# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+source "$(dirname "$0")/lib/auth.sh"
 export MSYS_NO_PATHCONV=1
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
@@ -29,10 +31,10 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-90}
 
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 stock() { curl -sf "$INVENTORY_URL/stocks/$1"; }
-points() { curl -sf "$POINT_URL/points/me" -H "X-User-Id: $1" | field balance; }
-order_json() { curl -sf "$ORDER_URL/orders/$1" -H "X-User-Id: $USER_ID"; }
-saga_json() { curl -sf "$ORDER_URL/orders/$1/saga" -H "X-User-Id: $USER_ID"; }
-payment_status() { curl -s "$PAYMENT_URL/payments/orders/$1" -H "X-User-Id: $USER_ID" | field status; }
+points() { curl -sf "$POINT_URL/points/me" -H "$(auth $1)" | field balance; }
+order_json() { curl -sf "$ORDER_URL/orders/$1" -H "$(auth $USER_ID)"; }
+saga_json() { curl -sf "$ORDER_URL/orders/$1/saga" -H "$(auth $USER_ID)"; }
+payment_status() { curl -s "$PAYMENT_URL/payments/orders/$1" -H "$(auth $USER_ID)" | field status; }
 psql_q() { # db sql
   docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d "$1" -tAc "$2"
 }
@@ -57,7 +59,7 @@ wait_until() { # description timeout-seconds command...
 }
 
 fault() { # mode delayMillis
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":$2}" > /dev/null
 }
 # 실패해도 PG 는 정상 승인으로 돌려 둔다 (뒤 단계가 쓴다)
@@ -65,7 +67,7 @@ trap 'fault APPROVE 0 || true' EXIT
 
 place_order() {
   local body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":1000}],\"pointAmount\":$POINT_AMOUNT}"
-  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $USER_ID" -d "$body" \
+  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" \
     | field orderId
 }
 

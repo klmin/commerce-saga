@@ -4,6 +4,15 @@ server:
 spring:
   application:
     name: point-service
+  # access token 검증 (ADR 0008). 공개키는 auth-service JWKS, 서명·만료·issuer 를 보고 roles 클레임을 ROLE_* 권한으로
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8086/.well-known/jwks.json}
+          issuer-uri: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+          authorities-claim-name: roles
+          authority-prefix: ROLE_
   # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
   datasource:
     url: ${POINT_DB_URL:jdbc:postgresql://localhost:5432/point_db}

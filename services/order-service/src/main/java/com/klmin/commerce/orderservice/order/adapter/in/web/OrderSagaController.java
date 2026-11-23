@@ -1,13 +1,11 @@
 package com.klmin.commerce.orderservice.order.adapter.in.web;
 
-import com.klmin.commerce.orderservice.common.web.UserIdHeader;
+import com.klmin.commerce.orderservice.common.web.CurrentUserId;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderSagaUseCase;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
-import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,7 +28,7 @@ class OrderSagaController {
     }
 
     @GetMapping("/{orderId}/saga")
-    SagaResponse getSaga(@RequestHeader(UserIdHeader.NAME) @Positive long userId, @PathVariable UUID orderId) {
+    SagaResponse getSaga(@CurrentUserId long userId, @PathVariable UUID orderId) {
         OrderSaga saga = getOrderSagaUseCase.getSaga(new GetOrderQuery(orderId, userId));
         return new SagaResponse(saga.orderId(), saga.state().name(), saga.state().isFinished(),
                 saga.state().isCompensating(), saga.pointUsed(), saga.failureReason(),

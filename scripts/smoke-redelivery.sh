@@ -14,6 +14,8 @@
 #      다시 받은 메시지를 모두 처리(lag 0)할 때까지 기다린 뒤 2 와 비교한다.
 #      LOG_DIR 을 주면 서비스 로그에서 "이미 처리한 ... 건너뜀" 이 찍혔는지도 본다
 set -euo pipefail
+# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+source "$(dirname "$0")/lib/auth.sh"
 # Windows Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 윈도 경로로 바꾸지 않게 한다 (리눅스에서는 영향 없음)
 export MSYS_NO_PATHCONV=1
 
@@ -51,7 +53,7 @@ state() {
     echo "stock.$p.reserved=$(echo "$s" | field reserved)"
   done
   for u in 1 2 3 4; do
-    echo "points.$u=$(curl -sf "$POINT_URL/points/me" -H "X-User-Id: $u" | field balance)"
+    echo "points.$u=$(curl -sf "$POINT_URL/points/me" -H "$(auth $u)" | field balance)"
   done
   local offset
   for t in "${TOPICS[@]}"; do

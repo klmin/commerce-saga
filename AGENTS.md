@@ -14,6 +14,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 
 ```
 services/<name>-service/   독립 실행·배포되는 Spring Boot 앱. 서비스마다 자기 DB만 사용
+services/gateway/          API Gateway (Spring Cloud Gateway, WebFlux, DB 없음)
 libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 토픽 이름만
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
@@ -32,6 +33,7 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | payment-service | 가짜 PG (지연·실패·타임아웃 주입) |
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
 | auth-service | 회원가입·로그인, access token(JWT RS256) 발급·JWKS, refresh token 회전(Redis). 메시지를 주고받지 않음 (ADR 0008) |
+| gateway | Spring Cloud Gateway(WebFlux). `/auth/**` → auth-service, `/api/<자원>/**` → 서비스, JWT 1차 검증·역할·사용자별 rate limit (ADR 0008) |
 
 ## 명령
 
@@ -96,13 +98,13 @@ common/error, common/web, common/config
 - 도메인 규칙 위반은 `DomainValidationException`(400), 없는 리소스는 `NotFoundException` 상속(404). 오류 응답은 Problem Details
 - 스키마 변경은 Flyway `V{n}__설명.sql`로만. 머지된 마이그레이션은 고치지 않는다
 - 현재 시각은 `Clock` Bean 주입 (`Instant.now()` 직접 호출 X)
-- 사용자 식별: 1~3단계는 `X-User-Id` 헤더, 후속 2(인증)부터 JWT. **리소스 조회·변경 시 소유권을 서비스 내부에서 검사한다**
+- 사용자 식별: access token(JWT)의 `sub`. 컨트롤러는 `@CurrentUserId long userId` 로 받는다(서비스마다 `common/web/CurrentUserId`, `common/config/SecurityConfig`). 경로·본문·헤더(`X-User-Id`)로 사용자 id 를 받지 않는다. Gateway 가 1차 검증하지만 서비스도 다시 검증한다. **리소스 조회·변경 시 소유권을 서비스 내부에서 검사한다** (ADR 0008)
 
 ### 테스트
 
 - domain: 순수 단위 테스트
 - application.service: `port.out`을 인메모리 구현으로 바꿔 단위 테스트
-- adapter.in.web: `@WebMvcTest` + `@MockitoBean`
+- adapter.in.web: `@WebMvcTest` + `@MockitoBean` + `@Import(SecurityConfig.class)`, 사용자는 `.with(jwt().jwt(j -> j.subject("7")))`
 - adapter.out / messaging: Testcontainers(Postgres, Kafka) + `@Testcontainers(disabledWithoutDocker = true)`
 - Saga 흐름·보상·중복 전달은 시나리오 테스트로 증명하고 `docs/scenarios/`에 결과를 남긴다
 
@@ -150,7 +152,7 @@ common/error, common/web, common/config
   - `services/*` 사이 의존, 도메인 클래스를 `libs/`로 옮겨 공유하는 변경
   - 서비스 간 동기 HTTP 호출 추가
 - 소유권·권한
-  - 주문·포인트 등 사용자 리소스를 ID로 조회·취소할 때 현재 사용자(`X-User-Id` / JWT subject)와 소유자를 비교하는지. 빠뜨리면 IDOR (P0)
+  - 주문·포인트 등 사용자 리소스를 ID로 조회·취소할 때 현재 사용자(JWT `sub`)와 소유자를 비교하는지. 빠뜨리면 IDOR (P0)
   - 메시지에 토큰이나 비밀값이 실리지 않는지
 - 인증 (auth-service, ADR 0008)
   - refresh token 은 httpOnly 쿠키로만 오가고 서버(Redis)에는 secret 해시만 있는지. 비밀번호·토큰이 로그·예외 메시지·`toString` 에 남지 않는지

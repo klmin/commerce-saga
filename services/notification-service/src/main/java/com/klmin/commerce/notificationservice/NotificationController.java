@@ -4,7 +4,6 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,7 +23,7 @@ class NotificationController {
 
     @GetMapping("/me")
     List<NotificationRepository.Notification> myNotifications(
-            @RequestHeader("X-User-Id") @Positive long userId,
+            @CurrentUserId long userId,
             @RequestParam(required = false) @Positive Long before,
             @RequestParam(defaultValue = "20") @Min(1) @Max(NotificationRepository.MAX_PAGE_SIZE) int size) {
         return repository.findByUser(userId, before, size);

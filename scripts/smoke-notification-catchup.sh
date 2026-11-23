@@ -5,12 +5,14 @@
 # notification-service 를 띄우고 이 스크립트를 실행한다.
 # 내려가 있던 동안 쌓인 order.events 를 이어서 처리해 알림이 만들어지는지 확인한다.
 set -euo pipefail
+# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+source "$(dirname "$0")/lib/auth.sh"
 
 NOTIFICATION_URL=${NOTIFICATION_URL:-http://localhost:8085}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-30}
 
 count_type() { # userId type
-  curl -sf "$NOTIFICATION_URL/notifications/me?size=50" -H "X-User-Id: $1" | grep -o "\"type\":\"$2\"" | wc -l | tr -d ' '
+  curl -sf "$NOTIFICATION_URL/notifications/me?size=50" -H "$(auth $1)" | grep -o "\"type\":\"$2\"" | wc -l | tr -d ' '
 }
 
 wait_for() { # userId type

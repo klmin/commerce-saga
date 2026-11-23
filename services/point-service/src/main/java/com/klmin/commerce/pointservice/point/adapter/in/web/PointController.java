@@ -1,11 +1,9 @@
 package com.klmin.commerce.pointservice.point.adapter.in.web;
 
-import com.klmin.commerce.pointservice.common.web.UserIdHeader;
+import com.klmin.commerce.pointservice.common.web.CurrentUserId;
 import com.klmin.commerce.pointservice.point.application.port.in.GetPointBalanceUseCase;
 import com.klmin.commerce.pointservice.point.domain.PointAccount;
-import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,7 +19,7 @@ class PointController {
     }
 
     @GetMapping("/me")
-    PointBalanceResponse getMyBalance(@RequestHeader(UserIdHeader.NAME) @Positive long userId) {
+    PointBalanceResponse getMyBalance(@CurrentUserId long userId) {
         PointAccount account = getPointBalanceUseCase.getBalance(userId);
         return new PointBalanceResponse(account.userId(), account.balance());
     }

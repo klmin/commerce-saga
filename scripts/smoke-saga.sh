@@ -16,6 +16,8 @@
 #   3. 결제 실패 주입 -> 포인트 환불 -> 재고 해제 -> CANCELLED (보상 순서 검증)
 #   4. 다른 사용자의 주문·결제 조회 -> 404
 set -euo pipefail
+# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+source "$(dirname "$0")/lib/auth.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 INVENTORY_URL=${INVENTORY_URL:-http://localhost:8082}
@@ -33,19 +35,19 @@ now_ms() {
 }
 
 stock() { curl -sf "$INVENTORY_URL/stocks/$1"; }
-points() { curl -sf "$POINT_URL/points/me" -H "X-User-Id: $1" | field balance; }
-saga() { curl -sf "$ORDER_URL/orders/$2/saga" -H "X-User-Id: $1"; }  # userId orderId
+points() { curl -sf "$POINT_URL/points/me" -H "$(auth $1)" | field balance; }
+saga() { curl -sf "$ORDER_URL/orders/$2/saga" -H "$(auth $1)"; }  # userId orderId
 
 place_order() { # userId body
-  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "X-User-Id: $1" -d "$2"
+  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $1)" -d "$2"
 }
 
 get_order() { # userId orderId
-  curl -sf "$ORDER_URL/orders/$2" -H "X-User-Id: $1"
+  curl -sf "$ORDER_URL/orders/$2" -H "$(auth $1)"
 }
 
 set_pg() { # mode
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":0}" > /dev/null
 }
 
@@ -90,7 +92,7 @@ elapsed=$(( $(now_ms) - start ))
 echo "  ok  orderId=$order_id COMPLETED (${elapsed}ms)"
 expect_eq "결제 금액" 1500 "$(get_order 1 "$order_id" | field paidAmount)"
 expect_eq "포인트 잔액" $(( points_before - 500 )) "$(points 1)"
-expect_eq "결제 상태" APPROVED "$(curl -sf "$PAYMENT_URL/payments/orders/$order_id" -H 'X-User-Id: 1' | field status)"
+expect_eq "결제 상태" APPROVED "$(curl -sf "$PAYMENT_URL/payments/orders/$order_id" -H "$(auth 1)" | field status)"
 # OrderCompleted 이벤트(코레오그래피)로 예약 재고가 판매 확정되어 reserved 가 원래대로
 wait_until "stock confirmed" reserved_is 1 "$reserved_before"
 expect_eq "상품 1 available" $(( avail_before - 2 )) "$(stock 1 | field available)"
@@ -123,8 +125,8 @@ order_of_steps=$(echo "$history" | sed 's/.*"history"://' | grep -oE '"state":"(
 expect_eq "Saga 보상 순서" "PAYING REFUNDING_POINT RELEASING_STOCK CANCELLED " "$order_of_steps"
 
 echo "== 4. 다른 사용자의 주문·Saga·결제 조회 -> 404"
-expect_eq "user 2 -> user 1 주문" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$ORDER_URL/orders/$order_id" -H 'X-User-Id: 2')"
-expect_eq "user 2 -> user 1 Saga" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$ORDER_URL/orders/$order_id/saga" -H 'X-User-Id: 2')"
-expect_eq "user 2 -> user 1 결제" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$PAYMENT_URL/payments/orders/$order_id" -H 'X-User-Id: 2')"
+expect_eq "user 2 -> user 1 주문" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$ORDER_URL/orders/$order_id" -H "$(auth 2)")"
+expect_eq "user 2 -> user 1 Saga" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$ORDER_URL/orders/$order_id/saga" -H "$(auth 2)")"
+expect_eq "user 2 -> user 1 결제" 404 "$(curl -s -o /dev/null -w '%{http_code}' "$PAYMENT_URL/payments/orders/$order_id" -H "$(auth 2)")"
 
 echo "PASS (정상 주문 생성 -> COMPLETED ${elapsed}ms)"

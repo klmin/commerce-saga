@@ -1,6 +1,6 @@
 # ADR 0008. 인증: 자체 auth-service 가 JWT(RS256 + JWKS)를 발급하고, refresh token 은 회전(RTR)하며 재사용하면 그 기기 세션을 버린다
 
-- 상태: 채택 (후속 2 A-1 auth-service. Gateway·서비스 JWT 검증은 A-2에서 이 ADR에 덧붙인다)
+- 상태: 채택 (후속 2 A-1 auth-service PR #30, A-2 Gateway·서비스 JWT 검증)
 - 날짜: 2026-11-23
 
 ## 배경
@@ -84,14 +84,45 @@ family 와 목록을 함께 바꾸는 일(로그인, 회전, 삭제, 전체 삭�
 - access token 은 응답 본문. Next 서버가 받아 자기 httpOnly 쿠키로 보관하고 API 호출 때 `Authorization` 헤더에 넣는다 (프론트 PR). 브라우저 localStorage 에 두지 않는다
 - CSRF: 쿠키로 인증되는 요청은 refresh·로그아웃뿐이다(나머지 API 는 `Authorization` 헤더로만 인증). 이 둘은 두 겹으로 막는다. (1) 쿠키가 `SameSite=Lax` 라 다른 사이트에서 보낸 POST 에 실리지 않는다. (2) `X-Requested-With` 헤더가 있어야 한다(값 상관없음, 없으면 `403`). 다른 사이트의 폼은 헤더를 붙일 수 없고, 다른 출처의 fetch 가 헤더를 붙이면 CORS preflight 에서 막힌다(CORS 를 열지 않음). 세션이 없어 동기화 토큰 방식은 쓰지 않는다. Spring Security CSRF 검사를 끄지 않고 "헤더 없는 refresh·로그아웃"에만 걸리게 했다
 
+### Gateway 와 서비스: 두 곳에서 검증 (A-2)
+
+```
+브라우저 ─(Next 서버)─▶ gateway :8000 ─▶ /auth/**           → auth-service (토큰 없이)
+                                       ─▶ /api/<자원>/**    → <서비스>/<자원>/** (Authorization 그대로)
+```
+
+- **Spring Cloud Gateway 2026.0 (Gateway 5.1, WebFlux).** 요청을 받아 넘기기만 하는 프록시라 논블로킹이 맞고, 사용자별 rate limit(`RedisRateLimiter`)이 리액티브 쪽에 있다. 서블릿 서비스 공통 설정(`commerce.service-conventions`)과 분리하려고 빌드 설정을 `commerce.boot-app-conventions`(관측성·JWT 검증·테스트) + 서블릿 전용으로 나눴다. 위치는 `services/gateway`(DB 없음)
+- 라우팅: `/auth/**`·JWKS → auth-service, `/api/orders|stocks|points|payments|notifications/**` → 각 서비스(`/api` 를 떼고), `/api/admin/payment-faults` → payment-service `/admin/payment-faults`. 그 밖의 경로는 거부
+- **1차 검증은 Gateway.** 토큰이 없거나 위조·만료면 `401` 로 끝나 서비스까지 가지 않는다. `/api/admin/**` 은 `ADMIN` 역할. 로그인 전 화면이 쓰는 `GET /api/stocks/**` 와 `/auth/**` 만 토큰 없이 통과
+- **서비스가 다시 검증한다.** 내부망이라도 Gateway 를 우회한 요청(같은 네트워크의 다른 프로세스, 설정 실수)을 믿지 않는다. 다섯 서비스 모두 resource server(같은 JWKS·issuer, `roles` → `ROLE_*`)이고 actuator 만 열려 있다. 결제 장애 주입(`/admin/**`)은 서비스에서도 `ADMIN`
+- **사용자 = 토큰의 `sub`.** 컨트롤러는 `@CurrentUserId long userId`(= `@AuthenticationPrincipal` 의 `sub`)로 받는다. `X-User-Id` 헤더는 더 읽지 않고, Gateway 가 들어온 `X-User-Id` 를 지운다. 소유권 비교(남의 주문·Saga·결제·알림 → `404`)는 그대로 서비스 안에서
+- 서비스끼리 보안 설정을 공유 모듈로 빼지 않았다(서비스 간 모듈 공유 금지). 서비스마다 `SecurityConfig` 와 `CurrentUserId` 를 둔다
+- CSRF: `/api/**` 는 Authorization 헤더로만 인증해 CSRF 대상이 아니다. 다만 검사를 끄지 않고 "쿠키가 실린 상태 변경 요청"에만 걸리게 했다(토큰이 없으니 `403`). 쿠키로 인증하는 refresh·로그아웃은 auth-service 가 `X-Requested-With` 헤더로 막는다
+
+### rate limit (Gateway, Redis 토큰 버킷)
+
+| 경로 | 키 | 기본 (초당 / 버스트) |
+|---|---|---|
+| `/api/**` | 로그인 사용자 `sub` (토큰 없이 열린 경로는 IP) | 20 / 40 (`GATEWAY_USER_RATE`, `GATEWAY_USER_BURST`) |
+| `/auth/**` | 클라이언트 IP | 5 / 20 (`GATEWAY_AUTH_RATE`, `GATEWAY_AUTH_BURST`) |
+
+넘으면 `429`. IP 는 TCP 연결 주소다. `X-Forwarded-For` 는 아무나 쓸 수 있어 믿지 않는다. 앞에 edge(Ingress)가 생기면 그 주소만 믿고 헤더를 읽도록 바꾼다(k8s 단계). 로그인 대입은 auth-service 가 아이디별로도 막는다. Redis 가 죽으면 `RedisRateLimiter` 는 요청을 통과시킨다(제한보다 가용성).
+
+### 개발용 사용자
+
+- auth-service 에 개발용 시드(`db/dev-seed/R__dev_seed_users.sql`): `user1`~`user4` = id 1~4(다른 서비스의 포인트 시드와 같은 id), `admin` = 100(`ADMIN`). 비밀번호는 로컬 개발용 값 `local-dev-pass`. 가입하면 id 는 1000 부터
+- 기본 Flyway 위치에 포함되고, **운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration` 으로 뺀다**
+- 시나리오 스크립트는 `scripts/lib/auth.sh` 로 이 사용자로 로그인해 `Authorization` 헤더를 붙인다(토큰은 10분 캐시)
+
 ## 결과
 
 - 좋은 점: 서비스는 요청마다 auth-service 를 부르지 않고 공개키로 검증한다. refresh token 탈취는 다음 사용 때 탐지되고 그 기기만 끊긴다. 발급자를 OAuth2 서버로 바꿔도 서비스 쪽은 그대로
 - 감수하는 것: 이미 나간 access token 은 최대 15분 유효. 아이디 기준 잠금으로 남이 내 계정을 15분 잠글 수 있음. 유예 20초 안의 옛 토큰은 access token 을 받을 수 있음
 - 확인: `RefreshFamilyTest`(회전·유예·재사용·만료 규칙), `AuthServiceTest`(로그인 제한, 동시 회전, 역할 재조회, 소유권), `AuthIntegrationTest`(Postgres + Redis, JWKS 로 서명 검증, 동시 refresh 8개 → 회전 1번), [시나리오 9](../scenarios/09-auth-refresh-reuse.md)(CI `e2e`)
+- A-2 확인: `GatewayRoutingTest`(Gateway 를 띄워 401·라우팅·헤더·역할·429), 서비스 `@WebMvcTest`(토큰 없으면 401, `sub` 로 소유권, ADMIN), 시나리오 9f~9i(CI `e2e`, 기존 시나리오 스크립트도 전부 토큰으로)
 
-## 다음 (A-2)
+## 한계와 다음
 
-- Spring Cloud Gateway: `/auth/**` → auth-service(검증 없이), `/api/**` → JWT 검증 후 서비스로, 경로별 역할, 사용자별 rate limit(Redis)
-- 각 서비스를 resource server 로: `X-User-Id` 대신 JWT `sub` 로 소유권 검사 (내부망도 무조건 믿지 않고 다시 검증)
-- 가입하면 포인트 계정 만들기 등 다른 서비스에 알려야 할 일이 생기면 그때 auth-service 에 outbox 를 붙인다
+- 가입한 사용자에게는 포인트 계정이 없다(포인트 시드는 1~4). 가입을 다른 서비스에 알릴 일(`UserRegistered` → 포인트 계정 생성)이 필요해지면 auth-service 에 outbox 를 붙인다
+- 이미 나간 access token 은 정지·로그아웃 뒤에도 최대 15분 유효
+- 키 교체 자동화(주기적 교체, 은퇴 키 정리)는 없다. 설정으로 한다
