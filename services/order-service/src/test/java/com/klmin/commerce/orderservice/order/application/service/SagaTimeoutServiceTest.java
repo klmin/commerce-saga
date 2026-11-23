@@ -33,7 +33,7 @@ class SagaTimeoutServiceTest {
     private final OrderService orderService =
             new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(), clock);
     private final SagaTimeoutService timeouts = new SagaTimeoutService(orders, orders, sagas, sent, sent,
-            new SagaTimeoutProperties(STEP, 1, 100), clock);
+            new SagaTimeoutProperties(STEP, 1, 2, 100), clock);
 
     private Order place(long pointAmount) {
         return orderService.placeOrder(new PlaceOrderCommand(1L, List.of(
@@ -108,7 +108,7 @@ class SagaTimeoutServiceTest {
     }
 
     @Test
-    void paying_keepsAskingForPaymentResult() {
+    void paying_asksAgain_thenCancelsPayment() {
         Order order = place(0L);
         reply(order, SagaEventType.STOCK_RESERVED);
 
@@ -118,8 +118,13 @@ class SagaTimeoutServiceTest {
         }
 
         assertThat(sent.log).endsWith("pay:" + order.id() + ":1:2000", "pay:" + order.id() + ":1:2000",
-                "pay:" + order.id() + ":1:2000");
-        assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.PAYING);
+                "cancelPayment:" + order.id() + ":1:2000");
+        assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.CANCELLING_PAYMENT);
+
+        reply(order, SagaEventType.PAYMENT_CANCELLED);
+        reply(order, SagaEventType.STOCK_RELEASED);
+        assertThat(orders.store.get(order.id()).status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(orders.store.get(order.id()).cancelReason()).isEqualTo("timeout: no reply in PAYING after 2 resends");
     }
 
     @Test

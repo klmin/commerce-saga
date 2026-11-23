@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_APPROVED;
+import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_CANCELLED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_FAILED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.POINT_REFUNDED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.POINT_USED;
@@ -19,6 +21,8 @@ class OrderSagaTimeoutTest {
     private static final Instant T0 = Instant.parse("2026-11-23T00:00:00Z");
     private static final Duration STEP = Duration.ofSeconds(30);
     private static final int MAX_RESENDS = 2;
+    private static final int MAX_PAYMENT_RESENDS = 4;
+    private static final SagaTimeoutPolicy POLICY = new SagaTimeoutPolicy(STEP, MAX_RESENDS, MAX_PAYMENT_RESENDS);
 
     /** 합계 10,000 */
     private static OrderSaga start(long pointAmount) {
@@ -28,7 +32,7 @@ class OrderSagaTimeoutTest {
 
     /** 마지막 변경에서 STEP 이 지난 시각에 타임아웃 */
     private static SagaAction timeout(OrderSaga saga) {
-        return saga.onTimeout(saga.updatedAt().plus(STEP), STEP, MAX_RESENDS);
+        return saga.onTimeout(saga.updatedAt().plus(STEP), POLICY);
     }
 
     private static void reply(OrderSaga saga, SagaEventType event) {
@@ -39,7 +43,7 @@ class OrderSagaTimeoutTest {
     void beforeStepTimeout_doesNothing() {
         OrderSaga saga = start(0L);
 
-        SagaAction action = saga.onTimeout(T0.plus(STEP).minusMillis(1), STEP, MAX_RESENDS);
+        SagaAction action = saga.onTimeout(T0.plus(STEP).minusMillis(1), POLICY);
 
         assertThat(action).isEqualTo(new SagaAction.Ignore());
         assertThat(saga.history()).hasSize(1);
@@ -100,18 +104,67 @@ class OrderSagaTimeoutTest {
     }
 
     @Test
-    void paying_neverGivesUp_becauseResultIsAmbiguous() {
-        OrderSaga saga = start(0L);
+    void paying_asksLonger_thenCancelsPaymentFirst() {
+        OrderSaga saga = start(3_000L);
         reply(saga, STOCK_RESERVED);
+        reply(saga, POINT_USED);
 
-        for (int i = 0; i < MAX_RESENDS + 3; i++) {
-            assertThat(timeout(saga)).isEqualTo(new SagaAction.Pay(10_000L));
+        // 결과가 애매하므로 재고·포인트보다 오래 다시 묻는다
+        for (int i = 0; i < MAX_PAYMENT_RESENDS; i++) {
+            assertThat(timeout(saga)).isEqualTo(new SagaAction.Pay(7_000L));
         }
         assertThat(saga.state()).isEqualTo(SagaState.PAYING);
-        assertThat(saga.stepResends()).isEqualTo(MAX_RESENDS + 3);
-        assertThat(saga.failureReason()).isNull();
+
+        // 그래도 응답이 없으면 결제 취소부터. 승인됐다면 결제 서비스가 환불한다
+        assertThat(timeout(saga)).isEqualTo(new SagaAction.CancelPayment(7_000L));
+        assertThat(saga.state()).isEqualTo(SagaState.CANCELLING_PAYMENT);
+        assertThat(saga.state().isCompensating()).isTrue();
+        assertThat(saga.failureReason()).isEqualTo("timeout: no reply in PAYING after 4 resends");
+
+        reply(saga, PAYMENT_CANCELLED);
+        assertThat(saga.state()).isEqualTo(SagaState.REFUNDING_POINT);
+        reply(saga, POINT_REFUNDED);
+        reply(saga, STOCK_RELEASED);
+        assertThat(saga.state()).isEqualTo(SagaState.CANCELLED);
+        // 처음 실패 사유(결제 타임아웃)가 남는다
+        assertThat(saga.failureReason()).isEqualTo("timeout: no reply in PAYING after 4 resends");
     }
 
+    @Test
+    void cancellingPayment_withoutPointUse_goesToReleaseStock() {
+        OrderSaga saga = start(0L);
+        reply(saga, STOCK_RESERVED);
+        for (int i = 0; i <= MAX_PAYMENT_RESENDS; i++) {
+            timeout(saga);
+        }
+
+        reply(saga, PAYMENT_CANCELLED);
+
+        assertThat(saga.state()).isEqualTo(SagaState.RELEASING_STOCK);
+    }
+
+    @Test
+    void cancellingPayment_ignoresLateApprovalOrFailure_andKeepsResendingCancel() {
+        OrderSaga saga = start(0L);
+        reply(saga, STOCK_RESERVED);
+        for (int i = 0; i <= MAX_PAYMENT_RESENDS; i++) {
+            timeout(saga);
+        }
+        int historySize = saga.history().size();
+
+        // 취소를 보낸 뒤 늦게 온 승인·거절은 단계를 되돌리지 않는다 (승인분은 결제 서비스가 환불)
+        assertThat(saga.handle(PAYMENT_APPROVED, null, saga.updatedAt().plusSeconds(1)))
+                .isEqualTo(new SagaAction.Ignore());
+        assertThat(saga.handle(PAYMENT_FAILED, "late", saga.updatedAt().plusSeconds(1)))
+                .isEqualTo(new SagaAction.Ignore());
+        assertThat(saga.history()).hasSize(historySize);
+
+        // 결제 취소도 보상이라 포기하지 않는다
+        for (int i = 0; i < MAX_PAYMENT_RESENDS + 3; i++) {
+            assertThat(timeout(saga)).isEqualTo(new SagaAction.CancelPayment(10_000L));
+        }
+        assertThat(saga.state()).isEqualTo(SagaState.CANCELLING_PAYMENT);
+    }
     @Test
     void compensation_keepsResendingForever() {
         OrderSaga saga = start(3_000L);
@@ -149,7 +202,7 @@ class OrderSagaTimeoutTest {
         reply(saga, SagaEventType.STOCK_RESERVATION_FAILED);
         assertThat(saga.state()).isEqualTo(SagaState.CANCELLED);
 
-        assertThat(saga.onTimeout(saga.updatedAt().plus(Duration.ofDays(1)), STEP, MAX_RESENDS))
+        assertThat(saga.onTimeout(saga.updatedAt().plus(Duration.ofDays(1)), POLICY))
                 .isEqualTo(new SagaAction.Ignore());
     }
 
@@ -157,6 +210,6 @@ class OrderSagaTimeoutTest {
     void zeroMaxResends_givesUpOnFirstTimeout() {
         OrderSaga saga = start(0L);
 
-        assertThat(saga.onTimeout(T0.plus(STEP), STEP, 0)).isEqualTo(new SagaAction.ReleaseStock());
+        assertThat(saga.onTimeout(T0.plus(STEP), new SagaTimeoutPolicy(STEP, 0, 0))).isEqualTo(new SagaAction.ReleaseStock());
     }
 }

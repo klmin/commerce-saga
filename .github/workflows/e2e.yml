@@ -28,10 +28,13 @@ jobs:
     env:
       # 서비스 application.yml 의 outbox.relay.enabled. debezium 모드는 스케줄러를 끄고 outbox 를 넣고 바로 지운다
       OUTBOX_RELAY_ENABLED: ${{ matrix.relay == 'scheduler' }}
-      # order-service 단계 타임아웃(ADR 0007)을 짧게 둔다. 시나리오 4 가 재전송·포기·보상까지 몇십 초 안에 보이도록.
+      # order-service 단계 타임아웃(ADR 0007)을 짧게 둔다. 시나리오 2·4 가 재전송·포기·보상까지 몇십 초 안에 보이도록.
       # 다른 시나리오의 정상 흐름은 1~2초 안에 끝나고, 시나리오 5(커넥터 중단 약 20초)는 포기(약 40초) 전에 재개한다
       SAGA_STEP_TIMEOUT: 10s
       SAGA_MAX_RESENDS: 3
+      SAGA_PAYMENT_MAX_RESENDS: 2
+      # payment-service 결제 보정(PG 조회·환불) 주기. 시나리오 2 가 빨리 끝나도록
+      PAYMENT_RECONCILE_INTERVAL: 1s
       SAGA_TIMEOUT_SCAN_INTERVAL: 1s
     steps:
       - uses: actions/checkout@v7
@@ -113,6 +116,10 @@ jobs:
       # point-service 를 내렸다 올린다. 짧은 장애는 재전송 후 이어서 완료, 긴 장애는 재전송 포기 후 역순 보상
       - name: 참여 서비스 다운 후 복구·보상 (시나리오 4)
         run: LOG_DIR=logs bash scripts/smoke-service-down.sh
+
+      # PG 지연을 주입한다. 짧은 지연은 PG 조회로 승인 확정 후 완료, 긴 지연은 결제 취소·보상 후 늦은 승인 자동 환불
+      - name: 결제 타임아웃 보정·늦은 승인 자동 환불 (시나리오 2)
+        run: bash scripts/smoke-payment-timeout.sh
 
       # 커넥터를 멈춘 동안 낸 주문이 재개 후 모두 완료되는지(유실 0), 그동안 slot 이 WAL 을 붙잡는지, heartbeat 로 다시 줄어드는지
       - name: 커넥터 중단 후 재개, 유실 0 (시나리오 5)

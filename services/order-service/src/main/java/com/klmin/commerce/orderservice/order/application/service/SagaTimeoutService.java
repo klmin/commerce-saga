@@ -62,7 +62,7 @@ class SagaTimeoutService implements HandleSagaTimeoutUseCase {
         OrderSaga saga = found.get();
         Instant now = clock.instant();
         SagaState timedOut = saga.state();
-        SagaAction action = saga.onTimeout(now, properties.stepTimeout(), properties.maxResends());
+        SagaAction action = saga.onTimeout(now, properties.policy());
         if (action instanceof SagaAction.Ignore) {
             return false;
         }
@@ -71,8 +71,8 @@ class SagaTimeoutService implements HandleSagaTimeoutUseCase {
         if (saga.state() != timedOut) {
             log.warn("Saga 타임아웃, 보상 시작: {} -> {} (orderId={}, reason={})",
                     timedOut, saga.state(), orderId, saga.failureReason());
-        } else if (saga.stepResends() > properties.maxResends()) {
-            // 결제·보상 단계는 포기하지 않는다. 오래 걸리면 사람이 볼 수 있게 경고로 남긴다
+        } else if (saga.state().isCompensating() && saga.stepResends() > properties.maxResends()) {
+            // 보상 단계는 포기하지 않는다. 오래 걸리면 사람이 볼 수 있게 경고로 남긴다
             log.warn("Saga 응답 없음, 계속 재전송: {} #{} (orderId={})", timedOut, saga.stepResends(), orderId);
         } else {
             log.info("Saga 응답 없음, 커맨드 재전송: {} #{} (orderId={})", timedOut, saga.stepResends(), orderId);

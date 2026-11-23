@@ -1,5 +1,6 @@
 package com.klmin.commerce.paymentservice.payment.application.service;
 
+import com.klmin.commerce.paymentservice.payment.application.PaymentGatewayTimeoutException;
 import com.klmin.commerce.paymentservice.payment.application.PaymentNotFoundException;
 import com.klmin.commerce.paymentservice.payment.application.port.in.GetPaymentQuery;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PayCommand;
@@ -122,12 +123,31 @@ class PaymentServiceTest {
 
         Settings settings = new Settings(Mode.APPROVE, 0);
         int calls;
+        // true 면 approve 가 타임아웃 (PG 는 pgLedger 에 결과를 나중에 남길 수 있다)
+        boolean timeout;
+        final Map<UUID, GatewayResult> pgLedger = new HashMap<>();
+        final List<UUID> refunds = new ArrayList<>();
 
         @Override
         public GatewayResult approve(UUID orderId, long userId, long amount) {
             calls++;
-            return settings.mode() == Mode.DECLINE ? GatewayResult.declined("declined")
+            if (timeout) {
+                throw new PaymentGatewayTimeoutException(orderId);
+            }
+            GatewayResult result = settings.mode() == Mode.DECLINE ? GatewayResult.declined("declined")
                     : GatewayResult.approved("tx-" + orderId);
+            pgLedger.putIfAbsent(orderId, result);
+            return pgLedger.get(orderId);
+        }
+
+        @Override
+        public Optional<GatewayResult> inquire(UUID orderId) {
+            return Optional.ofNullable(pgLedger.get(orderId));
+        }
+
+        @Override
+        public void refund(UUID orderId) {
+            refunds.add(orderId);
         }
 
         @Override
@@ -147,15 +167,39 @@ class PaymentServiceTest {
 
         @Override
         public Optional<Payment> findByOrderId(UUID orderId) {
-            return Optional.ofNullable(store.get(orderId));
+            return Optional.ofNullable(store.get(orderId)).map(PaymentServiceTest::copy);
+        }
+
+        @Override
+        public Optional<Payment> findByOrderIdForUpdate(UUID orderId) {
+            return findByOrderId(orderId);
+        }
+
+        @Override
+        public List<UUID> findPendingOrderIds(int limit) {
+            return store.values().stream()
+                    .filter(p -> p.status() == PaymentStatus.UNKNOWN || p.needsRefund())
+                    .map(Payment::orderId)
+                    .limit(limit)
+                    .toList();
         }
 
         @Override
         public void insert(Payment payment) {
-            if (store.putIfAbsent(payment.orderId(), payment) != null) {
+            if (store.putIfAbsent(payment.orderId(), copy(payment)) != null) {
                 throw new IllegalStateException("duplicate payment");
             }
         }
+
+        @Override
+        public void update(Payment payment) {
+            store.put(payment.orderId(), copy(payment));
+        }
+    }
+
+    private static Payment copy(Payment p) {
+        return Payment.restore(p.id(), p.orderId(), p.userId(), p.amount(), p.status(), p.transactionId(), p.reason(),
+                p.cancelRequested(), p.createdAt(), p.updatedAt());
     }
 
     static class RecordingReplies implements SendPaymentReplyPort {
@@ -170,6 +214,11 @@ class PaymentServiceTest {
         @Override
         public void paymentFailed(UUID orderId, String reason) {
             log.add("failed:" + orderId + ":" + reason);
+        }
+
+        @Override
+        public void paymentCancelled(UUID orderId) {
+            log.add("cancelled:" + orderId);
         }
     }
 }

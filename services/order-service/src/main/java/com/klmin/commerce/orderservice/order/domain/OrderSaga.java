@@ -100,6 +100,8 @@ public final class OrderSaga {
                 case PAYMENT_FAILED -> compensate(reason);
                 default -> ignore();
             };
+            // 처음 실패 사유(결제 타임아웃)는 그대로 두고 나머지를 역순으로 되돌린다
+            case CANCELLING_PAYMENT -> event == SagaEventType.PAYMENT_CANCELLED ? compensateAfterPayment() : ignore();
             case REFUNDING_POINT -> event == SagaEventType.POINT_REFUNDED ? moveTo(SagaState.RELEASING_STOCK,
                     new SagaAction.ReleaseStock()) : ignore();
             case RELEASING_STOCK -> event == SagaEventType.STOCK_RELEASED ? cancel() : ignore();
@@ -115,44 +117,46 @@ public final class OrderSaga {
     /**
      * 현재 단계에서 {@code stepTimeout} 넘게 아무 응답이 없을 때 할 일. 아직 시간이 안 됐거나 끝난 Saga 면 {@link SagaAction.Ignore}.
      * <ul>
-     *   <li>정방향(재고 예약·포인트 차감): {@code maxResends} 번까지 같은 커맨드를 다시 보낸다. 그래도 응답이 없으면
+     *   <li>재고 예약·포인트 차감: {@code maxResends} 번까지 같은 커맨드를 다시 보낸다. 그래도 응답이 없으면
      *       앞 단계가 반영됐는지 알 수 없으므로 <b>반영됐다고 보고</b> 역순 보상한다 (보상 커맨드는 앞 단계가 없었어도 안전)</li>
-     *   <li>결제: 결과가 애매하므로(승인됐을 수 있음) 포기하지 않고 계속 다시 묻는다. 결제 서비스는 같은 주문의 Pay 에
-     *       기록된 결과를 다시 응답한다</li>
+     *   <li>결제: 결과가 애매하므로(승인됐을 수 있음) 바로 보상하지 않고 {@code maxPaymentResends} 번까지 다시 묻는다.
+     *       결제 서비스는 같은 주문의 Pay 에 기록된 결과를 다시 응답하고, PG 타임아웃이면 PG 조회로 확정한 뒤 응답한다.
+     *       그래도 응답이 없으면 결제 취소({@link SagaAction.CancelPayment})부터 보상한다. 늦게 승인되면 결제 서비스가 환불한다</li>
      *   <li>보상: 포기할 수 없으므로 끝까지 다시 보낸다</li>
      * </ul>
      * 재전송할 때마다 {@code updatedAt} 이 바뀌어 다음 재전송은 다시 {@code stepTimeout} 뒤다.
      */
-    public SagaAction onTimeout(Instant now, Duration stepTimeout, int maxResends) {
+    public SagaAction onTimeout(Instant now, SagaTimeoutPolicy policy) {
+        Duration stepTimeout = policy.stepTimeout();
         if (state.isFinished() || now.isBefore(updatedAt.plus(stepTimeout))) {
             return ignore();
         }
         SagaState timedOut = state;
+        int limit = timedOut == SagaState.PAYING ? policy.maxPaymentResends() : policy.maxResends();
         String event;
         String reason;
         SagaAction action;
-        if (stepResends < maxResends || keepsResending(timedOut)) {
+        if (stepResends < limit || timedOut.isCompensating()) {
             stepResends++;
             event = TIMEOUT_RESEND;
             reason = "no reply in " + timedOut + " for " + stepTimeout.toSeconds() + "s, resend #" + stepResends;
             action = currentCommand();
         } else {
             event = TIMEOUT_GIVE_UP;
-            reason = "timeout: no reply in " + timedOut + " after " + maxResends + " resends";
+            reason = "timeout: no reply in " + timedOut + " after " + limit + " resends";
             failureReason = truncate(reason);
-            action = timedOut == SagaState.RESERVING_STOCK
-                    ? moveTo(SagaState.RELEASING_STOCK, new SagaAction.ReleaseStock())
-                    // 포인트 차감 여부를 모른다. 환불은 차감 기록이 없어도 안전하다
-                    : moveTo(SagaState.REFUNDING_POINT, new SagaAction.RefundPoint());
+            action = switch (timedOut) {
+                case RESERVING_STOCK -> moveTo(SagaState.RELEASING_STOCK, new SagaAction.ReleaseStock());
+                // 포인트 차감 여부를 모른다. 환불은 차감 기록이 없어도 안전하다
+                case USING_POINT -> moveTo(SagaState.REFUNDING_POINT, new SagaAction.RefundPoint());
+                // 승인 여부를 모른다. 결제 서비스가 취소를 기록하고, 승인됐거나 늦게 승인되면 환불한다
+                case PAYING -> moveTo(SagaState.CANCELLING_PAYMENT, new SagaAction.CancelPayment(paidAmount));
+                default -> throw new IllegalStateException("cannot give up in " + timedOut);
+            };
         }
         history.add(new SagaHistoryEntry(event, state, truncate(reason), now));
         updatedAt = now;
         return action;
-    }
-
-    /** 포기하지 않는 단계: 결제(결과가 애매함)와 보상 */
-    private static boolean keepsResending(SagaState state) {
-        return state == SagaState.PAYING || state.isCompensating();
     }
 
     /** 현재 단계에서 응답을 기다리는 커맨드 */
@@ -161,6 +165,7 @@ public final class OrderSaga {
             case RESERVING_STOCK -> new SagaAction.ReserveStock();
             case USING_POINT -> new SagaAction.UsePoint(pointAmount);
             case PAYING -> new SagaAction.Pay(paidAmount);
+            case CANCELLING_PAYMENT -> new SagaAction.CancelPayment(paidAmount);
             case REFUNDING_POINT -> new SagaAction.RefundPoint();
             case RELEASING_STOCK -> new SagaAction.ReleaseStock();
             case COMPLETED, CANCELLED -> throw new IllegalStateException("finished saga has no command: " + state);
@@ -188,6 +193,14 @@ public final class OrderSaga {
     // 정방향의 역순으로 되돌린다: 포인트 환불(차감했을 때만) -> 재고 해제
     private SagaAction compensate(String reason) {
         failureReason = truncate(reason);
+        if (pointUsed) {
+            return moveTo(SagaState.REFUNDING_POINT, new SagaAction.RefundPoint());
+        }
+        return moveTo(SagaState.RELEASING_STOCK, new SagaAction.ReleaseStock());
+    }
+
+    // 결제 취소가 접수된 뒤: 포인트 환불(차감했을 때만) -> 재고 해제. 실패 사유는 결제 타임아웃 그대로
+    private SagaAction compensateAfterPayment() {
         if (pointUsed) {
             return moveTo(SagaState.REFUNDING_POINT, new SagaAction.RefundPoint());
         }

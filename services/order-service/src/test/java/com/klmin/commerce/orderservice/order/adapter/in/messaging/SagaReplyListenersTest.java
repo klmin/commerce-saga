@@ -6,6 +6,7 @@ import com.klmin.commerce.contract.inventory.StockReleased;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
 import com.klmin.commerce.contract.payment.PaymentApproved;
+import com.klmin.commerce.contract.payment.PaymentCancelled;
 import com.klmin.commerce.contract.payment.PaymentFailed;
 import com.klmin.commerce.contract.point.PointRefunded;
 import com.klmin.commerce.contract.point.PointUseFailed;
@@ -82,9 +83,11 @@ class SagaReplyListenersTest {
         payment.onMessage(record(Topics.PAYMENT_REPLY, PaymentApproved.TYPE,
                 "{\"orderId\":\"" + orderId + "\",\"paymentId\":\"" + UUID.randomUUID() + "\"}"));
         payment.onMessage(record(Topics.PAYMENT_REPLY, PaymentFailed.TYPE, failed("declined")));
+        payment.onMessage(record(Topics.PAYMENT_REPLY, PaymentCancelled.TYPE, ok()));
 
         verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.PAYMENT_APPROVED));
         verify(useCase).handle(MESSAGE_ID, new SagaReplyCommand(orderId, SagaEventType.PAYMENT_FAILED, "declined"));
+        verify(useCase).handle(MESSAGE_ID, SagaReplyCommand.of(orderId, SagaEventType.PAYMENT_CANCELLED));
     }
 
     @Test

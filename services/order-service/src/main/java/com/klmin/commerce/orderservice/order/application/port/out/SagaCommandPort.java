@@ -16,4 +16,7 @@ public interface SagaCommandPort {
     void refundPoint(UUID orderId);
 
     void pay(UUID orderId, long userId, long amount);
+
+    /** 결제 취소 (결제 결과를 끝내 못 받아 포기). 승인됐으면 결제 서비스가 환불한다 */
+    void cancelPayment(UUID orderId, long userId, long amount);
 }

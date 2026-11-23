@@ -34,12 +34,13 @@ final class SagaActionExecutor {
     void execute(SagaAction action, OrderSaga saga, Instant now) {
         UUID orderId = saga.orderId();
         switch (action) {
-            case SagaAction.ReserveStock ignored -> commandPort.reserveStock(loadOrder(orderId));
+            case SagaAction.ReserveStock _ -> commandPort.reserveStock(loadOrder(orderId));
             case SagaAction.UsePoint usePoint -> commandPort.usePoint(orderId, saga.userId(), usePoint.amount());
             case SagaAction.Pay pay -> commandPort.pay(orderId, saga.userId(), pay.amount());
-            case SagaAction.RefundPoint ignored -> commandPort.refundPoint(orderId);
-            case SagaAction.ReleaseStock ignored -> commandPort.releaseStock(orderId);
-            case SagaAction.Complete ignored -> {
+            case SagaAction.RefundPoint _ -> commandPort.refundPoint(orderId);
+            case SagaAction.ReleaseStock _ -> commandPort.releaseStock(orderId);
+            case SagaAction.CancelPayment cancel -> commandPort.cancelPayment(orderId, saga.userId(), cancel.amount());
+            case SagaAction.Complete _ -> {
                 Order order = loadOrder(orderId);
                 if (order.complete(now)) {
                     saveOrderPort.update(order);
@@ -53,7 +54,7 @@ final class SagaActionExecutor {
                     eventPort.orderCancelled(order);
                 }
             }
-            case SagaAction.Ignore ignored -> {
+            case SagaAction.Ignore _ -> {
                 // 호출한 쪽에서 이미 걸렀다
             }
         }

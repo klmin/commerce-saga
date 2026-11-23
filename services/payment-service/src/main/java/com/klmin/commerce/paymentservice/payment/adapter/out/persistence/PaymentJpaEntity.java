@@ -37,14 +37,20 @@ class PaymentJpaEntity {
     @Column(length = 200)
     private String reason;
 
+    @Column(name = "cancel_requested", nullable = false)
+    private boolean cancelRequested;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 
     protected PaymentJpaEntity() {
     }
 
     PaymentJpaEntity(UUID id, UUID orderId, long userId, long amount, PaymentStatus status, String transactionId,
-                     String reason, Instant createdAt) {
+                     String reason, boolean cancelRequested, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.orderId = orderId;
         this.userId = userId;
@@ -52,7 +58,17 @@ class PaymentJpaEntity {
         this.status = status;
         this.transactionId = transactionId;
         this.reason = reason;
+        this.cancelRequested = cancelRequested;
         this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    void change(PaymentStatus status, String transactionId, String reason, boolean cancelRequested, Instant updatedAt) {
+        this.status = status;
+        this.transactionId = transactionId;
+        this.reason = reason;
+        this.cancelRequested = cancelRequested;
+        this.updatedAt = updatedAt;
     }
 
     UUID getId() {
@@ -83,7 +99,15 @@ class PaymentJpaEntity {
         return reason;
     }
 
+    boolean isCancelRequested() {
+        return cancelRequested;
+    }
+
     Instant getCreatedAt() {
         return createdAt;
+    }
+
+    Instant getUpdatedAt() {
+        return updatedAt;
     }
 }
