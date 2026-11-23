@@ -142,11 +142,19 @@ PR 두 개로 나눴다. 3-C-1(relay 교체)은 완료, 다음은 **3-C-2(시나
 **인증: 자체 JWT auth-service (Spring Authorization Server는 쓰지 않음)**
 - 로그인은 자체 회원(아이디·비밀번호) 하나, 클라이언트는 우리 Next 앱뿐이다. OAuth2/OIDC(SAS, Keycloak)는 외부 앱에 로그인 제공·소셜 로그인·여러 앱 SSO가 필요할 때 의미가 있어 지금은 과하다. password grant가 폐기돼 SAS로는 Next 화면에서 바로 로그인할 수 없다는 점도 이유. 필요해지면 서비스 쪽(resource server)은 그대로 두고 auth-service만 바꾼다
 - auth-service (API만, 화면 없음, `auth_db` + Redis): `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`(+ 전체 로그아웃), `GET /.well-known/jwks.json`. 비밀번호 bcrypt/argon2, 로그인 시도 제한
-- access token: JWT RS256, 10~15분, `kid` 포함. 개인키는 auth-service만. 키 교체 때 JWKS에 새 키·이전 키를 함께 노출
+- access token: JWT RS256, 10~15분, `kid` 포함, 클레임 `sub`(userId) · `roles`. 개인키는 auth-service만. 키 교체 때 JWKS에 새 키·이전 키를 함께 노출
+- 권한: **roles만** 쓴다(`users` ↔ `user_roles`, 예: `USER`, `ADMIN`). Gateway는 경로별 역할(`/api/admin/**` = ADMIN), 서비스는 `@PreAuthorize` + 소유권 검사. **OAuth scope는 쓰지 않는다**(외부 앱에 권한을 위임할 때 필요한 개념이라 우리 앱 하나에는 의미가 없음). roles는 refresh 때 DB에서 다시 읽어 넣어, 역할 변경이 AT 수명(최대 15분) 안에 반영되게 한다
+- 사용자 id는 bigint 유지(서비스 테이블·메시지 `userId: long`과 맞춤). 외부 노출이 필요해지면 `public_id uuid` 컬럼 추가
+- refresh token: **opaque `familyId.secret`**(JWT 아님, secret은 랜덤 32바이트), 14일, httpOnly 쿠키(`Path=/auth`)로만. 서버에는 원본을 두지 않는다(split token)
+- Redis 키 두 종류: `family:<familyId>` = { userId, agent, `current` = hash(secret), createdAt, 절대만료 } (TTL 14일), `user:<userId>:families` = familyId 목록(Sorted Set, 점수 = 만료 시각)
+  - **로그인**(최초·재로그인 모두): familyId·secret 새로 생성 → family 저장 → families에 추가. 다른 family는 건드리지 않는다(여러 기기 동시 로그인)
+  - **refresh**: RT에서 familyId를 꺼내 family 조회 → 없으면 401 / hash(secret) == current면 새 secret으로 current 교체·TTL과 점수 연장, 새 RT = 같은 familyId.새 secret / **다르면 이미 회전된 옛 RT 재사용 = 탈취 의심 → family 삭제** / 절대만료(예: 30일) 지나면 삭제 후 재로그인
+  - **로그아웃**: family 삭제 + families에서 제거. **전체 로그아웃·비밀번호 변경·계정 정지**: 사용자 family 전부 삭제
+  - 만료된 familyId는 로그인·기기 목록 조회 때 `ZREMRANGEBYSCORE`로 정리. 로그인 저장(family + families)은 한 트랜잭션(MULTI 또는 Lua)
+  - 비교는 상수 시간(`MessageDigest.isEqual`)
+- 여러 탭 동시 refresh 오탐: Next 서버 single-flight + 짧은 유예(직전 해시를 10~30초만 `previous`로 남겨 같은 새 토큰을 다시 돌려줌)
+- 이미 나간 access token은 짧은 수명으로 감수(즉시 차단이 필요하면 사용자 토큰 버전을 Gateway에서 확인하는 방식 검토)
 - 검증: Gateway 1차(JWKS 캐시, 실패면 401) + 각 서비스 resource server 재검증(내부망 무조건 신뢰 안 함). 소유권 검사는 지금처럼 서비스 안에서, `X-User-Id` 대신 JWT `sub`와 비교. 일반 API 요청마다 auth-service를 부르지 않는다
-- refresh token: 랜덤 문자열(JWT 아님), 14일, **로그인(기기·브라우저) 한 번 = family 하나**로 Redis에 저장(`refresh:<id>`, `family:<id>`, `user:<id>:families`). 기기별 로그아웃·전체 로그아웃·로그인 기기 목록이 가능
-- **RTR**: refresh 때마다 새 토큰, 이전 것은 사용 불가. 이미 회전된 토큰이 다시 오면 탈취로 보고 그 family 전체 폐기. 여러 탭 동시 refresh 오탐은 Next 서버 single-flight + 짧은 유예(10~30초)로 막는다
-- 로그아웃: family 폐기. 비밀번호 변경·강제 로그아웃은 사용자 family 전체 폐기. 이미 나간 access token은 짧은 수명으로 감수(즉시 차단이 필요하면 사용자 토큰 버전을 Gateway에서 확인하는 방식 검토)
 - 토큰 보관: Next 서버가 httpOnly·Secure·SameSite=Lax 쿠키로만. 브라우저 JS(localStorage)에 두지 않는다
 
 **Gateway·배포 경계**
