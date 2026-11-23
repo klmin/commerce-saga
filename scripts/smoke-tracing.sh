@@ -59,16 +59,22 @@ trace_has() { # trace-id expected-span-count
   [ "$n" -ge "$2" ]
 }
 
-expect_services() { # trace-id
-  local got
+has_services() { # trace-id
+  local got s
   got=$(trace_json "$1" | services_in)
   for s in order-service inventory-service point-service payment-service notification-service; do
     case " $got" in
       *" $s "*) ;;
-      *) echo "FAIL: trace $1 에 $s span 없음 (있는 서비스: $got)" >&2; exit 1 ;;
+      *) return 1 ;;
     esac
   done
-  echo "  ok  trace 하나에 다섯 서비스: $got"
+}
+
+# span 수가 먼저 차도(재시도 등으로 span 이 하나 더 생기면) 늦게 내보낸 서비스의 span 은 아직 없을 수 있어 기다린다
+expect_services() { # trace-id
+  wait_until "trace $1 에 다섯 서비스" "$TIMEOUT_SECONDS" has_services "$1" \
+    || { echo "FAIL: trace $1 에 빠진 서비스 (있는 서비스: $(trace_json "$1" | services_in))" >&2; exit 1; }
+  echo "  ok  trace 하나에 다섯 서비스: $(trace_json "$1" | services_in)"
 }
 
 echo "== 11a. 정상 주문 → trace 하나에 다섯 서비스"
