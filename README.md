@@ -6,7 +6,7 @@
 - DB 저장과 메시지 발행의 이중 쓰기 → **Transactional Outbox** + relay (스케줄러 → **Debezium CDC**)
 - at-least-once 전달로 같은 메시지가 여러 번 온다 → **멱등 처리**, 늦은 응답에 단계가 되돌아가지 않는 상태 머신
 
-> 진행 중: 3단계(신뢰성). 멱등 컨슈머·DLT 재처리 완료, 다음은 Debezium relay 교체. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md).
+> 진행 중: 3단계(신뢰성). 멱등 컨슈머·DLT 재처리 완료, Debezium relay 추가(스케줄러와 선택), 다음은 Debezium 장애 시나리오·relay 비교. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md).
 
 ## 아키텍처 (2단계)
 
@@ -40,7 +40,7 @@ flowchart LR
 보상:   (실패) -> REFUNDING_POINT -> RELEASING_STOCK -> CANCELLED
 ```
 
-- 모든 메시지는 outbox를 거친다: 비즈니스 변경 + outbox 저장 = 한 트랜잭션, 스케줄러 relay가 Kafka로 발행 ([libs/outbox](libs/outbox))
+- 모든 메시지는 outbox를 거친다: 비즈니스 변경 + outbox 저장 = 한 트랜잭션, relay가 Kafka로 발행. relay는 스케줄러([libs/outbox](libs/outbox)) 또는 Debezium Outbox Event Router([infra/connect](infra/connect)) 중 선택
 - 메인 Saga는 order-service가 상태 머신(`OrderSaga`)으로 오케스트레이션, 후속 처리는 `order.events` 코레오그래피 ([ADR 0003](docs/adr/0003-orchestration-for-main-saga.md))
 - 메시지 키 = `orderId` (주문 단위 순서 보장), 커맨드·응답·이벤트 토픽 분리 ([ADR 0005](docs/adr/0005-message-key-and-topic-rules.md))
 - 멱등 컨슈머 두 겹: 같은 메시지의 재전달은 `processed_message`(헤더 `id`)로 건너뛰고, 내용이 같은 재요청은 주문별 처리 기록(예약·사용·결제)으로 한 번만 반영한다 ([ADR 0006](docs/adr/0006-idempotent-consumer.md)). 처리할 수 없는 메시지는 `<토픽>.DLT`
@@ -107,4 +107,4 @@ docs/          ADR, 시나리오
 
 ## 기술 스택
 
-Java 25, Spring Boot 4.1, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.3(KRaft), Spring for Apache Kafka, Testcontainers, ArchUnit
+Java 25, Spring Boot 4.1, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, Testcontainers, ArchUnit

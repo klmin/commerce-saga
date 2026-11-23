@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DltToolIntegrationTest {
 
     @Container
-    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka:4.3.2"));
+    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka:4.4.0"));
 
     private final ByteArrayOutputStream output = new ByteArrayOutputStream();
     private DltClient client;
