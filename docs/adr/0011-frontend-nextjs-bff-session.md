@@ -42,19 +42,26 @@ Next 16 에서 Middleware 는 Proxy(`src/proxy.ts`, Node.js 런타임)로 이름
 
 - `cs_access` 가 있으면 통과. 없고 `cs_refresh` 가 있으면 auth-service `/auth/refresh` → 새 쿠키를 응답에 심고, **이번 요청에도** 새 access token 을 실어 서버 컴포넌트가 바로 쓰게 한다
 - refresh 가 401/403(만료·폐기·재사용 탐지)이면 두 쿠키를 지우고 `/login?next=<원래 경로>`. 백엔드에 닿지 않으면 쿠키를 그대로 두고 화면이 오류를 보여 준다(다음 요청에서 다시 시도)
-- 둘 다 없으면 보호된 화면은 `/login?next=…`. `next` 는 사이트 안 경로만 허용(open redirect 방지)
+- 둘 다 없으면 보호된 화면은 `/login?next=…`. `next` 는 사이트 안 경로만 허용(open redirect 방지). URL 파서가 탭·줄바꿈을 지우고 역슬래시를 `/` 로 읽어 `/	/evil.example` 이 외부 주소가 되므로, 제어문자·공백·역슬래시를 거부하고 파싱한 결과의 origin 까지 본 뒤 그 경로만 돌려준다(PR #35 Codex 리뷰)
 - **같은 refresh token 의 동시 요청은 한 번으로 묶는다**(single-flight, 프로세스 안 `Map`). 결과를 10초 남겨, 첫 응답의 새 쿠키가 닿기 전에 옛 쿠키로 온 요청도 같은 새 토큰을 받는다. 그러지 않으면 백엔드가 이미 회전된 토큰의 재사용으로 보고 그 기기 세션을 버린다(ADR 0008). 여러 Next 인스턴스 사이는 백엔드의 동시 refresh 유예(20초)가 받는다
 - access 쿠키를 토큰보다 30초 일찍 없애서, 만료 직전 토큰으로 백엔드를 부르다 401 이 나는 일을 줄인다. 그래도 401 이면 `/login` 으로 보낸다
 - 로컬 확인: refresh 성공 → 새 쿠키 2개 / 10초 안 옛 토큰 재요청 → 같은 결과 / 유예 지난 뒤 옛 토큰 → 쿠키 삭제 + `/login?next=%2Forders`, auth-service 로그에 "재사용, 그 기기 세션 폐기"
 
+### Gateway rate limit: BFF 가 넘긴 브라우저 IP 로
+
+- Gateway 의 `/auth/**` rate limit 은 클라이언트 IP 별이다(ADR 0008). BFF 를 거치면 모든 사용자의 로그인·가입·refresh 가 Next 서버 주소 하나로 들어와 **한 버킷을 나눠 쓴다**: 동시 로그인이 429 로 거절되고, 한 사람이 다른 사람의 로그인을 막을 수 있다(PR #35 Codex 리뷰)
+- Next 는 auth 호출에 브라우저 IP 를 `X-Forwarded-For` 로 넘긴다. 들어온 요청 `X-Forwarded-For` 의 **맨 오른쪽 값**(Next 앞 프록시가 본 주소, 프록시가 없으면 Next 가 소켓 주소로 채운 값)이다
+- Gateway 는 연결 주소가 `gateway.trusted-proxies`(`GATEWAY_TRUSTED_PROXIES`, 주소·CIDR, 기본 루프백)일 때만 그 헤더의 맨 오른쪽 값을 쓰고, 아니면 지금처럼 연결 주소다. 브라우저가 Gateway 에 직접 `X-Forwarded-For` 를 보내도 무시된다
+- 배포에서는 `GATEWAY_TRUSTED_PROXIES` 를 Next 대역으로, Next 앞에는 `X-Forwarded-For` 를 붙이는 프록시(Ingress)를 둔다. Next 를 프록시 없이 바로 열면 브라우저가 보낸 `X-Forwarded-For` 가 그대로 쓰여 IP 제한을 피할 수 있다(로그인 대입은 auth-service 가 아이디별로도 막는다)
+
 ## 검증
 
 - CI `frontend`(PR 마다, `frontend/**`): Prettier, ESLint, typecheck(`next typegen && tsc`), Vitest, `next build`, Docker 이미지 빌드
-- Vitest: 쿠키 속성·Set-Cookie 파싱·`sub` 읽기, auth 백엔드 호출(헤더·오류), single-flight, `proxy`(통과·로그인 이동·refresh 성공·거절·백엔드 다운), 입력 검증·open redirect, 폼
+- Vitest: 쿠키 속성·Set-Cookie 파싱·`sub` 읽기, auth 백엔드 호출(헤더·`X-Forwarded-For`·오류), 브라우저 IP 꺼내기, single-flight, `proxy`(통과·로그인 이동·refresh 성공·거절·백엔드 다운), 입력 검증·open redirect, 폼
 - Playwright(`frontend/e2e`, 로컬): 로그인 실패·성공·httpOnly·로그아웃, 가입 → 1,000P(auth.events). 백엔드 전체 + Next 를 띄우는 CI e2e 는 F-2 끝에 판단
 
 ## 결과
 
-- 좋아지는 것: 토큰이 브라우저 JS 에 없다. 백엔드(Gateway·서비스)는 바꾸지 않았다. 브라우저에 Gateway 를 열지 않아도 된다
+- 좋아지는 것: 토큰이 브라우저 JS 에 없다. 서비스는 바꾸지 않았다(Gateway 는 rate limit IP 만). 브라우저에 Gateway 를 열지 않아도 된다
 - 대가: 화면 요청마다 Next 서버를 거친다(Next 가 BFF). refresh 묶기는 인스턴스 안에서만 된다. Next 가 refresh token 을 다루므로 Next 서버 로그에 쿠키·토큰을 남기지 않게 주의한다(`logError` 는 오류 메시지만)
 - 한계: 브라우저 탭 여러 개가 서로 다른 Next 인스턴스로 동시에 refresh 하면 백엔드 유예(20초)에 기댄다. Secure 쿠키라 localhost 가 아닌 호스트를 http 로 보려면 `COOKIE_SECURE=false`

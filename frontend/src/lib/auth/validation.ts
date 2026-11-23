@@ -16,10 +16,26 @@ export function validateSignUp(loginId: string, password: string): string | unde
   return undefined;
 }
 
-/** 로그인 뒤 돌아갈 경로. 우리 사이트 안의 경로만 허용한다 (open redirect 방지) */
+// 사이트 밖으로 나가는지 보려고 붙여 보는 가짜 origin
+const SELF_ORIGIN = "http://self.invalid";
+
+/**
+ * 로그인 뒤 돌아갈 경로. 우리 사이트 안의 경로만 허용한다 (open redirect 방지).
+ * URL 파서는 탭·줄바꿈을 지우고 역슬래시를 `/` 로 읽어 `/\t/evil.example` 같은 값이 외부 주소가 되므로,
+ * 제어문자·공백·역슬래시를 거부하고 파싱한 결과의 origin 까지 본다.
+ */
 export function safeNextPath(next: string | null | undefined): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+  if (!next || !next.startsWith("/") || /[\u0000- \u007f\\]/.test(next)) {
     return "/";
   }
-  return next;
+  let url: URL;
+  try {
+    url = new URL(next, SELF_ORIGIN);
+  } catch {
+    return "/";
+  }
+  if (url.origin !== SELF_ORIGIN) {
+    return "/";
+  }
+  return url.pathname + url.search + url.hash;
 }

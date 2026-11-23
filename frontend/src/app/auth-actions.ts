@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { ApiError } from "@/lib/api/client";
 import * as auth from "@/lib/auth/backend";
+import { clientInfoFrom } from "@/lib/auth/client";
 import { clearSession, refreshToken, saveSession } from "@/lib/auth/server-session";
 import { safeNextPath, validateSignUp } from "@/lib/auth/validation";
 import { logError } from "@/lib/log";
@@ -31,8 +32,7 @@ export async function loginAction(
     return { error: "아이디와 비밀번호를 입력해 주세요.", loginId };
   }
   try {
-    const userAgent = (await headers()).get("user-agent") ?? undefined;
-    await saveSession(await auth.login(loginId, password, userAgent));
+    await saveSession(await auth.login(loginId, password, clientInfoFrom(await headers())));
   } catch (e) {
     if (e instanceof ApiError) {
       // 401(아이디·비밀번호 불일치), 429(잠금)는 백엔드 메시지를 그대로 보여 준다
@@ -58,10 +58,10 @@ export async function signUpAction(
     return { error: "비밀번호 확인이 일치하지 않습니다.", loginId };
   }
   try {
-    await auth.signUp(loginId, password);
+    const client = clientInfoFrom(await headers());
+    await auth.signUp(loginId, password, client);
     // 가입하면 바로 로그인한다. 포인트 계정(가입 축하 1,000P)은 auth.events 로 몇 초 안에 생긴다 (시나리오 13)
-    const userAgent = (await headers()).get("user-agent") ?? undefined;
-    await saveSession(await auth.login(loginId, password, userAgent));
+    await saveSession(await auth.login(loginId, password, client));
   } catch (e) {
     if (e instanceof ApiError) {
       return { error: e.status === 409 ? "이미 쓰고 있는 아이디입니다." : e.message, loginId };
@@ -76,7 +76,7 @@ export async function logoutAction(): Promise<void> {
   const token = await refreshToken();
   if (token) {
     try {
-      await auth.logout(token);
+      await auth.logout(token, clientInfoFrom(await headers()));
     } catch (e) {
       // 백엔드 세션은 만료로 정리된다. 브라우저 쿠키는 어쨌든 지운다
       logError("logoutAction failed", e);

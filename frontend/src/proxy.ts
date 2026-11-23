@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { ApiError } from "@/lib/api/client";
 import { refresh } from "@/lib/auth/backend";
+import { clientInfoFrom } from "@/lib/auth/client";
 import { refreshOnce } from "@/lib/auth/refresh-once";
 import {
   ACCESS_COOKIE,
@@ -57,7 +58,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   const secure = serverEnv().COOKIE_SECURE;
   try {
-    const session = await refreshOnce(refreshToken, refresh);
+    const client = clientInfoFrom(request.headers);
+    const session = await refreshOnce(refreshToken, (token) => refresh(token, client));
     const cookies = sessionCookies(session, secure);
     // 이번 요청을 처리하는 서버 컴포넌트·Server Action 도 새 access token 을 보게 요청 쿠키를 바꿔 넘긴다
     for (const c of cookies) {

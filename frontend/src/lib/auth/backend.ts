@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ApiError, toApiError } from "@/lib/api/client";
 import { serverEnv } from "@/lib/env";
 
+import type { ClientInfo } from "./client";
 import { refreshTokenFrom, type Session } from "./session";
 
 // auth-service 는 쿠키로 오는 요청 중 이 헤더가 없는 상태 변경 요청을 막는다 (CSRF, ADR 0008)
@@ -18,9 +19,15 @@ const tokenResponse = z.object({
 
 const signUpResponse = z.object({ userId: z.number().int().positive() });
 
-async function call(path: string, init: RequestInit): Promise<Response> {
+async function call(path: string, init: RequestInit, client: ClientInfo): Promise<Response> {
+  const headers = new Headers(init.headers);
+  // Gateway 의 /auth/** rate limit 이 Next 서버 주소 하나가 아니라 브라우저마다 걸리게 한다 (ADR 0011)
+  if (client.ip) {
+    headers.set("X-Forwarded-For", client.ip);
+  }
   const res = await fetch(new URL(path, serverEnv().BACKEND_URL), {
     ...init,
+    headers,
     signal: AbortSignal.timeout(TIMEOUT_MS),
     cache: "no-store",
   });
@@ -41,30 +48,38 @@ async function toSession(res: Response): Promise<Session> {
   };
 }
 
-export async function signUp(loginId: string, password: string): Promise<number> {
-  const res = await call("/auth/signup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ loginId, password }),
-  });
+export async function signUp(
+  loginId: string,
+  password: string,
+  client: ClientInfo,
+): Promise<number> {
+  const res = await call(
+    "/auth/signup",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loginId, password }),
+    },
+    client,
+  );
   return signUpResponse.parse(await res.json()).userId;
 }
 
-/** @param userAgent 로그인 기기 목록에 보일 이름 (브라우저의 User-Agent) */
+/** client.userAgent 는 로그인 기기 목록에 보일 이름 */
 export async function login(
   loginId: string,
   password: string,
-  userAgent: string | undefined,
+  client: ClientInfo,
 ): Promise<Session> {
   const headers = new Headers({ "Content-Type": "application/json" });
-  if (userAgent) {
-    headers.set("User-Agent", userAgent.slice(0, 200));
+  if (client.userAgent) {
+    headers.set("User-Agent", client.userAgent.slice(0, 200));
   }
-  const res = await call("/auth/login", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ loginId, password }),
-  });
+  const res = await call(
+    "/auth/login",
+    { method: "POST", headers, body: JSON.stringify({ loginId, password }) },
+    client,
+  );
   const session = await toSession(res);
   if (!session.refreshToken) {
     throw new ApiError(502, "로그인 응답에 refresh token 이 없습니다.");
@@ -73,18 +88,20 @@ export async function login(
 }
 
 /** refresh token 이 만료·폐기·재사용이면 ApiError(401) */
-export async function refresh(refreshToken: string): Promise<Session> {
-  const res = await call("/auth/refresh", {
-    method: "POST",
-    headers: { Cookie: `refresh_token=${refreshToken}`, ...CSRF_HEADER },
-  });
+export async function refresh(refreshToken: string, client: ClientInfo): Promise<Session> {
+  const res = await call(
+    "/auth/refresh",
+    { method: "POST", headers: { Cookie: `refresh_token=${refreshToken}`, ...CSRF_HEADER } },
+    client,
+  );
   return toSession(res);
 }
 
 /** 이미 없는 세션이어도 성공으로 본다 */
-export async function logout(refreshToken: string): Promise<void> {
-  await call("/auth/logout", {
-    method: "POST",
-    headers: { Cookie: `refresh_token=${refreshToken}`, ...CSRF_HEADER },
-  });
+export async function logout(refreshToken: string, client: ClientInfo): Promise<void> {
+  await call(
+    "/auth/logout",
+    { method: "POST", headers: { Cookie: `refresh_token=${refreshToken}`, ...CSRF_HEADER } },
+    client,
+  );
 }

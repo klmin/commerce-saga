@@ -15,7 +15,8 @@ function req(path: string, cookies: Record<string, string> = {}) {
     .map(([k, v]) => `${k}=${v}`)
     .join("; ");
   return new NextRequest(new URL(path, "http://localhost:3000"), {
-    headers: cookie ? { cookie } : {},
+    // 앞 프록시가 붙인 값이 맨 오른쪽. 그 앞은 브라우저가 마음대로 보낼 수 있다
+    headers: { "x-forwarded-for": "203.0.113.1, 198.51.100.9", ...(cookie ? { cookie } : {}) },
   });
 }
 
@@ -56,7 +57,10 @@ describe("proxy", () => {
 
     const res = await proxy(req("/", { [REFRESH_COOKIE]: "fam.old" }));
 
-    expect(refreshMock).toHaveBeenCalledWith("fam.old");
+    expect(refreshMock).toHaveBeenCalledWith("fam.old", {
+      ip: "198.51.100.9",
+      userAgent: undefined,
+    });
     expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe("new-at");
     expect(res.cookies.get(REFRESH_COOKIE)?.value).toBe("fam.new");
     expect(res.cookies.get(ACCESS_COOKIE)).toMatchObject({
