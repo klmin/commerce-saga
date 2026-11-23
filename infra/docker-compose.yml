@@ -7,6 +7,8 @@
 # - Kafka UI   : http://localhost:8989
 # - Kafka Connect (Debezium) REST : http://localhost:8088  (커넥터 등록은 scripts/register-connectors.sh)
 #   커넥터를 등록하지 않으면 아무것도 발행하지 않는다. relay 모드는 docs/PROGRESS.md 7절 참고
+# - Tempo      : OTLP http://localhost:4328 (서비스 trace 수신), API http://localhost:3210
+# - Grafana    : http://localhost:3000 (trace 보기, 익명 접근)
 # 포트는 infra/.env 로 바꿀 수 있다 (.env.example 참고). 계정·비밀번호는 로컬 개발용 값이다.
 name: commerce-saga
 
@@ -131,6 +133,32 @@ services:
         condition: service_completed_successfully
       postgres-init:
         condition: service_completed_successfully
+
+  # 분산 트레이싱 (ADR 0013). 서비스가 OTLP 로 span 을 보낸다 (OTLP_TRACING_ENDPOINT, 기본 http://localhost:4328/v1/traces)
+  # 호스트 포트는 다른 관측성 스택과 겹치지 않게 표준(4318·3200)에서 비켜 둔다
+  tempo:
+    image: grafana/tempo:2.10.10
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
+    ports:
+      - "${TEMPO_PORT:-3210}:3200"
+      - "${OTLP_HTTP_PORT:-4328}:4318"
+    # 이미지에 셸·wget 이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:3210/ready
+
+  # trace 보기: Explore → Tempo 에서 trace id 로 찾거나 service.name 으로 검색 (로컬 개발용 익명 관리자)
+  grafana:
+    image: grafana/grafana:13.2.6
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - tempo
 
 volumes:
   postgres-data:

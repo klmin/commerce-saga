@@ -1,0 +1,26 @@
+# Tempo 단일 바이너리, 로컬 디스크 저장 (로컬·CI 용). 서비스가 OTLP(HTTP 4318)로 span 을 보낸다
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+# 컨테이너를 내리면 trace 는 사라진다 (보존이 필요 없는 로컬 확인용)
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /tmp/tempo/wal
+    local:
+      path: /tmp/tempo/blocks
+
+compactor:
+  compaction:
+    block_retention: 24h

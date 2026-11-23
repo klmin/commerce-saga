@@ -13,8 +13,11 @@ dependencies {
     implementation("org.slf4j:slf4j-api")
     // 메시지 id(outbox.id) 는 UUIDv7
     implementation("com.github.f4b6a3:uuid-creator:6.1.1")
+    // 있으면 outbox 에 traceparent 를 저장한다 (서비스는 spring-boot-starter-opentelemetry 로 가져온다)
+    compileOnly("io.micrometer:micrometer-tracing")
 
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("io.micrometer:micrometer-tracing")
     testRuntimeOnly("org.postgresql:postgresql")
 }

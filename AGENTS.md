@@ -61,7 +61,8 @@ docker compose -f infra/docker-compose.yml up -d
 - **모든 메시지 발행은 outbox를 거친다.** `kafkaTemplate.send()`를 비즈니스 코드에서 직접 부르지 않는다
   - 오케스트레이터: Saga 상태 변경 + 커맨드 outbox 저장 = 한 트랜잭션
   - 참여 서비스: 로컬 변경 + 응답 outbox 저장 = 한 트랜잭션
-  - outbox 스키마는 Debezium Outbox Event Router 호환(`aggregatetype` = 토픽, `aggregateid` = 키, `type`, `payload`). "넣고 지운다"
+  - outbox 스키마는 Debezium Outbox Event Router 호환(`aggregatetype` = 토픽, `aggregateid` = 키, `type`, `payload`, `traceparent`). "넣고 지운다"
+  - trace 문맥은 outbox `traceparent` → Kafka 헤더 `traceparent` → 리스너 observation 으로 잇는다. KafkaTemplate observation 은 켜지 않는다(relay 문맥으로 덮어씀) (ADR 0013)
 - 전달은 at-least-once. **컨슈머는 멱등이어야 한다** (ADR 0006)
   - 같은 메시지의 재전달: 유스케이스가 `(messageId, 커맨드)`를 받아 트랜잭션 첫 줄에서 `ProcessedMessagePort.markProcessed`(`processed_message` INSERT). 이미 있으면 상태도 응답도 바꾸지 않고 skip. `messageId`는 Kafka 헤더 `id`(= 보낸 쪽 outbox `id`), 없으면 DLT
   - 내용이 같은 다른 메시지(재요청): 주문별 기록(`order_id` 유니크)으로 걸러 상태는 그대로, 처음 결과를 다시 응답

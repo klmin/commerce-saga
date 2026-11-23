@@ -35,7 +35,7 @@ public class SchedulerOutboxRelay {
     private static final Logger log = LoggerFactory.getLogger(SchedulerOutboxRelay.class);
 
     private static final String SELECT = """
-            select id, aggregatetype, aggregateid, type, payload::text as payload
+            select id, aggregatetype, aggregateid, type, payload::text as payload, traceparent
             from outbox
             order by created_at
             limit :limit
@@ -112,9 +112,14 @@ public class SchedulerOutboxRelay {
                 new ProducerRecord<>(row.aggregatetype(), row.aggregateid(), row.payload());
         record.headers().add("id", row.id().toString().getBytes(StandardCharsets.UTF_8));
         record.headers().add("type", row.type().getBytes(StandardCharsets.UTF_8));
+        // 넣을 때의 trace 문맥을 그대로 넘긴다. 받는 쪽 리스너 observation 이 이어받는다 (OutboxTraceContext)
+        if (row.traceparent() != null) {
+            record.headers().add("traceparent", row.traceparent().getBytes(StandardCharsets.UTF_8));
+        }
         return record;
     }
 
-    record OutboxRow(UUID id, String aggregatetype, String aggregateid, String type, String payload) {
+    record OutboxRow(UUID id, String aggregatetype, String aggregateid, String type, String payload,
+                     String traceparent) {
     }
 }

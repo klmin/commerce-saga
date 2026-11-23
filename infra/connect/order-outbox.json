@@ -30,5 +30,5 @@
   "transforms.outbox.table.field.event.key": "aggregateid",
   "transforms.outbox.table.field.event.payload": "payload",
   "transforms.outbox.table.expand.json.payload": "true",
-  "transforms.outbox.table.fields.additional.placement": "type:header:type"
+  "transforms.outbox.table.fields.additional.placement": "type:header:type,traceparent:header:traceparent"
 }

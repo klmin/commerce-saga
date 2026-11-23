@@ -340,6 +340,8 @@ product-service (Postgres) ──Debezium 테이블 CDC──▶ Kafka ──▶
 - 0009 Redis 사용 범위 (재고를 Redis에 두지 않는 이유 포함)
 - 0010 상품 검색 CQRS: Debezium 테이블 CDC → Elasticsearch
 - 0011 프론트엔드: Tailwind + shadcn/ui (MUI 대신)
+- 0012 실패 처리: 제자리 재시도 + DLT (retry 토픽 미사용)
+- 0013 관측성: outbox 를 거쳐도 trace 문맥 잇기, 메트릭·경보 (후속 1)
 
 ---
 
