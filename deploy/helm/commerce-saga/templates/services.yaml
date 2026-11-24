@@ -64,6 +64,11 @@ spec:
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            {{- if $svc.outbox }}
+            # Debezium 이 outbox 를 읽으면 스케줄러 relay 를 끈다 (outbox 는 넣고 바로 지운다, ADR 0004)
+            - name: OUTBOX_RELAY_ENABLED
+              value: {{ (not $root.Values.debezium.enabled) | quote }}
+            {{- end }}
             {{- if ne $name "gateway" }}
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: {{ $kafka | quote }}

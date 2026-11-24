@@ -12,8 +12,6 @@ image:
 # 서비스 공통 환경변수
 common:
   env:
-    # 배포 기준 relay 는 Debezium 이다(ADR 0004). K-1 은 스케줄러 relay, K-2 에서 KafkaConnector 와 함께 false 로 바꾼다
-    OUTBOX_RELAY_ENABLED: "true"
     # 클러스터에 Tempo 가 없어 trace 를 내보내지 않는다 (보내면 실패 로그만 쌓인다)
     TRACING_SAMPLING_PROBABILITY: "0"
     AUTH_JWT_ISSUER: commerce-saga-auth
@@ -49,11 +47,20 @@ kafka:
     - order.events
     - auth.events
 
-# 백엔드 서비스. 이름 = 이미지 이름 = k8s Service 이름
+# outbox relay. 배포 기준은 Debezium 이다(ADR 0004): KafkaConnect + 서비스별 KafkaConnector, 서비스는 스케줄러 relay 를 끈다.
+# false 면 KafkaConnect 없이 서비스의 스케줄러 relay(OUTBOX_RELAY_ENABLED=true)로 보낸다
+debezium:
+  enabled: true
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+# 백엔드 서비스. 이름 = 이미지 이름 = k8s Service 이름. outbox: 이 서비스 DB 의 outbox 를 Debezium 이 읽는다
 services:
   auth-service:
     port: 8086
     db: auth
+    outbox: true
     env:
       AUTH_COOKIE_SECURE: "true"
       # 개발용 시드 사용자(user1~4, admin)를 넣는다. 운영이면 classpath:db/migration 만
@@ -63,15 +70,19 @@ services:
   order-service:
     port: 8081
     db: order
+    outbox: true
   inventory-service:
     port: 8082
     db: inventory
+    outbox: true
   point-service:
     port: 8083
     db: point
+    outbox: true
   payment-service:
     port: 8084
     db: payment
+    outbox: true
   notification-service:
     port: 8085
     db: notification
