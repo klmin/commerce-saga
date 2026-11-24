@@ -30,7 +30,7 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **설정은 application.yml 의 환경변수를 채우기만** 한다. 서비스마다 자기 DB 계정 Secret 만 받는다(다른 서비스 DB 비밀번호를 갖지 않음). 비밀번호는 모두 로컬 개발용 값
 - **Postgres 초기화 SQL** 은 `infra/postgres/init` 의 사본(`helm/commerce-saga/files`). Helm 은 차트 밖 파일을 읽지 못한다. CI 가 두 파일이 같은지 검사한다
 - **relay**: K-1 은 스케줄러 relay 로 시작했고, K-2 부터 배포 기준인 Debezium(ADR 0004)이 기본이다(아래)
-- **trace**: 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0`
+- **trace**: K-1 은 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0` 으로 시작했고, 지금은 차트가 관측성을 같이 올려 서비스가 trace·로그를 alloy 로 보낸다(아래 "관측성". 끄면 `observability.enabled=false`)
 - **auth-service 서명 키**: 주지 않으면 띄울 때마다 임시 키다(ADR 0008). 그래서 replicas 1 에 `Recreate` 전략(재배포 때 키가 다른 옛·새 Pod 가 함께 응답하지 않게). 여럿이면 키를 Secret 으로 넣는다
 - **이미지**: kind 노드에 직접 넣는다(`kind load docker-image`). 레지스트리에 올리면 `image.registry` 만 채운다
 
