@@ -160,6 +160,9 @@ services:
     command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      # tail sampling: 오류·느린 trace 를 뺀 나머지 중 남길 비율(%). actuator trace 는 늘 버린다
+      TRACE_SAMPLING_PERCENT: ${TRACE_SAMPLING_PERCENT:-100}
     ports:
       - "${OTLP_HTTP_PORT:-4328}:4318"
       - "${ALLOY_PORT:-12346}:12345"
