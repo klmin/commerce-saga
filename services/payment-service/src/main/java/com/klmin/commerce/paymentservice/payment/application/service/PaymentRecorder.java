@@ -7,6 +7,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGat
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.SendPaymentReplyPort;
+import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,10 +69,10 @@ class PaymentRecorder {
         }
         Instant now = clock.instant();
         Payment payment = result.approved()
-                ? Payment.approved(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(), command.amount(),
-                        result.transactionId(), now)
-                : Payment.declined(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(), command.amount(),
-                        result.reason(), now);
+                ? Payment.approved(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(),
+                        Money.of(command.amount()), result.transactionId(), now)
+                : Payment.declined(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(),
+                        Money.of(command.amount()), result.reason(), now);
         paymentPort.insert(payment);
         reply(payment);
     }
@@ -83,7 +84,7 @@ class PaymentRecorder {
             return;
         }
         paymentPort.insert(Payment.unknown(UuidCreator.getTimeOrderedEpoch(), command.orderId(), command.userId(),
-                command.amount(), clock.instant()));
+                Money.of(command.amount()), clock.instant()));
         log.warn("PG 응답 타임아웃, 결과 조회로 확정 예정 (orderId={})", command.orderId());
     }
 
@@ -109,7 +110,7 @@ class PaymentRecorder {
         if (found.isEmpty()) {
             log.warn("결제 기록 없는 결제 취소 (orderId={})", command.orderId());
             paymentPort.insert(Payment.cancelledBeforePayment(UuidCreator.getTimeOrderedEpoch(), command.orderId(),
-                    command.userId(), command.amount(), now));
+                    command.userId(), Money.of(command.amount()), now));
         } else {
             Payment payment = found.get();
             if (payment.requestCancel(now)) {

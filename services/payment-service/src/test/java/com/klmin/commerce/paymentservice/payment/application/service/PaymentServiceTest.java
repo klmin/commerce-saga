@@ -10,6 +10,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGat
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.SendPaymentReplyPort;
+import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import com.klmin.commerce.paymentservice.payment.domain.PaymentStatus;
 import org.junit.jupiter.api.Test;
@@ -114,7 +115,7 @@ class PaymentServiceTest {
         UUID orderId = UUID.randomUUID();
         service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
-        assertThat(service.getPayment(new GetPaymentQuery(orderId, 1L)).amount()).isEqualTo(5_000L);
+        assertThat(service.getPayment(new GetPaymentQuery(orderId, 1L)).amount()).isEqualTo(Money.of(5_000L));
         assertThatThrownBy(() -> service.getPayment(new GetPaymentQuery(orderId, 2L)))
                 .isInstanceOf(PaymentNotFoundException.class);
     }
@@ -129,7 +130,7 @@ class PaymentServiceTest {
         final List<UUID> refunds = new ArrayList<>();
 
         @Override
-        public GatewayResult approve(UUID orderId, long userId, long amount) {
+        public GatewayResult approve(UUID orderId, long userId, Money amount) {
             calls++;
             if (timeout) {
                 throw new PaymentGatewayTimeoutException(orderId);

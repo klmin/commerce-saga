@@ -15,6 +15,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGat
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort.GatewayResult;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.ProcessedMessagePort;
+import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,7 +69,7 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
         }
         GatewayResult result;
         try {
-            result = gateway.approve(command.orderId(), command.userId(), command.amount());
+            result = gateway.approve(command.orderId(), command.userId(), Money.of(command.amount()));
         } catch (PaymentGatewayTimeoutException e) {
             recorder.recordUnknown(messageId, command);
             return;

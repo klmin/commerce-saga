@@ -25,7 +25,7 @@ public final class Payment {
     private final UUID id;
     private final UUID orderId;
     private final long userId;
-    private final long amount;
+    private final Money amount;
     private final Instant createdAt;
     private PaymentStatus status;
     private String transactionId;
@@ -33,11 +33,11 @@ public final class Payment {
     private boolean cancelRequested;
     private Instant updatedAt;
 
-    private Payment(UUID id, UUID orderId, long userId, long amount, PaymentStatus status, String transactionId,
+    private Payment(UUID id, UUID orderId, long userId, Money amount, PaymentStatus status, String transactionId,
                     String reason, boolean cancelRequested, Instant createdAt, Instant updatedAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.orderId = Objects.requireNonNull(orderId, "orderId");
-        if (amount <= 0) {
+        if (!Objects.requireNonNull(amount, "amount").isPositive()) {
             throw new DomainValidationException("amount must be positive");
         }
         this.userId = userId;
@@ -50,29 +50,29 @@ public final class Payment {
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
-    public static Payment approved(UUID id, UUID orderId, long userId, long amount, String transactionId,
+    public static Payment approved(UUID id, UUID orderId, long userId, Money amount, String transactionId,
                                    Instant now) {
         return new Payment(id, orderId, userId, amount, PaymentStatus.APPROVED,
                 Objects.requireNonNull(transactionId, "transactionId"), null, false, now, now);
     }
 
-    public static Payment declined(UUID id, UUID orderId, long userId, long amount, String reason, Instant now) {
+    public static Payment declined(UUID id, UUID orderId, long userId, Money amount, String reason, Instant now) {
         return new Payment(id, orderId, userId, amount, PaymentStatus.DECLINED, null, reason, false, now, now);
     }
 
     /** PG 응답 타임아웃. 결과는 PG 조회로 확정한다 */
-    public static Payment unknown(UUID id, UUID orderId, long userId, long amount, Instant now) {
+    public static Payment unknown(UUID id, UUID orderId, long userId, Money amount, Instant now) {
         return new Payment(id, orderId, userId, amount, PaymentStatus.UNKNOWN, null, "PG response timeout", false,
                 now, now);
     }
 
     /** 결제 기록이 없는데 취소가 옴 (Pay 가 아직 안 왔거나 DLT 로 감). 늦게 온 Pay 가 결제하지 않게 남긴다 */
-    public static Payment cancelledBeforePayment(UUID id, UUID orderId, long userId, long amount, Instant now) {
+    public static Payment cancelledBeforePayment(UUID id, UUID orderId, long userId, Money amount, Instant now) {
         return new Payment(id, orderId, userId, amount, PaymentStatus.CANCELLED, null, "cancelled before payment",
                 true, now, now);
     }
 
-    public static Payment restore(UUID id, UUID orderId, long userId, long amount, PaymentStatus status,
+    public static Payment restore(UUID id, UUID orderId, long userId, Money amount, PaymentStatus status,
                                   String transactionId, String reason, boolean cancelRequested, Instant createdAt,
                                   Instant updatedAt) {
         return new Payment(id, orderId, userId, amount, status, transactionId, reason, cancelRequested, createdAt,
@@ -158,7 +158,7 @@ public final class Payment {
         return userId;
     }
 
-    public long amount() {
+    public Money amount() {
         return amount;
     }
 

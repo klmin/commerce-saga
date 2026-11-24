@@ -1,6 +1,7 @@
 package com.klmin.commerce.paymentservice.payment.adapter.out.persistence;
 
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
+import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Limit;
@@ -41,7 +42,7 @@ class PaymentPersistenceAdapter implements PaymentPort {
     @Override
     public void insert(Payment payment) {
         entityManager.persist(new PaymentJpaEntity(payment.id(), payment.orderId(), payment.userId(),
-                payment.amount(), payment.status(), payment.transactionId(), payment.reason(),
+                payment.amount().value(), payment.status(), payment.transactionId(), payment.reason(),
                 payment.cancelRequested(), payment.createdAt(), payment.updatedAt()));
         entityManager.flush();
     }
@@ -56,7 +57,7 @@ class PaymentPersistenceAdapter implements PaymentPort {
     }
 
     private static Payment toDomain(PaymentJpaEntity e) {
-        return Payment.restore(e.getId(), e.getOrderId(), e.getUserId(), e.getAmount(), e.getStatus(),
+        return Payment.restore(e.getId(), e.getOrderId(), e.getUserId(), Money.of(e.getAmount()), e.getStatus(),
                 e.getTransactionId(), e.getReason(), e.isCancelRequested(), e.getCreatedAt(), e.getUpdatedAt());
     }
 }
