@@ -125,7 +125,7 @@ jobs:
           # Strimzi 는 Deployment 대신 StrimziPodSet 으로 Pod 를 띄운다
           kubectl -n commerce logs -l strimzi.io/kind=KafkaConnect --tail=80 || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
-          for d in auth-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+          for d in auth-service product-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
             echo "===== $d"
             kubectl -n commerce logs deployment/$d --tail=80 || true
           done

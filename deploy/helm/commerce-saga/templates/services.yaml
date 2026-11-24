@@ -1,4 +1,4 @@
-# 백엔드 서비스 7개. 이미지 = deploy/docker/service.Dockerfile, 설정은 application.yml 의 환경변수를 채운다.
+# 백엔드 서비스 8개. 이미지 = deploy/docker/service.Dockerfile, 설정은 application.yml 의 환경변수를 채운다.
 # 서비스마다 자기 DB·계정만 받는다 (다른 서비스 DB 비밀번호를 갖지 않는다)
 {{- $root := . }}
 {{- $kafka := include "commerce.kafkaBootstrap" . }}

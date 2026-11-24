@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: bootJar
-        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:gateway:bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:product-service:bootJar :services:gateway:bootJar
 
       - name: Next 빌드, Playwright 브라우저
         working-directory: frontend
@@ -54,12 +54,12 @@ jobs:
       - name: 서비스·Next 기동
         run: |
           mkdir -p logs
-          for svc in auth-service inventory-service point-service payment-service order-service notification-service gateway; do
+          for svc in auth-service product-service inventory-service point-service payment-service order-service notification-service gateway; do
             nohup java -jar services/$svc/build/libs/$svc-*.jar > logs/$svc.log 2>&1 &
           done
           # Next(:3500, package.json). Next 서버만 Gateway(:8000)를 부른다 (ADR 0011)
           (cd frontend && BACKEND_URL=http://localhost:8000 nohup npm run start > ../logs/frontend.log 2>&1 &)
-          for url in 8086 8081 8082 8083 8084 8085 8000; do
+          for url in 8086 8087 8081 8082 8083 8084 8085 8000; do
             url=http://localhost:$url/actuator/health
             for i in $(seq 1 60); do curl -sf "$url" | grep -q UP && break; sleep 2; done
             curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }

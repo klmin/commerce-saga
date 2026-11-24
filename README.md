@@ -16,6 +16,7 @@ flowchart LR
     gw -- "/orders (JWT 재검증)" --> order
     client -- "/auth/login" --> gw
     gw --> auth[auth-service\nauth_db · Redis\nJWT 발급 · JWKS]
+    gw -- "/products (공개 조회)\n/admin/products" --> product[product-service\nproduct_db\n상품 · 가격 · 가격 이력]
 
     subgraph order-service [order-service · 오케스트레이터]
         order[Order API] --> odb[(order_db\norders · order_sagas · outbox\nprocessed_message)]
@@ -67,6 +68,8 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:order-service:bootRun                  # 8081
 ./gradlew :services:notification-service:bootRun           # 8085 (선택)
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
+./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
+./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
 (cd frontend && npm ci && npm run dev)                 # 화면 http://localhost:3500. frontend/README.md
 ```
@@ -130,6 +133,10 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
 - [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, GitOps 는 ArgoCD, edge 는 Gateway API, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
+- [0015 컨텍스트 맵과 용어집, 쓰지 않기로 한 DDD 전술 패턴(도메인 이벤트 객체·이벤트 소싱·JPA Auditing)](docs/adr/0015-context-map-and-glossary.md)
+- [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
+- [0015 컨텍스트 맵과 용어집, 쓰지 않기로 한 DDD 전술 패턴(도메인 이벤트 객체·이벤트 소싱·JPA Auditing)](docs/adr/0015-context-map-and-glossary.md)
+- [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
 
 ## 구성
 
