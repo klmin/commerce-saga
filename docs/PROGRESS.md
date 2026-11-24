@@ -516,9 +516,10 @@ scripts/measure-relay.sh                                    # 시나리오 7 (�
 
 - 순서: 서비스 기동(Flyway가 outbox 생성) → 커넥터 등록 → 트래픽. 이 모드는 outbox를 넣고 바로 지우므로 **slot이 생기기 전에 쓴 메시지는 발행되지 않는다**. slot이 없으면 서비스가 기동 때 WARN을 남긴다(`DebeziumSlotCheck`)
 - 커넥터를 등록한 채로 서비스를 스케줄러 모드로 띄우면 두 relay가 같은 메시지를 두 번 보낸다(id 같음 → 컨슈머가 걸러 결과는 같지만 의도한 상태가 아님). 로컬에서 모드를 바꿀 때는 서비스를 모두 내리고 `down -v`로 새로 시작하는 게 가장 단순하다
-- 모드는 기동 때 정해진다(`@ConditionalOnProperty`, `OutboxWriter`). 서비스를 내리지 않고 바꾸려면 인스턴스를 하나씩 재시작하는 롤링이 되고, 그동안 두 모드가 섞인다. 규칙 하나: **`false` 인스턴스가 하나라도 떠 있는 동안 커넥터(와 slot)를 지우지 않는다.** 그 인스턴스는 넣고 바로 지우므로 WAL을 읽는 커넥터만 발행할 수 있다. 겹치는 구간의 중복은 컨슈머가 거른다
+- 모드는 기동 때 정해진다(`@ConditionalOnProperty`, `OutboxWriter`). 서비스를 내리지 않고 바꾸려면 인스턴스를 하나씩 재시작하는 롤링이 되고, 그동안 두 모드가 섞인다. 규칙 하나: **`false` 인스턴스가 하나라도 떠 있거나, 그 인스턴스들이 쓴 메시지를 커넥터가 아직 다 발행하지 못한 동안 커넥터(와 slot)를 지우지 않는다.** 그 인스턴스는 넣고 바로 지우므로 WAL을 읽는 커넥터만 발행할 수 있다. 겹치는 구간의 중복은 컨슈머가 거른다
   - 스케줄러 → Debezium: 커넥터 등록 → 인스턴스를 하나씩 `false`로 교체 → outbox 0행 확인
-  - Debezium → 스케줄러: 커넥터를 둔 채 인스턴스를 하나씩 `true`로 교체 → slot 적체가 heartbeat 주기(10초) 안에 줄어드는지 확인 → 커넥터 삭제(`curl -X DELETE localhost:8088/connectors/<이름>`), 필요하면 아래처럼 slot 삭제
+  - Debezium → 스케줄러: 커넥터를 둔 채 인스턴스를 하나씩 `true`로 교체 → `false` 인스턴스가 모두 정상 종료된 뒤(진행 중 트랜잭션 완료) 그 서비스 DB에서 기준 위치를 기록: `select pg_current_wal_lsn()` → 커넥터가 그 위치까지 발행·확인할 때까지 기다림: `select confirmed_flush_lsn >= '<기준 위치>'::pg_lsn from pg_replication_slots where slot_name = '<서비스>_outbox_slot'` 이 `t` (heartbeat 10초마다 위치가 앞으로 간다) → 커넥터 삭제(`curl -X DELETE localhost:8088/connectors/<이름>`), 필요하면 아래처럼 slot 삭제
+  - 적체가 "줄어드는 것"만 보고 지우면 안 된다. 일부만 읽은 상태일 수 있고, 남은 메시지는 outbox 행이 이미 지워져 스케줄러도 되살리지 못한다
   - 거꾸로(커넥터·slot을 먼저 지우고 인스턴스 교체) 하면 아직 `false`인 인스턴스가 그사이 쓴 메시지는 outbox에도 WAL을 읽을 slot에도 없어 **사라진다**
 - 커넥터를 지워도 slot은 DB에 남아 WAL을 붙잡는다. 다시 등록하지 않을 거면 `select pg_drop_replication_slot('<서비스>_outbox_slot')`
 
