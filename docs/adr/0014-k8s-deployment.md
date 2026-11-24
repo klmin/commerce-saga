@@ -74,6 +74,6 @@
 
 - **CD 는 pull 방식**: CI(`release` 워크플로)는 이미지를 GHCR 에 올리고 배포 브랜치 `release/eks` 를 옮기기만 한다. 클러스터 안의 ArgoCD 가 그 브랜치를 보고 sync 한다. CI 에 클러스터 자격증명을 두지 않는다
 - **레지스트리는 GHCR(public)**: `GITHUB_TOKEN` 으로 push, AWS 쪽 설정(ECR·IAM OIDC) 없음, 노드는 인증 없이 pull
-- **개발용 시드 사용자를 넣지 않는다**: 인터넷에 열리므로 EKS 값에서 `AUTH_FLYWAY_LOCATIONS` 를 `classpath:db/migration` 만으로 둔다(저장소에 공개된 admin 비밀번호로 결제 장애 주입이 가능해지는 것을 막음)
+- **개발용 시드 사용자를 넣지 않는다**: 인터넷에 열리므로 EKS 값에서 `AUTH_FLYWAY_LOCATIONS` 를 `classpath:db/migration` 만으로 둔다(저장소에 공개된 admin 비밀번호로 결제 장애 주입이 가능해지는 것을 막음). 가입자 id 를 1000 부터 시작하는 구문은 시드에만 있었으므로 auth-service `V3__user_id_starts_at_1000` 으로 옮겨, 시드 없이도 가입자가 point-service 의 시연용 계정(1~4)을 물려받지 않게 한다
 - **이미지 태그 = 커밋 해시 = ArgoCD 가 sync 하는 revision**: EKS root(`deploy/argocd/eks/root.yaml`)가 `$ARGOCD_APP_REVISION` 을 자식의 `revision`·`imageTag` 로 넘긴다. main 은 ruleset 으로 PR 만 받아 태그를 Git 에 커밋하는 봇이 어렵고, ArgoCD Image Updater 는 root 의 selfHeal 과 부딪친다. 브랜치를 이미지 push 뒤에만 옮기므로 이미지 없는 커밋이 배포되지 않는다
 - 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만
