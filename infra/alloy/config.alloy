@@ -1,6 +1,84 @@
-// OTLP 수집기 (ADR 0013). 서비스는 trace·로그를 여기 하나로 보낸다 → trace 는 Tempo, 로그는 Loki
-// 서비스는 수집기 주소(OTLP_TRACING_ENDPOINT·OTLP_LOGGING_ENDPOINT)만 알고, 저장소를 바꿔도 서비스 설정은 그대로다
-// 메트릭은 여기를 거치지 않는다. Prometheus 가 /actuator/prometheus 를 긁는다 (pull, 서비스가 죽은 것도 up=0 으로 보인다)
+// 수집기 (ADR 0013). trace·로그·메트릭을 모두 여기서 모아 저장소로 나눈다
+//   trace  : 서비스 ──OTLP push──▶ Alloy ──▶ Tempo
+//   로그   : 서비스 ──OTLP push──▶ Alloy ──▶ Loki
+//   메트릭 : Alloy ──scrape(pull)──▶ 서비스·kafka-exporter·관측성 스택 ──remote_write──▶ Prometheus (저장·경보)
+// 서비스는 수집기 주소(OTLP_TRACING_ENDPOINT·OTLP_LOGGING_ENDPOINT)만 알고, 저장소를 바꿔도 서비스 설정은 그대로다.
+// compose 와 k8s 가 이 파일을 같이 쓴다(차트 files/observability 사본). 환경마다 다른 것은 환경 변수로 받고,
+// k8s 에만 있는 수집(노드의 컨테이너 메모리)은 차트가 같은 폴더에 kubernetes.alloy 로 더 넣는다
+
+// ───────────── 메트릭 ─────────────
+// Alloy 가 긁어도 pull 이라 죽은 대상은 up=0 으로 남는다(경보 ServiceDown). Alloy 자체가 멈추면 아무것도 들어오지 않으므로
+// Prometheus 가 up{job="alloy"} 가 사라진 것을 경보로 본다(MetricsPipelineDown)
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// 서비스 7개 /actuator/prometheus: Saga·결제·outbox 메트릭(commerce_*), JVM, HTTP, Kafka 클라이언트.
+// 주소가 환경마다 달라(compose: host.docker.internal:<포트>, k8s: <Service>:<포트>) JSON 으로 받는다
+//   METRICS_SERVICE_TARGETS='[{"__address__":"order-service:8081","service":"order-service"}, ...]'
+prometheus.scrape "services" {
+  targets         = encoding.from_json(sys.env("METRICS_SERVICE_TARGETS"))
+  job_name        = "services"
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "5s"
+  scrape_timeout  = "5s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// 컨슈머 그룹 lag, 토픽 끝 오프셋(DLT 적재 확인). 서비스가 죽어 있어도 브로커 기준으로 보인다
+prometheus.scrape "kafka" {
+  targets         = [{"__address__" = "kafka-exporter:9308"}]
+  job_name        = "kafka"
+  scrape_interval = "5s"
+  scrape_timeout  = "5s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// 관측성 스택 자신(메모리·수집량·오류). 수집기·저장소가 죽거나 한도에 닿으면 trace·로그가 조용히 사라지므로 따로 본다.
+// 15s 로 둔다: 기본 60s 면 MetricsPipelineDown(1분 동안 up{job="alloy"} 없음)이 수집 사이 틈에 잘못 울릴 수 있다
+prometheus.scrape "tempo" {
+  targets         = [{"__address__" = "tempo:3200"}]
+  job_name        = "tempo"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.scrape "loki" {
+  targets         = [{"__address__" = "loki:3100"}]
+  job_name        = "loki"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.scrape "prometheus" {
+  targets         = [{"__address__" = "prometheus:9090"}]
+  job_name        = "prometheus"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// 내장 exporter 는 job="integrations/…" 를 스스로 붙여 job_name 으로 바뀌지 않는다 → 경보가 쓰는 이름으로 바꾼다
+prometheus.exporter.self "alloy" { }
+
+discovery.relabel "alloy" {
+  targets = prometheus.exporter.self.alloy.targets
+
+  rule {
+    target_label = "job"
+    replacement  = "alloy"
+  }
+}
+
+prometheus.scrape "alloy" {
+  targets         = discovery.relabel.alloy.output
+  job_name        = "alloy"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// ───────────── trace·로그 ─────────────
 
 otelcol.receiver.otlp "default" {
   http {
