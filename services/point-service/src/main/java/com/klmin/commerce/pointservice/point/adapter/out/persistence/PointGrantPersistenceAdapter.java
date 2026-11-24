@@ -27,7 +27,7 @@ class PointGrantPersistenceAdapter implements PointGrantPort {
     @Transactional(propagation = Propagation.MANDATORY)
     public void save(PointGrant grant) {
         jdbc.sql(INSERT)
-                .params(grant.id(), grant.userId(), grant.amount(), grant.type().name(),
+                .params(grant.id(), grant.userId().value(), grant.amount().value(), grant.type().name(),
                         Timestamp.from(grant.createdAt()))
                 .update();
     }

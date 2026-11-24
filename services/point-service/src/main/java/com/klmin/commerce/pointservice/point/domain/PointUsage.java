@@ -17,38 +17,47 @@ public final class PointUsage {
     public static final int REASON_MAX_LENGTH = 200;
 
     private final UUID orderId;
-    private final Long userId;
-    private final long amount;
+    private final UserId userId;
+    private final Points amount;
     private final String reason;
     private final Instant createdAt;
     private PointUsageStatus status;
     private Instant updatedAt;
 
-    private PointUsage(UUID orderId, Long userId, long amount, PointUsageStatus status, String reason,
+    private PointUsage(UUID orderId, UserId userId, Points amount, PointUsageStatus status, String reason,
                        Instant createdAt, Instant updatedAt) {
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         this.userId = userId;
-        this.amount = amount;
+        this.amount = Objects.requireNonNull(amount, "amount");
         this.status = Objects.requireNonNull(status, "status");
         this.reason = truncate(reason);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
-    public static PointUsage used(UUID orderId, long userId, long amount, Instant now) {
+    public static PointUsage used(UUID orderId, UserId userId, Points amount, Instant now) {
+        Objects.requireNonNull(userId, "userId");
+        if (!amount.isPositive()) {
+            throw new IllegalArgumentException("used amount must be positive: " + amount.value());
+        }
         return new PointUsage(orderId, userId, amount, PointUsageStatus.USED, null, now, now);
     }
 
+    /**
+     * 거절 기록. 커맨드 값을 그대로 받되, 잘못된 값(userId 0 이하, 음수 금액)은 남기지 않는다(사용자 없음·0).
+     * 거절 기록은 차감·환불에 쓰이지 않고 사유(reason)로 남는다.
+     */
     public static PointUsage rejected(UUID orderId, long userId, long amount, String reason, Instant now) {
-        return new PointUsage(orderId, userId, amount, PointUsageStatus.REJECTED, reason, now, now);
+        return new PointUsage(orderId, userId > 0 ? UserId.of(userId) : null, Points.of(Math.max(amount, 0L)),
+                PointUsageStatus.REJECTED, reason, now, now);
     }
 
     /** 사용 기록 없이 RefundPoint 가 먼저 온 경우. 늦게 온 UsePoint 가 차감하지 못하게 막는다 */
     public static PointUsage refundedWithoutUsage(UUID orderId, Instant now) {
-        return new PointUsage(orderId, null, 0L, PointUsageStatus.REFUNDED, "refunded before usage", now, now);
+        return new PointUsage(orderId, null, Points.ZERO, PointUsageStatus.REFUNDED, "refunded before usage", now, now);
     }
 
-    public static PointUsage restore(UUID orderId, Long userId, long amount, PointUsageStatus status, String reason,
+    public static PointUsage restore(UUID orderId, UserId userId, Points amount, PointUsageStatus status, String reason,
                                      Instant createdAt, Instant updatedAt) {
         return new PointUsage(orderId, userId, amount, status, reason, createdAt, updatedAt);
     }
@@ -75,11 +84,12 @@ public final class PointUsage {
         return orderId;
     }
 
-    public Long userId() {
+    /** 사용 전 환불 기록·잘못된 커맨드의 거절 기록이면 null */
+    public UserId userId() {
         return userId;
     }
 
-    public long amount() {
+    public Points amount() {
         return amount;
     }
 

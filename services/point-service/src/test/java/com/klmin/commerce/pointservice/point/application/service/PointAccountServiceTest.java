@@ -4,6 +4,8 @@ import com.klmin.commerce.pointservice.common.error.DomainValidationException;
 import com.klmin.commerce.pointservice.point.application.port.in.OpenPointAccountCommand;
 import com.klmin.commerce.pointservice.point.domain.PointGrant;
 import com.klmin.commerce.pointservice.point.domain.PointGrantType;
+import com.klmin.commerce.pointservice.point.domain.Points;
+import com.klmin.commerce.pointservice.point.domain.UserId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -34,8 +36,8 @@ class PointAccountServiceTest {
 
         assertThat(accounts.balance(1000L)).isEqualTo(1_000L);
         assertThat(grants.grants).singleElement().satisfies(g -> {
-            assertThat(g.userId()).isEqualTo(1000L);
-            assertThat(g.amount()).isEqualTo(1_000L);
+            assertThat(g.userId()).isEqualTo(UserId.of(1000L));
+            assertThat(g.amount()).isEqualTo(Points.of(1_000L));
             assertThat(g.type()).isEqualTo(PointGrantType.SIGNUP_BONUS);
             assertThat(g.createdAt()).isEqualTo(NOW);
             assertThat(g.id().version()).isEqualTo(7);
@@ -92,7 +94,7 @@ class PointAccountServiceTest {
 
     @Test
     void grantRecord_mustBePositive() {
-        assertThatThrownBy(() -> PointGrant.signupBonus(UUID.randomUUID(), 1L, 0L, NOW))
+        assertThatThrownBy(() -> PointGrant.signupBonus(UUID.randomUUID(), UserId.of(1L), Points.ZERO, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -8,6 +8,8 @@ import com.klmin.commerce.pointservice.point.application.port.out.SendPointReply
 import com.klmin.commerce.pointservice.point.domain.PointAccount;
 import com.klmin.commerce.pointservice.point.domain.PointUsage;
 import com.klmin.commerce.pointservice.point.domain.PointUsageStatus;
+import com.klmin.commerce.pointservice.point.domain.Points;
+import com.klmin.commerce.pointservice.point.domain.UserId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -61,15 +63,18 @@ class PointServiceTest {
     void use_unknownAccount_orInvalidAmount_repliesFailed() {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();
+        UUID c = UUID.randomUUID();
         accounts.put(1L, 100L);
 
         service.use(UUID.randomUUID(), new UsePointCommand(a, 99L, 10L));
         service.use(UUID.randomUUID(), new UsePointCommand(b, 1L, 0L));
+        service.use(UUID.randomUUID(), new UsePointCommand(c, 0L, 10L));
 
         assertThat(accounts.balance(1L)).isEqualTo(100L);
         assertThat(replies.log).containsExactly(
                 "failed:" + a + ":point account not found: userId=99",
-                "failed:" + b + ":invalid command: amount must be positive");
+                "failed:" + b + ":invalid command: amount must be positive",
+                "failed:" + c + ":invalid command: userId must be positive");
     }
 
     @Test
@@ -145,29 +150,29 @@ class PointServiceTest {
     void getBalance() {
         accounts.put(1L, 500L);
 
-        assertThat(service.getBalance(1L).balance()).isEqualTo(500L);
+        assertThat(service.getBalance(1L).balance()).isEqualTo(Points.of(500L));
         assertThatThrownBy(() -> service.getBalance(2L)).isInstanceOf(PointAccountNotFoundException.class);
     }
 
     static class InMemoryAccounts implements PointAccountPort {
 
-        final Map<Long, PointAccount> store = new HashMap<>();
+        final Map<UserId, PointAccount> store = new HashMap<>();
 
         void put(long userId, long balance) {
-            store.put(userId, PointAccount.restore(userId, balance, NOW));
+            store.put(UserId.of(userId), PointAccount.restore(UserId.of(userId), Points.of(balance), NOW));
         }
 
         long balance(long userId) {
-            return store.get(userId).balance();
+            return store.get(UserId.of(userId)).balance().value();
         }
 
         @Override
-        public Optional<PointAccount> findById(long userId) {
+        public Optional<PointAccount> findById(UserId userId) {
             return Optional.ofNullable(store.get(userId)).map(InMemoryAccounts::copy);
         }
 
         @Override
-        public Optional<PointAccount> findByIdForUpdate(long userId) {
+        public Optional<PointAccount> findByIdForUpdate(UserId userId) {
             return findById(userId);
         }
 

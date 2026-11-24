@@ -6,6 +6,8 @@ import com.klmin.commerce.pointservice.point.application.port.in.ListMyPointHist
 import com.klmin.commerce.pointservice.point.application.port.in.ListMyPointHistoryUseCase;
 import com.klmin.commerce.pointservice.point.application.port.in.PointHistoryEntryResult;
 import com.klmin.commerce.pointservice.point.domain.PointAccount;
+import com.klmin.commerce.pointservice.point.domain.Points;
+import com.klmin.commerce.pointservice.point.domain.UserId;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +43,7 @@ class PointControllerTest {
 
     @Test
     void getMyBalance_usesHeaderUser() throws Exception {
-        given(getPointBalanceUseCase.getBalance(3L)).willReturn(PointAccount.restore(3L, 700L, Instant.now()));
+        given(getPointBalanceUseCase.getBalance(3L)).willReturn(PointAccount.restore(UserId.of(3L), Points.of(700L), Instant.now()));
 
         mvc.perform(get("/points/me").with(jwt().jwt(j -> j.subject("3"))))
                 .andExpect(status().isOk())
