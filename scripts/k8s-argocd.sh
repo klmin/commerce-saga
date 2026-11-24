@@ -19,7 +19,8 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-1200}
 
 cd "$(dirname "$0")/.."
 
-IMAGES_ONLY=true bash scripts/k8s-deploy.sh
+# ArgoCD 는 Git 의 차트 값(image.tag=dev)으로 배포하므로 같은 태그로 넣는다
+TAG=dev IMAGES_ONLY=true bash scripts/k8s-deploy.sh
 
 echo "== ArgoCD (chart $ARGOCD_CHART_VERSION)"
 helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm \
