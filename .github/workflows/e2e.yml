@@ -1,5 +1,3 @@
-          echo "===== alloy"
-          docker compose -f infra/docker-compose.yml logs --tail 50 alloy || true
 name: e2e
 
 # 인프라(docker-compose) + 서비스(inventory, point, payment, order, notification, auth, gateway)를 실제로 띄우고 Saga 스모크 테스트를 돌린다.
