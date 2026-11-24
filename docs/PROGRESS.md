@@ -3,7 +3,7 @@
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
 - 마지막 갱신: 2026-11-24 (후속 3 K-3 PR = 후속 3 마지막, PR #41 머지 후)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(이번 PR)로 완료. 다음은 0절 2번(태그·DDD 후보·후속 4 중 사용자 결정)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 다음은 0절 2번(DDD 후보·후속 4 중 사용자 결정, 아직 안 정함)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. **후속 2 는 끝났고(태그 `v0.4-auth-frontend`), 지금은 후속 3(k8s).** 아래 "후속 3 진행" 표의 다음 PR 부터 한다. k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 후보 1(값 객체)·후보 2(컨텍스트 맵·용어집 ADR)는 아직 결정 전("F-2 시작 메모" 끝). 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)까지 끝났다. 다음 단계는 사용자가 고른다: DDD 후보 1·2 또는 후속 4(검색). 시작 전에 묻는다.** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 후보 1(값 객체)·후보 2(컨텍스트 맵·용어집 ADR)는 아직 결정 전("F-2 시작 메모" 끝). 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -46,7 +46,7 @@
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
-| 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 완료 (K-1 PR #40, K-2 PR #41, K-3 이번 PR) |
+| 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 완료 (K-1 PR #40, K-2 PR #41, K-3 PR #42, 태그 `v0.5-k8s`) |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
@@ -115,7 +115,7 @@ flowchart LR
 | #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
 | #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
 | #37 | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
-| (이번 PR) | 후속 3 K-3 (후속 3 마지막): ArgoCD app-of-apps(`deploy/argocd`, root 하나 → Strimzi·Envoy Gateway·commerce-saga, revision 하나로 같은 커밋), edge = Gateway API(`Gateway`·`HTTPRoute`, Envoy Gateway, 화면만 공개), `scripts/k8s-argocd.sh`, CI `k8s` 의 `argocd` 잡(PR 커밋 sync → Synced·Healthy, edge 로 화면, 시나리오 0·1), ADR 0014 K-3 |
+| #42 | 후속 3 K-3 (후속 3 마지막): ArgoCD app-of-apps(`deploy/argocd`, root 하나 → Strimzi·Envoy Gateway·commerce-saga, revision 하나로 같은 커밋), edge = Gateway API(`Gateway`·`HTTPRoute`, Envoy Gateway, 화면만 공개), `scripts/k8s-argocd.sh`, CI `k8s` 의 `argocd` 잡(PR 커밋 sync → Synced·Healthy, edge 로 화면, 시나리오 0·1), ADR 0014 K-3 |
 | #41 | 후속 3 K-2: Connect 이미지(`deploy/docker/connect.Dockerfile`, Strimzi Kafka + Debezium Postgres), 차트 `debezium.enabled`(KafkaConnect 하나 + 서비스별 KafkaConnector 5개, heartbeat 토픽, 서비스 스케줄러 relay 끔), CI 에서 커넥터 Ready·outbox 비어 있음·활성 slot 5개 확인 |
 | #40 | 후속 3 K-1: 공용 서비스 이미지(`deploy/docker/service.Dockerfile`), Helm 차트 `deploy/helm/commerce-saga`(Postgres·Redis StatefulSet, Strimzi Kafka 4.3.2·KafkaTopic, 서비스 7개, 화면), `scripts/k8s-deploy.sh`·`k8s-port-forward.sh`, CI `k8s`(kind 배포 + 시나리오 0·1·9·10) |
 | #39 | 후속 2 F-2b (후속 2 마지막): 로그인 기기 관리 `/sessions`(다른 기기·모든 기기 로그아웃), 관리자 `/admin`(ADMIN 만, 결제 장애 주입, DLT 안내), 헤더 메뉴(관리자는 토큰 roles 로 표시만), CI `browser-e2e`(서비스 7개 + `next start` + Playwright 13개), README 후속 2 완료 |
@@ -218,7 +218,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | F-1a | Next.js 기본 구성(템플릿 가져오기, ADR 0011) + 로그인·회원가입·로그아웃·세션 refresh, CI `frontend` | 완료 PR #35 |
 | F-1b | 상품 목록(고정 1~5), 주문 생성(Idempotency-Key), 내 주문 목록, 주문 상세(Saga 단계 타임라인·보상 경로) | 완료 PR #36 |
 | F-2a | 포인트 내역 API(point-service) + 포인트·결제 내역·알림 화면 | 완료 PR #38 |
-| F-2b | 로그인 기기 관리 + 관리자(결제 장애 주입. DLT 는 화면 없이 안내, 준비 메모 #6) + 브라우저 e2e CI + 후속 2 마무리 | 이번 PR (후속 2 끝) |
+| F-2b | 로그인 기기 관리 + 관리자(결제 장애 주입. DLT 는 화면 없이 안내, 준비 메모 #6) + 브라우저 e2e CI + 후속 2 마무리 | PR #39 (후속 2 끝) |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
 - 새 서비스 `services/auth-service` (8086, `auth_db`/`auth_svc`, Redis 6380). 헥사고날 그대로, 기능 패키지 `auth` 하나. Kafka·outbox 없음(다른 서비스와 메시지를 주고받지 않음)
@@ -301,14 +301,14 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 이 PC 환경 메모: Node 22.12 에서는 Vitest 가 undici 로드에 실패한다(engines `^24.15`). `npx -p node@24 node node_modules/vitest/vitest.mjs run` 처럼 Node 24 로 돌렸다. Playwright 브라우저(1255)가 없어 설치된 Edge 를 `launchOptions.executablePath` 로 지정한 임시 설정으로 돌렸다(커밋 안 함)
 - 한계: F-2a 전에 가입해 계정이 이미 있던 사용자는 지급 기록이 없다(로컬·CI 데이터만). 시드 사용자 1~4 의 시작 잔액도 지급 기록이 아니다(시드)
 
-**F-2b 로그인 기기·관리자·CI 브라우저 e2e (이번 PR) 에서 한 것 (결정·확인 사항)**
+**F-2b 로그인 기기·관리자·CI 브라우저 e2e (PR #39) 에서 한 것 (결정·확인 사항)**
 - `/sessions`: 헤더의 "사용자 #N" 을 누르면 간다. auth-service `GET /auth/sessions` 에 Bearer + refresh 쿠키(이 기기 표시)를 Next 서버가 보낸다. 이 기기는 맨 위·"이 기기" 표시만(로그아웃은 헤더 버튼), 다른 기기는 "로그아웃"(`DELETE /auth/sessions/{id}`, 소유자 검사는 auth-service), "모든 기기에서 로그아웃"(`POST /auth/logout-all`) 뒤 이 브라우저 쿠키도 지우고 로그인 화면. Server Action 은 세션 id 를 UUID 형식으로 먼저 거르고, 이미 없는 세션(404)은 목록만 다시 그린다. 기기 이름은 User-Agent 에서 브라우저·OS 만(`lib/auth/device.ts`)
 - 로그아웃한 다른 기기는 access token(최대 15분)이 끝나면 proxy 의 refresh 가 거절돼 로그인 화면으로 간다(즉시 차단 없음, ADR 0008 한계 그대로). Playwright 는 그 기기의 access 쿠키만 지워 확인한다
 - `/admin`: 토큰 `roles` 에 ADMIN 이 없으면 404(메뉴도 안 보임). 표시용일 뿐 권한은 Gateway `/api/admin/**` = ADMIN 과 payment-service 가 서명된 토큰으로 검사한다(위조 쿠키로 화면을 열어도 API 403 → 404). 결제 장애 주입 폼(승인·거절·지연 ms, 0~60,000), DLT 는 준비 메모 #6 대로 화면 없이 Kafka UI(`:8989`)·`scripts/dlt.sh` 안내
 - 폼은 제어 컴포넌트 + `onSubmit` 에서 Server Action 을 직접 부른다. 처음에는 저장 뒤 React 의 폼 초기화로 라디오가 옛 값으로 돌아가 보였다(Playwright 로 잡음). F-1b 주문 폼과 같은 방식
 - **브라우저 e2e 를 CI 에 넣었다**(준비 메모 "F-1 CI" 판단): 새 워크플로 `browser-e2e`(frontend·서비스·infra 변경 때). bootJar + `next build` + Playwright chromium → 인프라 + 서비스 7개(스케줄러 relay) + `next start :3500` → `e2e/` 13개. e2e(saga) 워크플로에 붙이지 않은 이유: 시나리오 9 때문에 Gateway 사용자 rate limit 을 초당 5 로 낮춰 띄우는데, 화면은 요청 한 번에 API 를 여러 개 불러 429 가 섞인다. 실패하면 Playwright 결과를 artifact 로 올린다
 - 확인(로컬, 서비스 7개 Debezium 모드 + `next dev`): Vitest 83개(+20: 토큰 roles, 기기 관리 호출, 기기 이름, 장애 입력, 두 Server Action), lint·typecheck·format, Playwright 13개(새 `sessions.spec` 2개: 다른 기기 로그아웃 → 그 기기 refresh 거절, 모든 기기 로그아웃 / `admin.spec` 2개: 거절 주입 → 결제 실패 → 포인트 환불·재고 해제·내역 "환불됨"·결제 "거절" → 정상 승인으로 되돌림, 일반 사용자는 메뉴 없음·404)
-- 후속 2 완료: README 상태·구성 갱신. 태그는 사용자에게 묻는다(0절 2번)
+- 후속 2 완료: README 상태·구성 갱신. 태그 `v0.4-auth-frontend`
 
 ### F-2 시작 메모 (2026-11-24 정리, 여기서 바로 시작)
 
@@ -419,7 +419,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 |---|---|---|
 | K-1 | 공용 서비스 이미지 + Helm 차트(Postgres·Redis StatefulSet, Strimzi Kafka·KafkaTopic, 서비스 7개, 화면) + CI kind 워크플로(시나리오 0·1·9·10) | 완료 PR #40 |
 | K-2 | Strimzi `KafkaConnect`·`KafkaConnector` 로 Debezium relay(ADR 0004 의 배포 기준) + Debezium 발행 확인 | 완료 PR #41 |
-| K-3 | ArgoCD(app-of-apps, CI kind 에서 GitHub 저장소를 sync 해 Healthy 확인) + edge(외부 공개는 이것 하나) + ADR 0014 보강 | 이번 PR |
+| K-3 | ArgoCD(app-of-apps, CI kind 에서 GitHub 저장소를 sync 해 Healthy 확인) + edge(외부 공개는 이것 하나) + ADR 0014 보강 | PR #42 |
 
 **K-1 (PR #40) 에서 한 것 (결정·확인 사항)**
 - 이미지: `deploy/docker/service.Dockerfile` 하나로 7개. bootJar 를 받아 레이어로 풀어 비 root 로 실행. 이미지 안에서 Gradle 을 돌리지 않는다
@@ -438,12 +438,12 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 - CI 첫 실행 실패: Strimzi v1 `KafkaConnect` 는 워커 그룹·내부 토픽을 config 가 아니라 spec 필드(`groupId`, `configStorageTopic` 등)로 받는다 → 고침
 - Codex 반영 (P0): slot 이 생기기 전에 Debezium 모드로 쓰면 메시지를 잃는다(넣고 바로 지우므로). k8s 는 Pod 가 뜨자마자 Kafka 를 소비해 배포 순서로 막을 수 없다 → `OutboxWriter` 가 slot·publication 을 확인하고 없으면 `OutboxNotReadyException` 으로 롤백(리스너는 재시도, 유실 대신 지연). ADR 0014 K-2 추가 결정, `OutboxWriterIntegrationTest` 2개
 
-**K-3 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**K-3 (PR #42) 에서 한 것 (결정·확인 사항)**
 - ArgoCD app-of-apps: `deploy/argocd/root.yaml` 하나만 apply. 자식(Strimzi·Envoy Gateway = OCI Helm, commerce-saga = 이 저장소 차트)은 `deploy/argocd/apps` 작은 Helm 차트라 `revision` 값 하나로 같은 커밋을 본다. 플랫폼 sync-wave -2, CRD 가 없을 때는 `SkipDryRunOnMissingResource` + 재시도. OCI 저장소는 repository Secret(`enableOCI`)
 - edge: Gateway API(`Gateway`·`HTTPRoute`) + Envoy Gateway(v1.10.0). ingress-nginx 은퇴(2026)로 Ingress 대신 표준의 다음 API. **화면(Next)만 공개**(ADR 0011 BFF), Spring Gateway·서비스·DB·Kafka·Redis 는 내부망. Envoy Service 타입은 값(kind = ClusterIP, LoadBalancer 면 주소가 없어 Programmed 안 됨)
 - `scripts/k8s-argocd.sh`: 이미지 → kind(빌드마다 새 태그, root → 자식 Application 의 `image.tag` 로 전달. Codex P1: `dev` 고정이면 다시 돌려도 옛 이미지로 Synced·Healthy), ArgoCD(chart 10.18.0) 설치, root apply(PR 커밋으로 바꿔 넣음), 네 Application Synced·Healthy + 커넥터 Ready 대기
 - CI `k8s` 의 `argocd` 잡: 위 스크립트 → edge 로 `/login` 200 → port-forward → 시나리오 0·1. 첫 실행에 통과
-- 후속 3 완료. 태그(예: `v0.5-k8s`)는 사용자에게 묻는다
+- 후속 3 완료. 태그 `v0.5-k8s`
 
 ## 5. 알려진 한계·나중 일
 
