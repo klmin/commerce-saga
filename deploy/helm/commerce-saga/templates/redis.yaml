@@ -1,0 +1,40 @@
+# auth-service refresh token family·로그인 실패 횟수, Gateway rate limit (ADR 0008).
+# 잃어도 다시 로그인하면 되므로 영속화하지 않는다 (compose 와 같음)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels: {{- include "commerce.labels" (dict "name" "redis" "root" .) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - name: redis
+      port: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels: {{- include "commerce.labels" (dict "name" "redis" "root" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "redis" "root" .) | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 3
+          resources: {{- toYaml .Values.redis.resources | nindent 12 }}

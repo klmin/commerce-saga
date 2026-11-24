@@ -1,0 +1,6 @@
+apiVersion: v2
+name: commerce-saga
+description: 커머스 주문 Saga (서비스 7개 + 화면 + Postgres·Redis·Kafka(Strimzi)). 후속 3 K-1
+type: application
+version: 0.1.0
+appVersion: "0.4.0"

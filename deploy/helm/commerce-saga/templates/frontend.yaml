@@ -1,0 +1,49 @@
+{{- if .Values.frontend.enabled }}
+# Next.js 화면 (frontend/Dockerfile, standalone). 브라우저는 Next 만, Next 서버만 Gateway 를 부른다 (ADR 0011)
+{{- $labels := include "commerce.labels" (dict "name" "frontend" "root" .) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels: {{- $labels | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: {{ .Values.frontend.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      containers:
+        - name: app
+          image: {{ include "commerce.image" (dict "name" "frontend" "root" .) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: BACKEND_URL
+              value: "http://gateway:{{ .Values.services.gateway.port }}"
+            {{- range $k, $v := .Values.frontend.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /login, port: http }
+            periodSeconds: 5
+          resources: {{- toYaml .Values.frontend.resources | nindent 12 }}
+{{- end }}
