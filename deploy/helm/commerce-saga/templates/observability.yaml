@@ -100,6 +100,10 @@ spec:
         - name: tempo
           image: {{ $o.tempo.image }}
           args: ["-config.file=/etc/tempo/tempo.yaml"]
+          {{- with $o.tempo.goMemLimit }}
+          env:
+            - { name: GOMEMLIMIT, value: {{ . | quote }} }
+          {{- end }}
           ports:
             - { name: http, containerPort: 3200 }
             - { name: otlp-http, containerPort: 4318 }
