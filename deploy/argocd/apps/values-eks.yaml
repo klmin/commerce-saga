@@ -1,0 +1,33 @@
+# EKS 값 (후속 3 K-4). deploy/argocd/eks/root.yaml 이 values.yaml 위에 덮는다.
+# revision·imageTag 는 root 가 커밋 해시로 넣는다
+
+commerceValues:
+  image:
+    # release 워크플로가 올리는 곳: ghcr.io/<owner>/commerce-saga/<이름>:<커밋 해시>
+    # GHCR 패키지가 private 이면 노드가 못 받는다 → 패키지 9개를 public 으로 (deploy/README.md)
+    registry: ghcr.io/klmin
+
+  # 비우면 클러스터 기본 StorageClass. EKS 는 EBS CSI 드라이버 add-on 과 기본 StorageClass(gp3 등)가 있어야 PVC 가 붙는다
+  storageClass: ""
+
+  edge:
+    enabled: true
+    # Envoy 를 AWS 로드밸런서로 연다. AWS Load Balancer Controller 가 있으면 NLB, 없으면 EKS 기본 CLB
+    serviceType: LoadBalancer
+    serviceAnnotations:
+      # LB Controller 는 기본이 internal 이다. 화면을 인터넷에 연다 (LB Controller 가 없으면 무시된다)
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+
+  # TLS(도메인·인증서)를 붙이기 전까지는 LB 주소를 http 로 연다. Secure 쿠키는 http 에서 브라우저가 버려 로그인이 안 된다
+  # → 임시로 끈다. https 를 붙이면 두 값을 지운다(기본 true)
+  frontend:
+    env:
+      COOKIE_SECURE: "false"
+  services:
+    auth-service:
+      env:
+        AUTH_COOKIE_SECURE: "false"
+    gateway:
+      env:
+        # EKS Pod IP 는 VPC 대역(10/8, 172.16/12, 192.168/16 중 하나). Spring Gateway 는 내부망에만 있다
+        GATEWAY_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1

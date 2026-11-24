@@ -69,3 +69,39 @@ kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-syst
 - Envoy 의 Service 타입은 값(`edge.serviceType`). kind 는 LoadBalancer 가 없어 ClusterIP, 클라우드는 LoadBalancer
 - 이미지는 여전히 `kind load`(레지스트리 없음). 레지스트리에 올리면 ArgoCD 만으로 끝난다
 - CI `k8s` 워크플로의 `argocd` 잡이 Synced·Healthy, edge 로 화면, 시나리오 0·1 을 확인한다
+
+## EKS 에 올리기 (K-4, GHCR + ArgoCD GitOps)
+
+클러스터는 이미 있다고 본다. CI 는 이미지만 GHCR 에 올리고, 클러스터 안의 ArgoCD 가 Git 을 보고 가져간다(CI 에 클러스터 권한 없음).
+
+```
+PR → CI(backend·e2e·k8s 등) → main 머지
+  → release 워크플로: bootJar → 이미지 9개 GHCR push (태그 = 커밋 해시) → release/eks 브랜치를 그 커밋으로
+  → EKS 의 ArgoCD: release/eks 가 움직이면 sync, 이미지 태그 = 그 커밋 해시 → 롤링 배포
+```
+
+| 파일 | 내용 |
+|---|---|
+| `.github/workflows/release.yml` | main push(문서만 바뀐 커밋 제외)·수동 실행. `ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시>` |
+| `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `$ARGOCD_APP_REVISION` 을 자식의 revision·이미지 태그로 넘긴다 |
+| `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |
+| `scripts/eks-argocd.sh` | 처음 한 번: ArgoCD 설치 → root apply → Synced·Healthy 대기 → 화면 주소 출력 |
+
+### 처음 한 번
+
+1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 9개, `release/eks` 브랜치가 생긴다
+2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 9개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
+3. 클러스터 준비 확인
+   - 노드가 **amd64**(x86). Graviton(arm64)이면 release 워크플로를 멀티 아키텍처로 바꿔야 한다
+   - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
+   - 노드 여유: 요청 합계 CPU 약 1.5 코어, 메모리 약 5Gi (서비스 7개 JVM + Kafka + Connect + Postgres)
+4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
+
+그 뒤로는 머지만 하면 된다. 롤백은 `git push origin <옛 커밋>:refs/heads/release/eks --force` (그 커밋의 이미지가 GHCR 에 있다).
+
+### 결정 (K-4)
+
+- **레지스트리는 GHCR**: 저장소와 같은 곳, Actions 의 기본 `GITHUB_TOKEN` 으로 push. AWS IAM·OIDC 설정이 없다. public 패키지라 pull secret 도 없다
+- **태그를 Git 에 커밋하지 않는다**: main 은 PR 로만 바뀌어(ruleset) 봇 커밋이 어렵다. 대신 배포 브랜치 `release/eks` 를 이미지가 다 올라간 뒤에만 옮기고, ArgoCD 가 sync 하는 커밋 해시를 태그로 쓴다. Git 의 `release/eks` 가 곧 "지금 배포된 것"이다
+- **http 로 먼저**: TLS(도메인·ACM/cert-manager)를 붙이기 전이라 `COOKIE_SECURE`·`AUTH_COOKIE_SECURE` 를 `false` 로 둔다. https 를 붙이면 지운다
+- DB·Redis·Kafka 는 kind 와 같이 클러스터 안 단일 인스턴스(EBS PVC). 운영이면 RDS(logical replication)·ElastiCache·MSK 로 바꿀 자리
