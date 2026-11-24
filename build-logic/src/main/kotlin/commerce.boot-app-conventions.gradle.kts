@@ -10,6 +10,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
     // /actuator/prometheus (Prometheus 가 긁어 간다, ADR 0013)
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    // 로그를 OTLP 로 Alloy → Loki (ADR 0013). Boot 는 exporter 만 만들어서 Logback appender 는 서비스가 붙인다
+    implementation("io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0:2.33.1-alpha")
     // access token(JWT) 검증 (ADR 0008). Gateway 1차, 서비스마다 다시 검증
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
 

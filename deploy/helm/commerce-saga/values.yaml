@@ -12,8 +12,9 @@ image:
 # 서비스 공통 환경변수
 common:
   env:
-    # 클러스터에 Tempo 가 없어 trace 를 내보내지 않는다 (보내면 실패 로그만 쌓인다)
+    # 클러스터에 수집기(Alloy·Tempo·Loki)가 없어 trace·로그를 내보내지 않는다 (보내면 실패 로그만 쌓인다)
     TRACING_SAMPLING_PROBABILITY: "0"
+    OTLP_LOGGING_EXPORT_ENABLED: "false"
     AUTH_JWT_ISSUER: commerce-saga-auth
 
 postgres:

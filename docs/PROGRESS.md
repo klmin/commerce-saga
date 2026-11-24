@@ -3,7 +3,7 @@
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
 - 마지막 갱신: 2026-11-24 (후속 3 K-3 PR = 후속 3 마지막, PR #41 머지 후)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 다음은 0절 2번(DDD 후보·후속 4 중 사용자 결정, 아직 안 정함)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, 이번 PR). 다음은 0절 2번(DDD 후보·후속 4 중 사용자 결정, 아직 안 정함)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -44,7 +44,7 @@
 | 1 | 기본 흐름 (모노레포, outbox + 스케줄러 relay, order → inventory) | 완료, 태그 `v0.1-basic-flow` |
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
-| 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
+| 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보, 로그) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28). O-3 로그·수집기(Alloy·Loki)는 후속 3 뒤 추가(이번 PR) |
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 완료 (K-1 PR #40, K-2 PR #41, K-3 PR #42, 태그 `v0.5-k8s`) |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
@@ -115,6 +115,7 @@ flowchart LR
 | #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
 | #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
 | #37 | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
+| (이번 PR) | 후속 1 보강 O-3 로그·수집기: 서비스 trace·로그 → OTLP → Alloy → Tempo·Loki, Logback OpenTelemetry appender(서비스마다 `OpenTelemetryLoggingConfig`), Grafana span ↔ 로그 링크, order-service Saga 진행 로그, 시나리오 11c, ADR 0013 로그 절. k8s 는 로그 export 끔 |
 | #42 | 후속 3 K-3 (후속 3 마지막): ArgoCD app-of-apps(`deploy/argocd`, root 하나 → Strimzi·Envoy Gateway·commerce-saga, revision 하나로 같은 커밋), edge = Gateway API(`Gateway`·`HTTPRoute`, Envoy Gateway, 화면만 공개), `scripts/k8s-argocd.sh`, CI `k8s` 의 `argocd` 잡(PR 커밋 sync → Synced·Healthy, edge 로 화면, 시나리오 0·1), ADR 0014 K-3 |
 | #41 | 후속 3 K-2: Connect 이미지(`deploy/docker/connect.Dockerfile`, Strimzi Kafka + Debezium Postgres), 차트 `debezium.enabled`(KafkaConnect 하나 + 서비스별 KafkaConnector 5개, heartbeat 토픽, 서비스 스케줄러 relay 끔), CI 에서 커넥터 Ready·outbox 비어 있음·활성 slot 5개 확인 |
 | #40 | 후속 3 K-1: 공용 서비스 이미지(`deploy/docker/service.Dockerfile`), Helm 차트 `deploy/helm/commerce-saga`(Postgres·Redis StatefulSet, Strimzi Kafka 4.3.2·KafkaTopic, 서비스 7개, 화면), `scripts/k8s-deploy.sh`·`k8s-port-forward.sh`, CI `k8s`(kind 배포 + 시나리오 0·1·9·10) |
@@ -194,6 +195,15 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 시나리오 11 (`scripts/smoke-tracing.sh`, CI 두 모드, 시나리오 2 다음): 요청에 traceparent를 넣고 정상 주문 = span 9개·서비스 5개 + 주문 id 검색으로 같은 trace, 결제 실패 = 보상까지 한 trace. 로컬 Debezium 모드 PASS
 - 배포 순서: 서비스(마이그레이션) 먼저, 커넥터 설정 나중(`table.field.additional.missing=error`라 컬럼이 없으면 커넥터 실패). 로컬에서 커넥터 재등록 직후 첫 주문은 재시작 때문에 10초 넘게 걸려 타임아웃 재전송이 한 번 났다
 - 한계: 단계 타임아웃 재전송·결제 보정 후 응답·traceparent 없는 예전 메시지는 새 trace로 시작(주문 id 검색으로는 모임). JDBC span 없음
+
+**O-3 로그·수집기 (이번 PR, 2026-11-24 사용자 요청: "Alloy 쓰는 걸로, Loki 빠져 있는 거 다") 에서 한 것 (결정·확인 사항)**
+- 수집기 `grafana/alloy:v1.21.3`: 서비스가 trace·로그를 OTLP 로 보내면 trace → Tempo, 로그 → Loki (`infra/alloy/config.alloy`). 호스트 OTLP **4328** 을 Tempo 에서 Alloy 로 옮김(서비스 기본값 그대로), Alloy UI **12346**. 메트릭은 Alloy 를 거치지 않고 Prometheus 가 그대로 긁는다(pull, 경보 규칙이 Prometheus 에 있음)
+- 로그 저장소 `grafana/loki:3.7.9`(단일 바이너리, 로컬 디스크, tsdb·v13, structured metadata), 호스트 **3110**. Loki·Alloy 이미지도 healthcheck 도구가 없어 CI 가 `/ready`·`/-/ready` 를 curl 로 기다림
+- 로그 보내는 법은 OTLP(파일·stdout 수집 아님): 로컬·CI 서비스가 호스트에서 `java -jar` 로 돌아서. Boot 4.2 는 OTLP 로그 exporter 까지만 만들고 appender 가 없어 `opentelemetry-logback-appender-1.0:2.33.1-alpha`(boot-app-conventions) + 서비스마다 `OpenTelemetryLoggingConfig`(기동 후 root logger 에 붙임, 컨텍스트 닫히면 뗌). 설정 `management.opentelemetry.logging.export.otlp.endpoint`(`OTLP_LOGGING_ENDPOINT`, 기본 `http://localhost:4328/v1/logs`), `management.logging.export.enabled`(`OTLP_LOGGING_EXPORT_ENABLED`, Helm 은 false)
+- Grafana: Tempo `tracesToLogsV2`(span → `{service_name="…"} | trace_id="…"`), Loki `derivedFields`(로그의 `trace_id` → Tempo). 로컬에서 span "Related logs" → Loki 창 확인
+- order-service 가 Saga 전이마다 `Saga 진행: <응답> -> <상태> (orderId=…)` INFO. 결제 거절은 payment-service 가 로그를 남기지 않아 11c 근거로 씀
+- 시나리오 11c: 결제 실패 trace id 로 Loki 에서 order·notification 로그. 로컬 Debezium 모드 PASS
+- 남은 것: k8s 에는 수집기·저장소가 없다(로그·trace export 끔). 필요해지면 Helm·ArgoCD 에 Alloy·Loki·Tempo·Grafana 를 붙인다
 
 **O-2 메트릭·경보 (PR #28) 에서 한 것 (결정·확인 사항)**
 - 서비스: `micrometer-registry-prometheus`(service-conventions) + actuator `prometheus` 노출. 서비스 메트릭은 이름 앞에 `commerce_`

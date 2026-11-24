@@ -4,12 +4,13 @@
 
 ## 재현
 
-1. 인프라(Tempo·Grafana 포함)와 다섯 서비스를 띄운다. relay 모드는 상관없다
+1. 인프라(Alloy·Tempo·Loki·Grafana 포함)와 다섯 서비스를 띄운다. relay 모드는 상관없다
 2. `scripts/smoke-tracing.sh`
    - 요청에 `traceparent`를 직접 넣어 trace id를 알고 시작한다
    - **11a**: 정상 주문 → `COMPLETED` → Tempo(`GET /api/traces/<id>`)에 span이 다 모일 때까지 기다린 뒤 서비스 다섯 개가 다 있는지, 주문 id로 검색(`{ span.messaging.kafka.message.key = "<orderId>" }`)해서 같은 trace 하나가 나오는지
    - **11b**: 결제 실패 주입(`DECLINE`) → `CANCELLED` → 보상 커맨드·응답까지 같은 trace에 있는지
-3. 눈으로 보려면 Grafana(http://localhost:3030) → Explore → Tempo → trace id 또는 TraceQL
+   - **11c** (2026-11-24 추가): 11b 의 trace id 로 Loki 를 검색(`{service_name=~".+"} | trace_id="<id>"`)해 order-service(`Saga 진행: …`)와 notification-service(`알림 발송: OrderCancelled …`) 로그가 찾히는지. 서비스 → OTLP → Alloy → Loki (ADR 0013 로그와 수집기)
+3. 눈으로 보려면 Grafana(http://localhost:3030) → Explore → Tempo → trace id 또는 TraceQL. span 을 열고 "Related logs" 를 누르면 그 서비스의 같은 trace_id 로그가 Loki 창으로 열린다
 
 CI `e2e`가 두 relay 모드에서 시나리오 2 다음에 이 스크립트를 돈다.
 
@@ -82,3 +83,15 @@ debezium 모드도 11a(주문 …32aa13b0, span 9개 구성이 위와 같음, �
 - 주기 작업(단계 타임아웃 스캔 1초, 결제 보정 1초)은 trace를 만들지 않았다(Tempo 최근 10분 검색에 주기 작업 root trace 없음, Debezium 모드). 그래서 trace 목록이 주기 작업으로 덮이지 않는다. 스케줄러 relay는 span 없이 헤더만 옮긴다
 - traceparent가 없는 메시지(이 변경 전에 쌓인 이벤트, 단계 타임아웃 재전송)는 받는 쪽에서 새 trace로 시작한다. 알림 서비스가 밀린 예전 이벤트를 처리할 때 그런 trace가 수십 개 생겼다. 이때도 orderId 검색으로는 찾힌다
 - Debezium 모드에서 `traceparent`가 null인 행(타임아웃 재전송)도 커넥터 오류 없이 발행됐다
+
+## 11c 로그 (2026-11-24, 로컬 Debezium 모드)
+
+```
+== 11c. 같은 trace 의 로그가 Loki 에 (trace_id 로 검색)
+  ok  trace_id 로 찾은 로그의 서비스: notification-service order-service
+PASS
+```
+
+- Grafana 에서 11b trace 의 notification-service span → "Related logs" → Loki 창에 `{service_name="notification-service"} | trace_id="<id>"` 로 `알림 발송: OrderCancelled …` 한 줄이 열렸다
+- 결제 거절은 payment-service 가 로그를 남기지 않아(응답만 보낸다) 11c 는 order·notification 두 서비스로 본다. 그래서 order-service 가 Saga 전이마다 `Saga 진행: <응답> -> <상태>` 를 남기게 했다
+- 7개 서비스 모두 Loki 라벨 `service_name` 으로 들어왔다. HTTP 요청 처리 중 로그(예: 결제 장애 주입 변경)도 요청 span 의 trace_id 가 붙는다. 기동 로그는 appender 를 붙이기 전이라 콘솔에만 있다
