@@ -1,0 +1,54 @@
+# ADR 0014. k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, 검증은 CI 의 kind
+
+- 상태: 채택 (후속 3 K-1. relay 절은 K-2 에서 구현)
+- 날짜: 2026-11-24
+
+## 배경
+
+1~3단계와 후속 1·2 는 docker-compose + `java -jar` 로 돌렸다. 후속 3 은 같은 구성을 k8s 에 올린다. 브리프 5절이 정한 범위는 "Helm, Strimzi, ArgoCD, 클러스터를 상시 띄우지 않고 CI 에서 kind 로 검증"이다. 정할 것은 다음과 같다.
+
+- 이미지: 서비스 7개를 어떻게 이미지로 만드나
+- 차트: 서비스마다 차트인가, 하나인가. Postgres·Redis 는 어떻게 두나
+- Kafka·Debezium: Strimzi 로 무엇을 만드나, 버전은
+- 검증: 어디서 무엇을 확인하나
+
+## 결정
+
+### 이미지: 공용 Dockerfile 하나, 빌드는 이미지 밖에서
+
+- `deploy/docker/service.Dockerfile` 이 Gradle 이 만든 bootJar 를 받아 Spring Boot 레이어(의존성·로더·애플리케이션)로 풀어 실행한다. 비 root, `MaxRAMPercentage=75`
+- 이미지 안에서 Gradle 을 돌리지 않는다. 서비스 7개마다 의존성을 다시 받게 되고, CI 는 이미 bootJar 를 만든다
+- Paketo(`bootBuildImage`)·Jib 는 쓰지 않는다. 새 도구 없이 Dockerfile 하나로 7개가 같고, compose 의 `java -jar` 와 같은 JAR 를 쓴다
+
+### 차트: `deploy/helm/commerce-saga` 하나
+
+- 서비스 7개 + 화면 + Postgres·Redis·Kafka 가 한 릴리스다. 서비스마다 차트를 두면 값(포트·DB·Kafka 주소)이 일곱 군데로 흩어진다. 서비스는 `values.services` 의 한 항목(포트, DB, outbox 여부, 추가 env)이고 템플릿 하나가 Deployment·Service·DB Secret 을 만든다
+- 설정은 **각 서비스 application.yml 의 환경변수를 채우기만** 한다. 서비스 코드·설정은 그대로다
+- 서비스 경계: 서비스마다 자기 DB 계정 Secret 만 받는다(다른 서비스 DB 비밀번호를 갖지 않음). 비밀번호는 모두 로컬 개발용 값
+- **Postgres·Redis 는 오퍼레이터 없이** 차트 안의 StatefulSet·Deployment 로 둔다(compose 와 같은 단일 인스턴스). 새 오퍼레이터는 Strimzi 하나로 끝낸다. 운영이면 관리형 DB·오퍼레이터(CloudNativePG 등)로 바꿀 자리다
+- Postgres 초기화 SQL 은 `infra/postgres/init` 의 사본을 차트에 둔다(Helm 은 차트 밖 파일을 못 읽는다). CI 가 두 파일이 같은지 검사한다
+- 클러스터에 Tempo 가 없어 trace 를 내보내지 않는다(`TRACING_SAMPLING_PROBABILITY=0`)
+- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1. 여럿이면 키를 Secret 으로 넣는다
+
+### Kafka: Strimzi `Kafka` + `KafkaNodePool`(KRaft) + `KafkaTopic`, 버전 4.3.2
+
+- 노드 하나가 broker·controller 를 겸한다(kind·CI). 토픽은 compose 처럼 `KafkaTopic` 으로 명시적으로 만들고 브로커 자동 생성을 끈다(DLT 포함 16개 + heartbeat 5개)
+- **Kafka 4.3.2**: 최신 Strimzi 1.3.1(2026-11-04)이 지원하는 마지막 버전이다. 서비스의 클라이언트는 4.4.0(compose 브로커와 같음)이고 4.3 브로커와 호환된다. Strimzi 가 4.4 를 지원하면 맞춘다
+
+### relay: Strimzi `KafkaConnect` + 서비스별 `KafkaConnector` (ADR 0004 의 배포 기준)
+
+- Connect 이미지(`deploy/docker/connect.Dockerfile`)는 Strimzi Kafka 이미지에 Debezium Postgres 플러그인(compose 와 같은 버전·SHA-512)을 얹는다. Strimzi 의 `build`(클러스터에서 빌드해 레지스트리에 올림)는 kind 에 레지스트리가 없어 쓰지 않는다
+- 커넥터 설정은 compose 의 `infra/connect/<서비스>-outbox.json` 과 같다(slot·publication 이름, Outbox Event Router, heartbeat). 커넥터를 REST 가 아니라 CR 로 관리한다(`strimzi.io/use-connector-resources`)
+- DB 비밀번호는 Connect 컨테이너가 서비스 DB Secret 을 env 로 받고, 커넥터는 `${env:...}`(EnvVarConfigProvider)로 읽는다. CR 에 비밀번호를 쓰지 않는다
+- 서비스는 `OUTBOX_RELAY_ENABLED=false`. `debezium.enabled=false` 면 스케줄러 relay 로 돈다
+
+### 검증: PR 마다 CI 의 kind
+
+- `.github/workflows/k8s.yml`: kind → 이미지 빌드·`kind load` → Strimzi(Helm OCI) → 차트 → Kafka·토픽·Deployment·커넥터 Ready 까지 기다림 → `kubectl port-forward` 로 compose 때와 같은 로컬 포트에 연결 → 기존 스모크(시나리오 0·1·9·10)를 그대로 → Debezium 이 발행했는지(커넥터 5개 Ready, outbox 비어 있음, 활성 slot 5개)
+- 스크립트(`scripts/k8s-deploy.sh`, `k8s-port-forward.sh`)는 로컬 kind 에서도 같다
+- 장애 시나리오(서비스 다운, 커넥터 중단 등)는 compose 기준 e2e 워크플로가 계속 증명한다. k8s 워크플로는 "같은 시스템이 k8s 에서도 같은 결과"까지
+
+## 결과
+
+- 좋아진 것: 서비스 코드 변경 없이 같은 JAR·같은 커넥터 설정으로 k8s 에 올라간다. PR 마다 kind 에서 Saga·보상·소유권·멱등 주문과 Debezium 발행까지 확인된다
+- 감수한 것: Postgres·Redis 는 단일 인스턴스(운영 수준 아님). Kafka 브로커 버전이 compose(4.4.0)와 다르다(4.3.2). 커넥터 설정이 compose json 과 차트 두 곳에 있다(바꿀 때 같이 바꾼다). 클러스터 안 trace 없음

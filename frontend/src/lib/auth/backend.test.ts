@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/client";
 
-import { login, logout, refresh, signUp } from "./backend";
+import { listSessions, login, logout, logoutAll, refresh, revokeSession, signUp } from "./backend";
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
 
@@ -97,5 +97,61 @@ describe("auth backend", () => {
     expect(new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers).get("Cookie")).toBe(
       "refresh_token=fam.secret",
     );
+  });
+});
+
+describe("로그인 기기 관리", () => {
+  const session = {
+    sessionId: "0196f3a2-1b2c-4d3e-8f40-123456789abc",
+    agent: "Mozilla/5.0",
+    createdAt: "2026-11-24T00:00:00Z",
+    lastUsedAt: "2026-11-24T01:00:00Z",
+    expiresAt: "2026-12-08T01:00:00Z",
+    current: true,
+  };
+
+  it("목록: Bearer 와 이 기기를 알리는 refresh 쿠키를 보낸다", async () => {
+    const fetchMock = respond(200, [session, { ...session, agent: null, current: false }]);
+
+    const sessions = await listSessions("at", "fam.secret", { ip: "203.0.113.7" });
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions[1].agent).toBeNull();
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("http://gateway:8000/auth/sessions");
+    const headers = new Headers(init.headers);
+    expect(headers.get("Authorization")).toBe("Bearer at");
+    expect(headers.get("Cookie")).toBe("refresh_token=fam.secret");
+    expect(init.method ?? "GET").toBe("GET");
+  });
+
+  it("refresh 쿠키가 없으면 Cookie 없이", async () => {
+    const fetchMock = respond(200, []);
+    await listSessions("at", undefined, {});
+    expect(
+      new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers).get("Cookie"),
+    ).toBeNull();
+  });
+
+  it("한 기기 로그아웃은 DELETE, 모든 기기는 POST. 둘 다 쿠키 없이 Bearer 만", async () => {
+    let fetchMock = respond(204);
+    await revokeSession("at", session.sessionId, {});
+    let [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe(`http://gateway:8000/auth/sessions/${session.sessionId}`);
+    expect(init.method).toBe("DELETE");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer at");
+    expect(new Headers(init.headers).get("Cookie")).toBeNull();
+
+    fetchMock = respond(204);
+    await logoutAll("at", {});
+    [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("http://gateway:8000/auth/logout-all");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Cookie")).toBeNull();
+  });
+
+  it("남의 세션이면 ApiError(404)", async () => {
+    respond(404, { status: 404, detail: "session not found" });
+    await expect(revokeSession("at", session.sessionId, {})).rejects.toMatchObject({ status: 404 });
   });
 });

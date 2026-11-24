@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-24 (F-2a PR, PR #37 머지 후)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드) 진행 중: Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(이번 PR). **다음은 F-2b (후속 2 마지막), 아래 "F-2 시작 메모"의 F-2b 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-24 (후속 3 K-1 PR, PR #39 머지·태그 `v0.4-auth-frontend` 후)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s) 진행 중: K-1 이미지·Helm·Strimzi·kind CI(이번 PR) → K-2 Debezium → K-3 ArgoCD·Ingress. 아래 "후속 3 진행"**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. 다음 작업은 아래 "후속 2 진행" 표의 **F-2b** (A-3·F-1·F-2a 완료). **바로 시작하려면 "F-2 시작 메모"(후속 2 진행 절 끝)를 읽는다.** 프론트엔드는 `frontend/README.md` 와 ADR 0011 을 먼저 읽는다. 먼저 "프론트엔드 준비 메모"를 읽는다. **후속 2 안의 설계 선택(PR 나누기, API 모양, 화면 구성 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23).** 메모의 "결정" 열대로 진행하고, 메모에 없는 선택도 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 새 인프라 도입·단계 순서 변경처럼 후속 2 밖의 결정은 여전히 묻는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. **후속 2 는 끝났고(태그 `v0.4-auth-frontend`), 지금은 후속 3(k8s).** 아래 "후속 3 진행" 표의 다음 PR 부터 한다. k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 후보 1(값 객체)·후보 2(컨텍스트 맵·용어집 ADR)는 아직 결정 전("F-2 시작 메모" 끝). 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -45,8 +45,8 @@
 | 2 | Saga 완성 (point, payment, 보상, 상태 머신, 알림 코레오그래피) | 완료, 태그 `v0.2-saga` |
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
-| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 진행 중 (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36. 다음 F-2) |
-| 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증 | 나중으로 미룸 |
+| 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
+| 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 진행 중 (K-1 이번 PR, 다음 K-2·K-3) |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
@@ -115,7 +115,9 @@ flowchart LR
 | #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
 | #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
 | #37 | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
-| (이번 PR) | 후속 2 F-2a: point-service 포인트 내역 `GET /points/me/history`(주문 사용 + 지급 기록 `point_grants`, 커서 = UUIDv7 id 하나), 가입 축하 지급 기록, 화면 `/points`·`/payments`·`/notifications`, 시나리오 13d, Playwright 내역 시나리오 2개 |
+| (이번 PR) | 후속 3 K-1: 공용 서비스 이미지(`deploy/docker/service.Dockerfile`), Helm 차트 `deploy/helm/commerce-saga`(Postgres·Redis StatefulSet, Strimzi Kafka 4.3.2·KafkaTopic, 서비스 7개, 화면), `scripts/k8s-deploy.sh`·`k8s-port-forward.sh`, CI `k8s`(kind 배포 + 시나리오 0·1·9·10) |
+| #39 | 후속 2 F-2b (후속 2 마지막): 로그인 기기 관리 `/sessions`(다른 기기·모든 기기 로그아웃), 관리자 `/admin`(ADMIN 만, 결제 장애 주입, DLT 안내), 헤더 메뉴(관리자는 토큰 roles 로 표시만), CI `browser-e2e`(서비스 7개 + `next start` + Playwright 13개), README 후속 2 완료 |
+| #38 | 후속 2 F-2a: point-service 포인트 내역 `GET /points/me/history`(주문 사용 + 지급 기록 `point_grants`, 커서 = UUIDv7 id 하나), 가입 축하 지급 기록, 화면 `/points`·`/payments`·`/notifications`, 시나리오 13d, Playwright 내역 시나리오 2개 |
 
 CI(`e2e`)가 매 PR마다 인프라 + 서비스를 실제로 띄워 시나리오 0·1·2·3·4·6·8·9(인증·Gateway·IDOR)·10·11·12·13을 relay 두 모드(scheduler / debezium)에서 자동으로 돈다. debezium 모드는 시나리오 5도 돌고, 두 모드 모두 끝에 시나리오 7 측정값을 로그로 남긴다.
 
@@ -186,7 +188,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - **outbox를 거쳐도 trace가 이어지게**: `outbox.traceparent` 컬럼(Flyway order·inventory·payment V5, point V4) ← `OutboxWriter`가 넣는 시점의 현재 span(`OutboxTraceContext`, Micrometer Tracing 있을 때만) → 스케줄러 relay가 헤더 `traceparent`로, Debezium은 Event Router `additional.placement`에 `traceparent:header:traceparent` → 받는 쪽 `spring.kafka.listener.observation-enabled=true`가 이어받음. relay는 span을 만들지 않는다
 - **KafkaTemplate observation은 켜지 않는다**(켜면 relay 문맥으로 `traceparent`를 덮어써 끊김)
 - 리스너 span에 `messaging.kafka.message.key`(orderId)·`messaging.message.type`(`MessageTracingConvention`, libs/outbox 자동 설정). Tempo에서 `{ span.messaging.kafka.message.key = "<orderId>" }`로 주문의 trace를 찾는다
-- 인프라: `grafana/tempo:2.10.10`(단일 바이너리, 로컬 디스크, 컨테이너 내리면 사라짐) + `grafana/grafana:13.2.6`(익명 Admin, Tempo 데이터 소스 프로비저닝). 호스트 포트 Tempo API **3210**, OTLP **4328**, Grafana 3000 (이 PC에 다른 관측성 스택이 3200·4318을 쓰고 있어 비킴). Tempo 이미지는 셸·wget이 없어 healthcheck 없음 → CI는 `/ready`를 curl로 기다림. Tempo 3.x는 구조가 바뀌어(설정 미확인) 2.10을 씀
+- 인프라: `grafana/tempo:2.10.10`(단일 바이너리, 로컬 디스크, 컨테이너 내리면 사라짐) + `grafana/grafana:13.2.6`(익명 Admin, Tempo 데이터 소스 프로비저닝). 호스트 포트 Tempo API **3210**, OTLP **4328**, Grafana 3000(F-2b 뒤 3030) (이 PC에 다른 관측성 스택이 3200·4318을 쓰고 있어 비킴). Tempo 이미지는 셸·wget이 없어 healthcheck 없음 → CI는 `/ready`를 curl로 기다림. Tempo 3.x는 구조가 바뀌어(설정 미확인) 2.10을 씀
 - 시나리오 11 (`scripts/smoke-tracing.sh`, CI 두 모드, 시나리오 2 다음): 요청에 traceparent를 넣고 정상 주문 = span 9개·서비스 5개 + 주문 id 검색으로 같은 trace, 결제 실패 = 보상까지 한 trace. 로컬 Debezium 모드 PASS
 - 배포 순서: 서비스(마이그레이션) 먼저, 커넥터 설정 나중(`table.field.additional.missing=error`라 컬럼이 없으면 커넥터 실패). 로컬에서 커넥터 재등록 직후 첫 주문은 재시작 때문에 10초 넘게 걸려 타임아웃 재전송이 한 번 났다
 - 한계: 단계 타임아웃 재전송·결제 보정 후 응답·traceparent 없는 예전 메시지는 새 trace로 시작(주문 id 검색으로는 모임). JDBC span 없음
@@ -213,8 +215,8 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 | A-3-2 | 가입 → 포인트 계정: auth-service outbox(`UserRegistered`, `auth.events`) → point-service 멱등 계정 생성(가입 축하 포인트), Debezium 커넥터 포함 | 완료 PR #34 |
 | F-1a | Next.js 기본 구성(템플릿 가져오기, ADR 0011) + 로그인·회원가입·로그아웃·세션 refresh, CI `frontend` | 완료 PR #35 |
 | F-1b | 상품 목록(고정 1~5), 주문 생성(Idempotency-Key), 내 주문 목록, 주문 상세(Saga 단계 타임라인·보상 경로) | 완료 PR #36 |
-| F-2a | 포인트 내역 API(point-service) + 포인트·결제 내역·알림 화면 | 이번 PR |
-| F-2b | 로그인 기기 관리 + 관리자(결제 장애 주입. DLT 는 화면 없이 안내, 준비 메모 #6) + 브라우저 e2e CI 판단 + 후속 2 마무리 | **다음 (마지막)**, "F-2 시작 메모" |
+| F-2a | 포인트 내역 API(point-service) + 포인트·결제 내역·알림 화면 | 완료 PR #38 |
+| F-2b | 로그인 기기 관리 + 관리자(결제 장애 주입. DLT 는 화면 없이 안내, 준비 메모 #6) + 브라우저 e2e CI + 후속 2 마무리 | 이번 PR (후속 2 끝) |
 
 **A-1 auth-service (PR #30) 에서 한 것 (결정·확인 사항)**
 - 새 서비스 `services/auth-service` (8086, `auth_db`/`auth_svc`, Redis 6380). 헥사고날 그대로, 기능 패키지 `auth` 하나. Kafka·outbox 없음(다른 서비스와 메시지를 주고받지 않음)
@@ -265,7 +267,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 설계는 ADR 0011: 브라우저는 Next 만, Next 서버만 Gateway(`BACKEND_URL` 기본 :8000). 토큰은 Next 가 httpOnly·Secure·SameSite=Lax 쿠키 `cs_access`(토큰 수명 − 30초)·`cs_refresh` 로. 로그인·가입(바로 로그인)·로그아웃은 Server Action
 - `src/proxy.ts`(Next 16 의 Middleware): access 없고 refresh 있으면 auth-service refresh → 응답·이번 요청 모두 새 쿠키. 같은 refresh token 은 프로세스 안에서 한 번으로 묶고 결과를 10초 남김(옛 쿠키로 온 요청이 재사용 탐지에 걸리지 않게). 거절이면 쿠키 지우고 `/login?next=`. `next` 는 사이트 안 경로만
 - 홈 = 내 포인트(가입 직후 계정이 없으면 "만드는 중" 안내). 헤더에 사용자 번호(토큰 `sub` 표시용)·로그아웃
-- 개발 서버는 3001(3000 은 Grafana). `.claude/launch.json` 은 로컬용이라 커밋하지 않았다
+- 개발 서버는 3001(그때 3000 은 Grafana. F-2b 뒤 Grafana 는 3030, 화면은 3500). `.claude/launch.json` 은 로컬용이라 커밋하지 않았다
 - 확인(로컬, 인프라 + auth·point·gateway jar + `next dev`): 브라우저로 로그인 실패·성공·로그아웃, `document.cookie` 빈 문자열, 가입 → "만드는 중" → 1,000P. curl 로 proxy refresh → 새 쿠키 2개, 10초 안 옛 토큰 → 같은 결과, 유예 지난 옛 토큰 → 쿠키 삭제 + `/login?next=%2Forders`(auth-service "재사용, 그 기기 세션 폐기"). Playwright `e2e/auth.spec.ts` 2개 통과
 - Playwright 첫 실행 실패: 로그인 실패 응답 뒤 React 가 폼을 초기화하는 시점이 테스트의 다음 입력보다 늦어 비밀번호가 지워졌다. 테스트가 새 화면에서 다시 로그인하게 고침(사람이 입력하는 속도에서는 생기지 않음)
 - CI `frontend`: format·lint·typecheck·Vitest(33개)·`next build`·Docker 빌드. 로컬 Node 24.13 은 engines(`^24.15`) 경고만 나고 동작한다. CI 는 Node 26
@@ -287,7 +289,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - Codex 반영(P2): 주문과 Saga 를 따로 읽는 사이 Saga 가 끝나면 주문이 PENDING 으로 남아 갱신이 멈췄다 → 둘 다 끝났을 때만 멈춘다
 - 한계: 가격은 클라이언트(Next) 고정 목록. 진행 표시는 폴링(1초). 주문 취소 API 는 없다(Saga 가 끝나야 결과가 난다)
 
-**F-2a 포인트·결제 내역·알림 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**F-2a 포인트·결제 내역·알림 (PR #38) 에서 한 것 (결정·확인 사항)**
 - 포인트 내역 API `GET /points/me/history?before=&size=`(Gateway `/api/points/me/history`, 기존 라우트 그대로). 다른 목록과 같은 커서 모양(`size` 1~50, 기본 20, 최신순). 항목: `entryId`(커서), `kind`(`ORDER` 또는 `SIGNUP_BONUS`), `orderId`(주문 사용만), `amount`, `status`(`USED`·`REJECTED`·`REFUNDED` 또는 `GRANTED`), `reason`, 시각
 - 가입 축하 지급을 어떻게 보일지(시작 메모의 숙제): **지급 기록 테이블 `point_grants`(V5)를 두고 계정을 만든 트랜잭션에서 함께 INSERT**(처리 기록 + 계정 + 지급 기록 = 한 트랜잭션, 계정이 이미 있거나 0P 면 남기지 않음). 대안이던 "잔액 응답에 가입 축하 금액만 싣기"는 지급 종류가 늘면 다시 바꿔야 해서 버림
 - 두 기록을 한 목록으로: 주문 id(order-service)와 지급 id(point-service) 모두 UUIDv7 이라 id 하나로 정렬·커서. 각 표에서 최신 size 개씩 읽어 `union all` 후 다시 size 개(인덱스 `(user_id, order_id)`·`(user_id, id)`). 두 서비스 시계가 조금 달라도 커서가 같은 id 라 쪽 사이에 빠지거나 겹치는 항목은 없다(순서만 수 ms 어긋날 수 있음)
@@ -296,6 +298,15 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - 확인(로컬, Debezium 모드 서비스 7개 + 커넥터 5개 + `next dev`): point-service 테스트 51개(Testcontainers 포함), 시나리오 13(13d 추가) PASS, user1 로 세 화면·다음 쪽 링크, Playwright 9개(새 `e2e/history.spec.ts` 2개: 가입 축하 → 주문 사용 → 결제 완료 → 완료 알림, 포인트 부족 → "사용 안 됨"·결제 없음·취소 알림)
 - 이 PC 환경 메모: Node 22.12 에서는 Vitest 가 undici 로드에 실패한다(engines `^24.15`). `npx -p node@24 node node_modules/vitest/vitest.mjs run` 처럼 Node 24 로 돌렸다. Playwright 브라우저(1255)가 없어 설치된 Edge 를 `launchOptions.executablePath` 로 지정한 임시 설정으로 돌렸다(커밋 안 함)
 - 한계: F-2a 전에 가입해 계정이 이미 있던 사용자는 지급 기록이 없다(로컬·CI 데이터만). 시드 사용자 1~4 의 시작 잔액도 지급 기록이 아니다(시드)
+
+**F-2b 로그인 기기·관리자·CI 브라우저 e2e (이번 PR) 에서 한 것 (결정·확인 사항)**
+- `/sessions`: 헤더의 "사용자 #N" 을 누르면 간다. auth-service `GET /auth/sessions` 에 Bearer + refresh 쿠키(이 기기 표시)를 Next 서버가 보낸다. 이 기기는 맨 위·"이 기기" 표시만(로그아웃은 헤더 버튼), 다른 기기는 "로그아웃"(`DELETE /auth/sessions/{id}`, 소유자 검사는 auth-service), "모든 기기에서 로그아웃"(`POST /auth/logout-all`) 뒤 이 브라우저 쿠키도 지우고 로그인 화면. Server Action 은 세션 id 를 UUID 형식으로 먼저 거르고, 이미 없는 세션(404)은 목록만 다시 그린다. 기기 이름은 User-Agent 에서 브라우저·OS 만(`lib/auth/device.ts`)
+- 로그아웃한 다른 기기는 access token(최대 15분)이 끝나면 proxy 의 refresh 가 거절돼 로그인 화면으로 간다(즉시 차단 없음, ADR 0008 한계 그대로). Playwright 는 그 기기의 access 쿠키만 지워 확인한다
+- `/admin`: 토큰 `roles` 에 ADMIN 이 없으면 404(메뉴도 안 보임). 표시용일 뿐 권한은 Gateway `/api/admin/**` = ADMIN 과 payment-service 가 서명된 토큰으로 검사한다(위조 쿠키로 화면을 열어도 API 403 → 404). 결제 장애 주입 폼(승인·거절·지연 ms, 0~60,000), DLT 는 준비 메모 #6 대로 화면 없이 Kafka UI(`:8989`)·`scripts/dlt.sh` 안내
+- 폼은 제어 컴포넌트 + `onSubmit` 에서 Server Action 을 직접 부른다. 처음에는 저장 뒤 React 의 폼 초기화로 라디오가 옛 값으로 돌아가 보였다(Playwright 로 잡음). F-1b 주문 폼과 같은 방식
+- **브라우저 e2e 를 CI 에 넣었다**(준비 메모 "F-1 CI" 판단): 새 워크플로 `browser-e2e`(frontend·서비스·infra 변경 때). bootJar + `next build` + Playwright chromium → 인프라 + 서비스 7개(스케줄러 relay) + `next start :3500` → `e2e/` 13개. e2e(saga) 워크플로에 붙이지 않은 이유: 시나리오 9 때문에 Gateway 사용자 rate limit 을 초당 5 로 낮춰 띄우는데, 화면은 요청 한 번에 API 를 여러 개 불러 429 가 섞인다. 실패하면 Playwright 결과를 artifact 로 올린다
+- 확인(로컬, 서비스 7개 Debezium 모드 + `next dev`): Vitest 83개(+20: 토큰 roles, 기기 관리 호출, 기기 이름, 장애 입력, 두 Server Action), lint·typecheck·format, Playwright 13개(새 `sessions.spec` 2개: 다른 기기 로그아웃 → 그 기기 refresh 거절, 모든 기기 로그아웃 / `admin.spec` 2개: 거절 주입 → 결제 실패 → 포인트 환불·재고 해제·내역 "환불됨"·결제 "거절" → 정상 승인으로 되돌림, 일반 사용자는 메뉴 없음·404)
+- 후속 2 완료: README 상태·구성 갱신. 태그는 사용자에게 묻는다(0절 2번)
 
 ### F-2 시작 메모 (2026-11-24 정리, 여기서 바로 시작)
 
@@ -314,12 +325,12 @@ F-2 = 후속 2 마지막. 남은 화면: 포인트(잔액·내역), 결제 내�
 
 **PR 나누기 (추천안, 그대로 진행)**
 - F-2a (완료, 위 절): 포인트 내역 API(point-service, 백엔드 규칙대로 테스트·ArchUnit) + 포인트·결제 내역·알림 화면
-- F-2b (**다음**): 로그인 기기 관리 + 관리자 결제 장애 주입 화면 + 브라우저 e2e 를 CI 에 넣을지 판단(준비 메모 "F-1 CI" 항목) + 후속 2 마무리(README. 태그를 붙일지는 사용자에게 묻는다)
+- F-2b (완료, 위 절): 로그인 기기 관리 + 관리자 결제 장애 주입 화면 + 브라우저 e2e 를 CI 에 넣을지 판단(준비 메모 "F-1 CI" 항목) + 후속 2 마무리(README. 태그를 붙일지는 사용자에게 묻는다)
 
 **로컬 실행 (F-1b 때 쓴 방법)**
 - 인프라: `docker compose -f infra/docker-compose.yml up -d --wait`
 - 서비스: `./gradlew build` 후 `java -jar services/<이름>/build/libs/<이름>-0.0.1-SNAPSHOT.jar` (JDK 25. 이 PC는 `C:/Users/user/.jdks/openjdk-25.0.2`). 화면 전체에 필요한 것: auth 8086, point 8083, order 8081, inventory 8082, payment 8084, notification 8085, gateway 8000
-- 화면: `cd frontend && npm run dev -- --port 3001` (3000 은 Grafana). Playwright: `E2E_BASE_URL=http://localhost:3001 npm run test:e2e` (한 worker)
+- 화면: `cd frontend && npm run dev` (3500, `package.json` 에 고정. Grafana 는 3030). Playwright: `npm run test:e2e` (한 worker). Node 는 24.15 이상(22 에서는 Vitest 가 undici 로드 실패)
 - 관리자 토큰: `admin` / `local-dev-pass` 로 `POST localhost:8000/auth/login`. 결제 장애 주입은 확인 뒤 `{"mode":"APPROVE","delayMillis":0}` 로 되돌린다
 - Redis·Kafka 컨테이너를 다시 띄우면 오래 떠 있던 gateway 가 `/auth` 요청에 응답하지 않은 적이 있다(F-1a). 그러면 gateway 를 다시 띄운다
 
@@ -398,6 +409,24 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 - 로그인 화면은 Next. middleware가 쿠키를 보고 access 유효 → 통과, 만료 → refresh, 둘 다 없음 → `/login`
 - 화면(포트폴리오용으로 상황에 맞게 전부): 회원가입·로그인·로그인 기기 관리, 주문 생성·목록·상세(Saga 단계 타임라인, 보상 경로 표시), 포인트, 결제 내역, 알림, 관리자(결제 장애 주입, DLT 조회·재처리 등)
 
+## 4-3. 후속 3. k8s (진행 중)
+
+2026-11-24 사용자 합의: 아래 추천안대로 PR 셋, 세부 선택은 추천안대로. 결정은 [ADR 0014](adr/0014-k8s-deployment.md), 사용법은 [`deploy/README.md`](../deploy/README.md).
+
+| 순서 | PR | 상태 |
+|---|---|---|
+| K-1 | 공용 서비스 이미지 + Helm 차트(Postgres·Redis StatefulSet, Strimzi Kafka·KafkaTopic, 서비스 7개, 화면) + CI kind 워크플로(시나리오 0·1·9·10) | 이번 PR |
+| K-2 | Strimzi `KafkaConnect`·`KafkaConnector` 로 Debezium relay(ADR 0004 의 배포 기준) + Debezium 발행 확인 | 다음 (브랜치 `feat/k8s-debezium` 에 로컬 커밋 있음) |
+| K-3 | ArgoCD(app-of-apps, CI kind 에서 GitHub 저장소를 sync 해 Healthy 확인) + edge(외부 공개는 이것 하나) + ADR 0014 보강 | 그다음 |
+
+**K-1 (이번 PR) 에서 한 것 (결정·확인 사항)**
+- 이미지: `deploy/docker/service.Dockerfile` 하나로 7개. bootJar 를 받아 레이어로 풀어 비 root 로 실행. 이미지 안에서 Gradle 을 돌리지 않는다
+- 차트 하나(`deploy/helm/commerce-saga`): 서비스는 `values.services` 의 한 항목(포트·DB·추가 env), 서비스마다 자기 DB 계정 Secret 만. Postgres·Redis 는 오퍼레이터 없이 StatefulSet·Deployment. Postgres 초기화 SQL 은 `infra/postgres/init` 사본(CI 가 diff)
+- Kafka: Strimzi 1.3.1(2026-11-04) 이 지원하는 마지막 버전 **4.3.2**(KRaft 노드 하나). 클라이언트 4.4.0 과 호환. 토픽 16개(DLT 포함)는 `KafkaTopic`, 자동 생성 끔
+- trace 없음(`TRACING_SAMPLING_PROBABILITY=0`, 클러스터에 Tempo 없음). auth-service replicas 1(임시 서명 키)
+- CI `k8s`: kind(v0.33, 노드 1.37) → 이미지 빌드·`kind load` → Strimzi(Helm OCI) → 차트 → Ready 대기 → `port-forward` 로 compose 와 같은 포트 → 기존 스모크 그대로. 서드파티 액션은 커밋 해시로 고정(CodeQL 지적)
+- 로컬에는 kind 가 없어(Docker Desktop 만) 렌더링·`helm lint`(alpine/helm 이미지)·order-service 이미지 실행까지 확인하고 배포는 CI 로 확인
+
 ## 5. 알려진 한계·나중 일
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
@@ -423,7 +452,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 ## 7. 로컬에서 이어서 돌리기
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Prometheus(9091)·Grafana(3000), Redis(6380)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(8989), 토픽·DB 초기화, Tempo(3210, OTLP 4328)·Prometheus(9091)·Grafana(3030), Redis(6380)
 ./gradlew build                                             # 전체 빌드·테스트
 ./gradlew :services:inventory-service:bootRun               # 8082 (point 8083, payment 8084, order 8081, notification 8085, auth 8086, gateway 8000)
 scripts/smoke-saga.sh                                       # 시나리오 0·1 + IDOR
@@ -434,7 +463,7 @@ scripts/smoke-service-down.sh                               # 시나리오 4 (po
 PG_CLIENT_TIMEOUT=3s PAYMENT_RECONCILE_INTERVAL=1s ./gradlew :services:payment-service:bootRun   # 결제 보정 주기를 짧게
 scripts/smoke-payment-timeout.sh                            # 시나리오 2 (order-service 는 SAGA_PAYMENT_MAX_RESENDS=2 도)
 scripts/dlt.sh list inventory.command.DLT                   # DLT 확인
-scripts/smoke-tracing.sh                                    # 시나리오 11 (trace 는 Grafana http://localhost:3000 → Explore → Tempo)
+scripts/smoke-tracing.sh                                    # 시나리오 11 (trace 는 Grafana http://localhost:3030 → Explore → Tempo)
 scripts/smoke-alerts.sh                                     # 시나리오 12 (경보는 http://localhost:9091/alerts, 대시보드는 Grafana commerce-saga)
 AUTH_REFRESH_GRACE=2s ./gradlew :services:auth-service:bootRun   # 동시 refresh 유예를 짧게 (기본 20s)
 GRACE_WAIT=3 scripts/smoke-auth.sh                          # 시나리오 9 인증 (가입·로그인·회전·재사용 탐지·잠금)
