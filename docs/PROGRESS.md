@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-24 (후속 3 K-1 PR, PR #39 머지·태그 `v0.4-auth-frontend` 후)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s) 진행 중: K-1 이미지·Helm·Strimzi·kind CI(이번 PR) → K-2 Debezium → K-3 ArgoCD·Ingress. 아래 "후속 3 진행"**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-24 (후속 3 K-2 PR, PR #40 머지 후)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s) 진행 중: K-1 이미지·Helm·Strimzi·kind CI(PR #40) → K-2 Debezium(이번 PR) → K-3 ArgoCD·edge. 아래 "후속 3 진행"**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -46,7 +46,7 @@
 | 3 | **신뢰성** (멱등 컨슈머, DLT 재처리, Debezium relay, 타임아웃·장애 복구) | 완료, 태그 `v0.3-reliability` = **완성 기준** |
 | 후속 1 | 관측성 (분산 트레이싱으로 Saga 한 건을 서비스 넘어 추적, lag·DLT 경보) | 완료 (O-1 트레이싱 PR #27, O-2 메트릭·경보 PR #28) |
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
-| 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 진행 중 (K-1 이번 PR, 다음 K-2·K-3) |
+| 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 진행 중 (K-1 PR #40, K-2 이번 PR, 다음 K-3) |
 | 후속 4 | 상품 검색 (product-service + 테이블 CDC + Elasticsearch) | 나중으로 미룸 |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
@@ -115,7 +115,8 @@ flowchart LR
 | #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
 | #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
 | #37 | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
-| (이번 PR) | 후속 3 K-1: 공용 서비스 이미지(`deploy/docker/service.Dockerfile`), Helm 차트 `deploy/helm/commerce-saga`(Postgres·Redis StatefulSet, Strimzi Kafka 4.3.2·KafkaTopic, 서비스 7개, 화면), `scripts/k8s-deploy.sh`·`k8s-port-forward.sh`, CI `k8s`(kind 배포 + 시나리오 0·1·9·10) |
+| (이번 PR) | 후속 3 K-2: Connect 이미지(`deploy/docker/connect.Dockerfile`, Strimzi Kafka + Debezium Postgres), 차트 `debezium.enabled`(KafkaConnect 하나 + 서비스별 KafkaConnector 5개, heartbeat 토픽, 서비스 스케줄러 relay 끔), CI 에서 커넥터 Ready·outbox 비어 있음·활성 slot 5개 확인 |
+| #40 | 후속 3 K-1: 공용 서비스 이미지(`deploy/docker/service.Dockerfile`), Helm 차트 `deploy/helm/commerce-saga`(Postgres·Redis StatefulSet, Strimzi Kafka 4.3.2·KafkaTopic, 서비스 7개, 화면), `scripts/k8s-deploy.sh`·`k8s-port-forward.sh`, CI `k8s`(kind 배포 + 시나리오 0·1·9·10) |
 | #39 | 후속 2 F-2b (후속 2 마지막): 로그인 기기 관리 `/sessions`(다른 기기·모든 기기 로그아웃), 관리자 `/admin`(ADMIN 만, 결제 장애 주입, DLT 안내), 헤더 메뉴(관리자는 토큰 roles 로 표시만), CI `browser-e2e`(서비스 7개 + `next start` + Playwright 13개), README 후속 2 완료 |
 | #38 | 후속 2 F-2a: point-service 포인트 내역 `GET /points/me/history`(주문 사용 + 지급 기록 `point_grants`, 커서 = UUIDv7 id 하나), 가입 축하 지급 기록, 화면 `/points`·`/payments`·`/notifications`, 시나리오 13d, Playwright 내역 시나리오 2개 |
 
@@ -415,17 +416,25 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 
 | 순서 | PR | 상태 |
 |---|---|---|
-| K-1 | 공용 서비스 이미지 + Helm 차트(Postgres·Redis StatefulSet, Strimzi Kafka·KafkaTopic, 서비스 7개, 화면) + CI kind 워크플로(시나리오 0·1·9·10) | 이번 PR |
-| K-2 | Strimzi `KafkaConnect`·`KafkaConnector` 로 Debezium relay(ADR 0004 의 배포 기준) + Debezium 발행 확인 | 다음 (브랜치 `feat/k8s-debezium` 에 로컬 커밋 있음) |
+| K-1 | 공용 서비스 이미지 + Helm 차트(Postgres·Redis StatefulSet, Strimzi Kafka·KafkaTopic, 서비스 7개, 화면) + CI kind 워크플로(시나리오 0·1·9·10) | 완료 PR #40 |
+| K-2 | Strimzi `KafkaConnect`·`KafkaConnector` 로 Debezium relay(ADR 0004 의 배포 기준) + Debezium 발행 확인 | 이번 PR |
 | K-3 | ArgoCD(app-of-apps, CI kind 에서 GitHub 저장소를 sync 해 Healthy 확인) + edge(외부 공개는 이것 하나) + ADR 0014 보강 | 그다음 |
 
-**K-1 (이번 PR) 에서 한 것 (결정·확인 사항)**
+**K-1 (PR #40) 에서 한 것 (결정·확인 사항)**
 - 이미지: `deploy/docker/service.Dockerfile` 하나로 7개. bootJar 를 받아 레이어로 풀어 비 root 로 실행. 이미지 안에서 Gradle 을 돌리지 않는다
 - 차트 하나(`deploy/helm/commerce-saga`): 서비스는 `values.services` 의 한 항목(포트·DB·추가 env), 서비스마다 자기 DB 계정 Secret 만. Postgres·Redis 는 오퍼레이터 없이 StatefulSet·Deployment. Postgres 초기화 SQL 은 `infra/postgres/init` 사본(CI 가 diff)
 - Kafka: Strimzi 1.3.1(2026-11-04) 이 지원하는 마지막 버전 **4.3.2**(KRaft 노드 하나). 클라이언트 4.4.0 과 호환. 토픽 16개(DLT 포함)는 `KafkaTopic`, 자동 생성 끔
-- trace 없음(`TRACING_SAMPLING_PROBABILITY=0`, 클러스터에 Tempo 없음). auth-service replicas 1(임시 서명 키)
+- trace 없음(`TRACING_SAMPLING_PROBABILITY=0`, 클러스터에 Tempo 없음). auth-service replicas 1 + `Recreate`(임시 서명 키, 재배포 중 키가 다른 Pod 동시 응답 방지. Codex 지적)
+- Codex 반영: (P2) 같은 태그 `dev` 로 다시 배포하면 Pod 가 안 바뀜 → `k8s-deploy.sh` 기본 태그를 빌드마다 새로. (P2) auth-service RollingUpdate 중 임시 키가 다른 Pod 둘 → `Recreate`
 - CI `k8s`: kind(v0.33, 노드 1.37) → 이미지 빌드·`kind load` → Strimzi(Helm OCI) → 차트 → Ready 대기 → `port-forward` 로 compose 와 같은 포트 → 기존 스모크 그대로. 서드파티 액션은 커밋 해시로 고정(CodeQL 지적)
 - 로컬에는 kind 가 없어(Docker Desktop 만) 렌더링·`helm lint`(alpine/helm 이미지)·order-service 이미지 실행까지 확인하고 배포는 CI 로 확인
+
+**K-2 (이번 PR) 에서 한 것 (결정·확인 사항)**
+- Connect 이미지 `deploy/docker/connect.Dockerfile`: Strimzi Kafka 이미지(1.3.1, Kafka 4.3.2) + Debezium Postgres 플러그인(compose 와 같은 3.7.1.Final·SHA-512). Strimzi `build` 는 kind 에 레지스트리가 없어 쓰지 않음
+- 차트 `debezium.enabled`(기본 true): `KafkaConnect` 하나(`strimzi.io/use-connector-resources`) + 서비스별 `KafkaConnector` 5개(compose `infra/connect/*.json` 과 같은 설정), heartbeat `KafkaTopic` 5개. outbox 가 있는 서비스는 `OUTBOX_RELAY_ENABLED=false`
+- DB 비밀번호: 서비스 DB Secret → Connect 컨테이너 env → 커넥터 `${env:...}`(EnvVarConfigProvider). CR 에 비밀번호를 쓰지 않음
+- CI `k8s`: 스모크 뒤 커넥터 5개 Ready, outbox 5개 비어 있음, 활성 replication slot 5개
+- CI 첫 실행 실패: Strimzi v1 `KafkaConnect` 는 워커 그룹·내부 토픽을 config 가 아니라 spec 필드(`groupId`, `configStorageTopic` 등)로 받는다 → 고침
 
 ## 5. 알려진 한계·나중 일
 
