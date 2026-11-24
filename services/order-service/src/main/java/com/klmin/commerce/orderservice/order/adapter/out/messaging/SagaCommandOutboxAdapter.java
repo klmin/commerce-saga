@@ -8,7 +8,10 @@ import com.klmin.commerce.contract.payment.Pay;
 import com.klmin.commerce.contract.point.RefundPoint;
 import com.klmin.commerce.contract.point.UsePoint;
 import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPort;
+import com.klmin.commerce.orderservice.order.domain.Money;
 import com.klmin.commerce.orderservice.order.domain.Order;
+import com.klmin.commerce.orderservice.order.domain.Points;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import com.klmin.commerce.outbox.OutboxWriter;
 import org.springframework.stereotype.Component;
 
@@ -27,7 +30,7 @@ class SagaCommandOutboxAdapter implements SagaCommandPort {
     @Override
     public void reserveStock(Order order) {
         ReserveStock command = new ReserveStock(order.id(), order.lines().stream()
-                .map(l -> new ReserveStock.Line(l.productId(), l.quantity()))
+                .map(l -> new ReserveStock.Line(l.productId().value(), l.quantity().value()))
                 .toList());
         outboxWriter.append(Topics.INVENTORY_COMMAND, order.id().toString(), ReserveStock.TYPE, command);
     }
@@ -39,9 +42,9 @@ class SagaCommandOutboxAdapter implements SagaCommandPort {
     }
 
     @Override
-    public void usePoint(UUID orderId, long userId, long amount) {
+    public void usePoint(UUID orderId, UserId userId, Points amount) {
         outboxWriter.append(Topics.POINT_COMMAND, orderId.toString(), UsePoint.TYPE,
-                new UsePoint(orderId, userId, amount));
+                new UsePoint(orderId, userId.value(), amount.value()));
     }
 
     @Override
@@ -50,13 +53,13 @@ class SagaCommandOutboxAdapter implements SagaCommandPort {
     }
 
     @Override
-    public void pay(UUID orderId, long userId, long amount) {
-        outboxWriter.append(Topics.PAYMENT_COMMAND, orderId.toString(), Pay.TYPE, new Pay(orderId, userId, amount));
+    public void pay(UUID orderId, UserId userId, Money amount) {
+        outboxWriter.append(Topics.PAYMENT_COMMAND, orderId.toString(), Pay.TYPE, new Pay(orderId, userId.value(), amount.value()));
     }
 
     @Override
-    public void cancelPayment(UUID orderId, long userId, long amount) {
+    public void cancelPayment(UUID orderId, UserId userId, Money amount) {
         outboxWriter.append(Topics.PAYMENT_COMMAND, orderId.toString(), CancelPayment.TYPE,
-                new CancelPayment(orderId, userId, amount));
+                new CancelPayment(orderId, userId.value(), amount.value()));
     }
 }

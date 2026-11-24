@@ -11,8 +11,87 @@ otelcol.receiver.otlp "default" {
   }
 
   output {
-    traces = [otelcol.processor.batch.default.input]
+    traces = [otelcol.processor.tail_sampling.default.input]
     logs   = [otelcol.processor.batch.default.input]
+  }
+}
+
+// trace 샘플링은 여기서 한다(tail sampling). 서비스는 전부 보내고(샘플링 1.0), 끝난 trace 를 보고 남길지 정한다.
+// 오류(span ERROR·5xx)·느린 trace 는 비율과 상관없이 남기고, actuator(헬스 체크·메트릭 수집) trace 는 버린다.
+// 나머지는 TRACE_SAMPLING_PERCENT(%, 기본 100)만큼. trace id 로 정하므로 같은 trace 의 늦은 span 도 같은 결정을 받는다.
+// 로그는 샘플링하지 않는다. 버린 trace 의 로그도 Loki 에는 남는다(그 trace 를 열면 비어 있다)
+otelcol.processor.tail_sampling "default" {
+  // 첫 span 이 온 뒤 이만큼 모았다가 판단한다. 그동안 Tempo 에 보이지 않는다(시나리오 11 은 60초까지 기다린다).
+  // 나머지 비율이 100% 면 결과가 같아 짧게 둔다. 비율을 낮추면 30s 로 올린다: 결제 지연·타임아웃처럼 오래 걸린 Saga 는
+  // 판단 뒤에 오류 span 이 와서, 앞부분은 버려지고 오류 조각만 남을 수 있다
+  // (klmin-drive 실측: 10s 에서 5xx 31건 중 5건 유실 → 30s)
+  // 남기기로 한 trace 의 늦은 span(늦게 끝난 Saga 단계)은 decision_cache 를 보고 그대로 남긴다.
+  // 버린 trace 의 늦은 span 은 다시 판단한다: 비율은 trace id 로 정해 결과가 같고, 늦게 난 오류는 남는다
+  decision_wait = "10s"
+
+  decision_cache = {
+    sampled_cache_size = 10000,
+  }
+
+  policy {
+    name = "drop-actuator"
+    type = "drop"
+
+    drop {
+      drop_sub_policy {
+        name = "actuator"
+        type = "string_attribute"
+
+        string_attribute {
+          key                    = "uri"
+          values                 = ["/actuator/.*"]
+          enabled_regex_matching = true
+        }
+      }
+    }
+  }
+
+  policy {
+    name = "errors"
+    type = "status_code"
+
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+
+  // @ExceptionHandler 가 잡아 Problem Details 로 답한 5xx 는 span 이 ERROR 가 아니다. Spring 이 남기는 outcome 으로 잡는다.
+  // 4xx(검증 실패·인증·남의 주문·재고 부족)는 서버가 정상으로 거절한 것이라 남기지 않는다. 건수는 Prometheus 메트릭으로 본다
+  policy {
+    name = "server_errors"
+    type = "string_attribute"
+
+    string_attribute {
+      key    = "outcome"
+      values = ["SERVER_ERROR"]
+    }
+  }
+
+  policy {
+    name = "slow"
+    type = "latency"
+
+    latency {
+      threshold_ms = 1000
+    }
+  }
+
+  policy {
+    name = "rest"
+    type = "probabilistic"
+
+    probabilistic {
+      sampling_percentage = encoding.from_json(coalesce(sys.env("TRACE_SAMPLING_PERCENT"), "100"))
+    }
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
   }
 }
 

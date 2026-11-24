@@ -13,6 +13,8 @@ import com.klmin.commerce.pointservice.point.application.port.out.SendPointReply
 import com.klmin.commerce.pointservice.point.domain.PointAccount;
 import com.klmin.commerce.pointservice.point.domain.PointUsage;
 import com.klmin.commerce.pointservice.point.domain.PointUsageStatus;
+import com.klmin.commerce.pointservice.point.domain.Points;
+import com.klmin.commerce.pointservice.point.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -60,24 +62,31 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
 
         Instant now = clock.instant();
         // 잘못된 커맨드·잔액 부족은 재시도해도 같으므로 예외 대신 실패로 응답한다
+        // 값 객체로 바꾸기 전에 원시 값으로 검사한다
         if (command.amount() <= 0) {
             reject(command, "invalid command: amount must be positive", now);
             return;
         }
-        Optional<PointAccount> found = accountPort.findByIdForUpdate(command.userId());
+        if (command.userId() <= 0) {
+            reject(command, "invalid command: userId must be positive", now);
+            return;
+        }
+        UserId userId = UserId.of(command.userId());
+        Points amount = Points.of(command.amount());
+        Optional<PointAccount> found = accountPort.findByIdForUpdate(userId);
         if (found.isEmpty()) {
             reject(command, "point account not found: userId=" + command.userId(), now);
             return;
         }
         PointAccount account = found.get();
-        if (!account.canUse(command.amount())) {
+        if (!account.canUse(amount)) {
             reject(command, "insufficient points: userId=" + command.userId(), now);
             return;
         }
 
-        account.use(command.amount(), now);
+        account.use(amount, now);
         accountPort.update(account);
-        PointUsage usage = PointUsage.used(command.orderId(), command.userId(), command.amount(), now);
+        PointUsage usage = PointUsage.used(command.orderId(), userId, amount, now);
         usagePort.insert(usage);
         replyToUse(usage);
     }
@@ -99,7 +108,7 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
             if (usage.refund(now)) {
                 PointAccount account = accountPort.findByIdForUpdate(usage.userId())
                         .orElseThrow(() -> new InvariantViolationException(
-                                "point account disappeared: userId=" + usage.userId() + ", orderId=" + orderId));
+                                "point account disappeared: userId=" + usage.userId().value() + ", orderId=" + orderId));
                 account.refund(usage.amount(), now);
                 accountPort.update(account);
                 usagePort.update(usage);
@@ -114,7 +123,7 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
     @Override
     @Transactional(readOnly = true)
     public PointAccount getBalance(long userId) {
-        return accountPort.findById(userId).orElseThrow(() -> new PointAccountNotFoundException(userId));
+        return accountPort.findById(UserId.of(userId)).orElseThrow(() -> new PointAccountNotFoundException(userId));
     }
 
     // 같은 메시지의 재전달(relay 재전송, 오프셋 되감기)은 아무것도 바꾸지 않고 응답도 다시 보내지 않는다.

@@ -11,6 +11,8 @@ import com.klmin.commerce.inventoryservice.stock.application.port.out.ProcessedM
 import com.klmin.commerce.inventoryservice.stock.application.port.out.SendStockReplyPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockReservationPort;
+import com.klmin.commerce.inventoryservice.stock.domain.ProductId;
+import com.klmin.commerce.inventoryservice.stock.domain.Quantity;
 import com.klmin.commerce.inventoryservice.stock.domain.ReservationLine;
 import com.klmin.commerce.inventoryservice.stock.domain.ReservationStatus;
 import com.klmin.commerce.inventoryservice.stock.domain.Stock;
@@ -73,27 +75,27 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
         }
 
         Instant now = clock.instant();
-        List<ReservationLine> lines = command.lines().stream()
-                .map(l -> new ReservationLine(l.productId(), l.quantity()))
-                .toList();
-
-        String invalid = validate(lines);
+        // 값 객체로 바꾸기 전에 원시 값으로 검사한다. 잘못된 커맨드는 재시도해도 같으므로 예외 대신 실패로 응답한다
+        String invalid = validate(command.lines());
         if (invalid != null) {
-            reject(command, lines, invalid, now);
+            reject(command, List.of(), invalid, now);
             return;
         }
+        List<ReservationLine> lines = command.lines().stream()
+                .map(l -> ReservationLine.of(l.productId(), l.quantity()))
+                .toList();
 
-        Map<Long, Stock> stocks = stockPort.findAllForUpdate(lines.stream().map(ReservationLine::productId).toList())
+        Map<ProductId, Stock> stocks = stockPort.findAllForUpdate(lines.stream().map(ReservationLine::productId).toList())
                 .stream()
                 .collect(Collectors.toMap(Stock::productId, Function.identity()));
         for (ReservationLine line : lines) {
             Stock stock = stocks.get(line.productId());
             if (stock == null) {
-                reject(command, lines, "unknown product: productId=" + line.productId(), now);
+                reject(command, lines, "unknown product: productId=" + line.productId().value(), now);
                 return;
             }
             if (!stock.canReserve(line.quantity())) {
-                reject(command, lines, "insufficient stock: productId=" + line.productId(), now);
+                reject(command, lines, "insufficient stock: productId=" + line.productId().value(), now);
                 return;
             }
         }
@@ -164,8 +166,8 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
         return true;
     }
 
-    private void applyToStocks(StockReservation reservation, BiConsumer<Stock, Integer> change) {
-        Map<Long, Stock> stocks = stockPort.findAllForUpdate(
+    private void applyToStocks(StockReservation reservation, BiConsumer<Stock, Quantity> change) {
+        Map<ProductId, Stock> stocks = stockPort.findAllForUpdate(
                         reservation.lines().stream().map(ReservationLine::productId).toList())
                 .stream()
                 .collect(Collectors.toMap(Stock::productId, Function.identity()));
@@ -173,7 +175,7 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
             Stock stock = stocks.get(line.productId());
             if (stock == null) {
                 throw new InvariantViolationException(
-                        "reserved product disappeared: productId=" + line.productId() + ", orderId="
+                        "reserved product disappeared: productId=" + line.productId().value() + ", orderId="
                                 + reservation.orderId());
             }
             change.accept(stock, line.quantity());
@@ -184,7 +186,7 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     @Override
     @Transactional(readOnly = true)
     public Stock getStock(long productId) {
-        return stockPort.findById(productId).orElseThrow(() -> new StockNotFoundException(productId));
+        return stockPort.findById(ProductId.of(productId)).orElseThrow(() -> new StockNotFoundException(productId));
     }
 
     private void reject(ReserveStockCommand command, List<ReservationLine> lines, String reason, Instant now) {
@@ -205,12 +207,15 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     }
 
     // 잘못된 커맨드는 재시도해도 바뀌지 않으므로 예외 대신 실패로 응답한다
-    private static String validate(List<ReservationLine> lines) {
+    private static String validate(List<ReserveStockCommand.Line> lines) {
         if (lines.isEmpty()) {
             return "invalid command: no lines";
         }
         Set<Long> productIds = new HashSet<>();
-        for (ReservationLine line : lines) {
+        for (ReserveStockCommand.Line line : lines) {
+            if (line.productId() <= 0) {
+                return "invalid command: productId must be positive (productId=" + line.productId() + ")";
+            }
             if (line.quantity() <= 0) {
                 return "invalid command: quantity must be positive (productId=" + line.productId() + ")";
             }

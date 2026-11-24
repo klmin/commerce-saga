@@ -20,26 +20,25 @@ public final class Order {
     public static final int CANCEL_REASON_MAX_LENGTH = 200;
 
     private final UUID id;
-    private final long userId;
+    private final UserId userId;
     private final List<OrderLine> lines;
-    private final long totalAmount;
-    private final long pointAmount;
+    private final Money totalAmount;
+    private final Points pointAmount;
     private final Instant createdAt;
     private OrderStatus status;
     private String cancelReason;
     private Instant updatedAt;
 
-    private Order(UUID id, long userId, List<OrderLine> lines, long pointAmount, OrderStatus status,
+    private Order(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, OrderStatus status,
                   String cancelReason, Instant createdAt, Instant updatedAt) {
         this.id = Objects.requireNonNull(id, "id");
-        if (userId <= 0) {
-            throw new DomainValidationException("userId must be positive");
-        }
-        this.userId = userId;
+        this.userId = Objects.requireNonNull(userId, "userId");
         this.lines = validateLines(lines);
-        this.totalAmount = this.lines.stream().mapToLong(OrderLine::amount).reduce(0L, Math::addExact);
-        if (pointAmount < 0 || pointAmount > totalAmount) {
-            throw new DomainValidationException("pointAmount must be between 0 and totalAmount(" + totalAmount + ")");
+        this.totalAmount = this.lines.stream().map(OrderLine::amount).reduce(Money.ZERO, Money::plus);
+        Objects.requireNonNull(pointAmount, "pointAmount");
+        if (pointAmount.toMoney().isGreaterThan(totalAmount)) {
+            throw new DomainValidationException(
+                    "pointAmount must be between 0 and totalAmount(" + totalAmount.value() + ")");
         }
         this.pointAmount = pointAmount;
         this.status = Objects.requireNonNull(status, "status");
@@ -48,11 +47,11 @@ public final class Order {
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
-    public static Order place(UUID id, long userId, List<OrderLine> lines, long pointAmount, Instant now) {
+    public static Order place(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, Instant now) {
         return new Order(id, userId, lines, pointAmount, OrderStatus.PENDING, null, now, now);
     }
 
-    public static Order restore(UUID id, long userId, List<OrderLine> lines, long pointAmount, OrderStatus status,
+    public static Order restore(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, OrderStatus status,
                                 String cancelReason, Instant createdAt, Instant updatedAt) {
         return new Order(id, userId, lines, pointAmount, status, cancelReason, createdAt, updatedAt);
     }
@@ -78,13 +77,13 @@ public final class Order {
         return true;
     }
 
-    public boolean isOwnedBy(long userId) {
-        return this.userId == userId;
+    public boolean isOwnedBy(UserId userId) {
+        return this.userId.equals(userId);
     }
 
     /** 결제할 금액 (합계 - 사용 포인트) */
-    public long paidAmount() {
-        return totalAmount - pointAmount;
+    public Money paidAmount() {
+        return totalAmount.minus(pointAmount.toMoney());
     }
 
     private static List<OrderLine> validateLines(List<OrderLine> lines) {
@@ -94,10 +93,10 @@ public final class Order {
         if (lines.size() > MAX_LINES) {
             throw new DomainValidationException("order must have at most " + MAX_LINES + " lines");
         }
-        Set<Long> productIds = new HashSet<>();
+        Set<ProductId> productIds = new HashSet<>();
         for (OrderLine line : lines) {
             if (!productIds.add(line.productId())) {
-                throw new DomainValidationException("duplicate productId: " + line.productId());
+                throw new DomainValidationException("duplicate productId: " + line.productId().value());
             }
         }
         return List.copyOf(lines);
@@ -115,7 +114,7 @@ public final class Order {
         return id;
     }
 
-    public long userId() {
+    public UserId userId() {
         return userId;
     }
 
@@ -123,11 +122,11 @@ public final class Order {
         return lines;
     }
 
-    public long totalAmount() {
+    public Money totalAmount() {
         return totalAmount;
     }
 
-    public long pointAmount() {
+    public Points pointAmount() {
         return pointAmount;
     }
 

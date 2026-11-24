@@ -34,7 +34,7 @@ class PointController {
     @GetMapping("/me")
     PointBalanceResponse getMyBalance(@CurrentUserId long userId) {
         PointAccount account = getPointBalanceUseCase.getBalance(userId);
-        return new PointBalanceResponse(account.userId(), account.balance());
+        return new PointBalanceResponse(account.userId().value(), account.balance().value());
     }
 
     /** 본인 포인트 내역 (주문 사용 + 지급, 최신순 커서 페이징). 다음 쪽은 마지막 entryId 를 before 로 */

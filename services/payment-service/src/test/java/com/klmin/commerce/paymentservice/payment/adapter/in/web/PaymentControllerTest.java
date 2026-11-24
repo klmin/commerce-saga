@@ -9,6 +9,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentSumm
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Mode;
 import com.klmin.commerce.paymentservice.payment.application.port.in.PaymentFaultUseCase.Settings;
+import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Import;
@@ -53,7 +54,7 @@ class PaymentControllerTest {
     @Test
     void getByOrder_ownPayment() throws Exception {
         UUID orderId = UUID.randomUUID();
-        Payment payment = Payment.approved(UUID.randomUUID(), orderId, 1L, 5_000L, "tx", Instant.now());
+        Payment payment = Payment.approved(UUID.randomUUID(), orderId, 1L, Money.of(5_000L), "tx", Instant.now());
         given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 1L))).willReturn(payment);
 
         mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject("1"))))

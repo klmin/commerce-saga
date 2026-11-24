@@ -21,13 +21,13 @@ class OrderEventOutboxAdapter implements OrderEventPort {
     @Override
     public void orderCompleted(Order order) {
         outboxWriter.append(Topics.ORDER_EVENTS, order.id().toString(), OrderCompleted.TYPE,
-                new OrderCompleted(order.id(), order.userId(), order.totalAmount(), order.pointAmount(),
-                        order.paidAmount()));
+                new OrderCompleted(order.id(), order.userId().value(), order.totalAmount().value(),
+                        order.pointAmount().value(), order.paidAmount().value()));
     }
 
     @Override
     public void orderCancelled(Order order) {
         outboxWriter.append(Topics.ORDER_EVENTS, order.id().toString(), OrderCancelled.TYPE,
-                new OrderCancelled(order.id(), order.userId(), order.cancelReason()));
+                new OrderCancelled(order.id(), order.userId().value(), order.cancelReason()));
     }
 }

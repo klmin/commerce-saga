@@ -1,6 +1,9 @@
 package com.klmin.commerce.orderservice.order.application.port.out;
 
+import com.klmin.commerce.orderservice.order.domain.Money;
 import com.klmin.commerce.orderservice.order.domain.Order;
+import com.klmin.commerce.orderservice.order.domain.Points;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 
 import java.util.UUID;
 
@@ -11,12 +14,12 @@ public interface SagaCommandPort {
 
     void releaseStock(UUID orderId);
 
-    void usePoint(UUID orderId, long userId, long amount);
+    void usePoint(UUID orderId, UserId userId, Points amount);
 
     void refundPoint(UUID orderId);
 
-    void pay(UUID orderId, long userId, long amount);
+    void pay(UUID orderId, UserId userId, Money amount);
 
     /** 결제 취소 (결제 결과를 끝내 못 받아 포기). 승인됐으면 결제 서비스가 환불한다 */
-    void cancelPayment(UUID orderId, long userId, long amount);
+    void cancelPayment(UUID orderId, UserId userId, Money amount);
 }

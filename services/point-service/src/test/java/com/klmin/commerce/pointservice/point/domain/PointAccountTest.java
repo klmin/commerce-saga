@@ -15,36 +15,36 @@ class PointAccountTest {
 
     @Test
     void use_and_refund() {
-        PointAccount account = PointAccount.restore(1L, 1_000L, T0);
+        PointAccount account = PointAccount.restore(UserId.of(1L), Points.of(1_000L), T0);
 
-        account.use(300L, T0);
-        assertThat(account.balance()).isEqualTo(700L);
+        account.use(Points.of(300L), T0);
+        assertThat(account.balance()).isEqualTo(Points.of(700L));
 
-        account.refund(300L, T0);
-        assertThat(account.balance()).isEqualTo(1_000L);
+        account.refund(Points.of(300L), T0);
+        assertThat(account.balance()).isEqualTo(Points.of(1_000L));
     }
 
     @Test
     void canUse_upToBalance_andPositiveOnly() {
-        PointAccount account = PointAccount.restore(1L, 100L, T0);
+        PointAccount account = PointAccount.restore(UserId.of(1L), Points.of(100L), T0);
 
-        assertThat(account.canUse(100L)).isTrue();
-        assertThat(account.canUse(101L)).isFalse();
-        assertThat(account.canUse(0L)).isFalse();
-        assertThatThrownBy(() -> account.use(101L, T0)).isInstanceOf(IllegalStateException.class);
-        assertThat(account.balance()).isEqualTo(100L);
+        assertThat(account.canUse(Points.of(100L))).isTrue();
+        assertThat(account.canUse(Points.of(101L))).isFalse();
+        assertThat(account.canUse(Points.ZERO)).isFalse();
+        assertThatThrownBy(() -> account.use(Points.of(101L), T0)).isInstanceOf(IllegalStateException.class);
+        assertThat(account.balance()).isEqualTo(Points.of(100L));
     }
 
     @Test
     void refund_nonPositive_isInvariantViolation() {
-        PointAccount account = PointAccount.restore(1L, 100L, T0);
+        PointAccount account = PointAccount.restore(UserId.of(1L), Points.of(100L), T0);
 
-        assertThatThrownBy(() -> account.refund(0L, T0)).isInstanceOf(InvariantViolationException.class);
+        assertThatThrownBy(() -> account.refund(Points.ZERO, T0)).isInstanceOf(InvariantViolationException.class);
     }
 
     @Test
     void usage_refundOnlyFromUsed() {
-        PointUsage used = PointUsage.used(UUID.randomUUID(), 1L, 100L, T0);
+        PointUsage used = PointUsage.used(UUID.randomUUID(), UserId.of(1L), Points.of(100L), T0);
         assertThat(used.refund(T0)).isTrue();
         assertThat(used.status()).isEqualTo(PointUsageStatus.REFUNDED);
         assertThat(used.refund(T0)).isFalse();

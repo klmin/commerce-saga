@@ -94,7 +94,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - 시드 데이터: 재고 상품 1~3은 100개, 4는 1개, 5는 품절 / 포인트 사용자 1~3은 10,000P, 4는 0P, 새로 가입하면 1,000P(auth.events → point-service) / 로그인 사용자 `user1`~`user4`(id 1~4), `admin`(id 100), 비밀번호 `local-dev-pass` (로컬 개발용, 운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`)
 - 결제 실패 주입(관리자): `curl -X PUT localhost:8000/api/admin/payment-faults -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' -d '{"mode":"DECLINE","delayMillis":0}'` (`admin` 으로 로그인한 토큰)
 
-진행 현황과 다음 작업: [docs/PROGRESS.md](docs/PROGRESS.md)
+진행 현황과 다음 작업: [docs/PROGRESS.md](docs/PROGRESS.md). CI·배포 워크플로: [docs/ci-cd.md](docs/ci-cd.md)
 
 ## 시나리오
 

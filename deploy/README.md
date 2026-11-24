@@ -30,7 +30,7 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **설정은 application.yml 의 환경변수를 채우기만** 한다. 서비스마다 자기 DB 계정 Secret 만 받는다(다른 서비스 DB 비밀번호를 갖지 않음). 비밀번호는 모두 로컬 개발용 값
 - **Postgres 초기화 SQL** 은 `infra/postgres/init` 의 사본(`helm/commerce-saga/files`). Helm 은 차트 밖 파일을 읽지 못한다. CI 가 두 파일이 같은지 검사한다
 - **relay**: K-1 은 스케줄러 relay 로 시작했고, K-2 부터 배포 기준인 Debezium(ADR 0004)이 기본이다(아래)
-- **trace**: 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0`
+- **trace**: K-1 은 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0` 으로 시작했고, 지금은 차트가 관측성을 같이 올려 서비스가 trace·로그를 alloy 로 보낸다(아래 "관측성". 끄면 `observability.enabled=false`)
 - **auth-service 서명 키**: 주지 않으면 띄울 때마다 임시 키다(ADR 0008). 그래서 replicas 1 에 `Recreate` 전략(재배포 때 키가 다른 옛·새 Pod 가 함께 응답하지 않게). 여럿이면 키를 Secret 으로 넣는다
 - **이미지**: kind 노드에 직접 넣는다(`kind load docker-image`). 레지스트리에 올리면 `image.registry` 만 채운다
 
@@ -46,6 +46,8 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 ## 관측성 (Grafana·Tempo·Loki·Prometheus)
 
 차트가 alloy·tempo·loki·prometheus·kafka-exporter·grafana 를 같이 올린다(`observability.enabled`, 기본 true, ADR 0014 "관측성"). 밖으로는 열지 않으니 `scripts/k8s-port-forward.sh` 로 연결해서 Grafana http://localhost:3030 → Explore(Tempo, span 의 Related logs → Loki) 또는 대시보드 commerce-saga 를 본다. 설정 파일은 `files/observability` 에 있는 `infra/` 의 사본이라, 바꿀 때는 `infra/` 를 고치고 복사한다(CI 가 diff 로 확인)
+
+서비스의 trace·로그에는 `service.name`(= `spring.application.name`) 말고도 OTel 표준 resource 속성이 붙는다: `service.namespace`, `service.version`(이미지 태그), `deployment.environment.name`(`observability.environment`, 기본 `local`, EKS 는 `eks`), `service.instance.id`·`k8s.pod.name`·`k8s.node.name`·`k8s.namespace.name`. 파드 값은 Downward API 로 넣은 `OTEL_RESOURCE_ATTRIBUTES` 를 Spring Boot 가 읽는다(`templates/services.yaml`). replica 가 여럿이어도 어느 파드·노드의 trace·로그인지 보인다
 
 ## ArgoCD 로 올리기 (K-3, GitOps)
 

@@ -54,7 +54,7 @@ class PaymentController {
                            Instant createdAt, Instant updatedAt) {
 
         static PaymentResponse from(Payment p) {
-            return new PaymentResponse(p.id(), p.orderId(), p.amount(), p.status().name(), p.reason(),
+            return new PaymentResponse(p.id(), p.orderId(), p.amount().value(), p.status().name(), p.reason(),
                     p.createdAt(), p.updatedAt());
         }
 
