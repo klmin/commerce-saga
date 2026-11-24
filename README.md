@@ -52,7 +52,7 @@ flowchart LR
 - 메인 Saga는 order-service가 상태 머신(`OrderSaga`)으로 오케스트레이션, 후속 처리는 `order.events` 코레오그래피 ([ADR 0003](docs/adr/0003-orchestration-for-main-saga.md))
 - 메시지 키 = `orderId` (주문 단위 순서 보장), 커맨드·응답·이벤트 토픽 분리 ([ADR 0005](docs/adr/0005-message-key-and-topic-rules.md))
 - 멱등 컨슈머 두 겹: 같은 메시지의 재전달은 `processed_message`(헤더 `id`)로 건너뛰고, 내용이 같은 재요청은 주문별 처리 기록(예약·사용·결제)으로 한 번만 반영한다 ([ADR 0006](docs/adr/0006-idempotent-consumer.md)). 처리할 수 없는 메시지는 `<토픽>.DLT`
-- 분산 트레이싱: outbox 행에 넣는 시점의 `traceparent`를 저장하고 relay가 Kafka 헤더로 옮겨, 주문 한 건이 서비스를 몇 개 지나도 trace 하나 ([ADR 0013](docs/adr/0013-observability.md))
+- 분산 트레이싱: outbox 행에 넣는 시점의 `traceparent`를 저장하고 relay가 Kafka 헤더로 옮겨, 주문 한 건이 서비스를 몇 개 지나도 trace 하나. 서비스는 trace·로그를 OTLP 로 Alloy 에 보내고(→ Tempo·Loki), Grafana 에서 span ↔ 같은 trace_id 로그를 오간다 ([ADR 0013](docs/adr/0013-observability.md))
 - 메트릭·경보: 서비스마다 자기 DB 기준의 Saga·결제·outbox 메트릭(`/actuator/prometheus`), kafka-exporter 로 lag·DLT, Prometheus 경보 규칙(`infra/prometheus/rules`), Grafana 대시보드 ([ADR 0013](docs/adr/0013-observability.md))
 - 인증(후속 2): auth-service 가 access token(JWT RS256, 15분)을 발급하고 공개키를 JWKS 로 낸다. refresh token 은 httpOnly 쿠키, 쓸 때마다 회전하고 옛 토큰을 다시 쓰면 그 기기 세션을 버린다. 요청은 Spring Cloud Gateway(:8000)가 1차로 검증·라우팅·사용자별 rate limit 하고, 서비스마다 다시 검증해 토큰의 `sub` 로 소유권을 본다 ([ADR 0008](docs/adr/0008-auth-self-issued-jwt.md)). 가입은 `auth.events`(`UserRegistered`, outbox)로 알리고 point-service 가 멱등하게 포인트 계정을 만든다(시나리오 13)
 - 서비스 내부는 헥사고날 + DDD 애그리거트 ([ADR 0002](docs/adr/0002-persistence-domain-jpa-separation.md)), 서비스별 DB·계정 분리 ([ADR 0001](docs/adr/0001-monorepo-independent-deploy.md))
@@ -60,7 +60,7 @@ flowchart LR
 ## 실행
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Tempo·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Alloy(OTLP 4328)·Tempo·Loki·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380)
 ./gradlew :services:inventory-service:bootRun              # 8082   (각각 다른 터미널에서)
 ./gradlew :services:point-service:bootRun                  # 8083
 ./gradlew :services:payment-service:bootRun                # 8084
@@ -82,7 +82,7 @@ curl localhost:8000/api/orders/<orderId>/saga -H "Authorization: Bearer $TOKEN" 
 curl localhost:8000/api/orders?size=20 -H "Authorization: Bearer $TOKEN"          # 내 주문 목록 (최신순, 다음 쪽은 before=<마지막 orderId>). 결제는 /api/payments
 scripts/smoke-saga.sh                                      # 정상·품절·결제 실패 보상·소유권 검사 한 번에
 scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메시지와 원인 (replay 로 재처리)
-scripts/smoke-tracing.sh                                   # 주문 한 건 = trace 하나 (Grafana → Explore → Tempo 에서 trace 보기)
+scripts/smoke-tracing.sh                                   # 주문 한 건 = trace 하나 + 그 trace 의 로그 (Grafana → Explore → Tempo, span 의 Related logs → Loki)
 scripts/smoke-alerts.sh                                    # 장애 → 경보 firing (Grafana 대시보드 commerce-saga)
 scripts/smoke-auth.sh                                      # 가입·로그인·refresh 회전·재사용 탐지 (auth-service 를 AUTH_REFRESH_GRACE=2s 로 띄우면 GRACE_WAIT=3 로 빨리)
 scripts/smoke-gateway.sh                                   # Gateway·서비스 JWT 검증, 남의 주문 404, 관리자 역할, rate limit
@@ -147,4 +147,4 @@ docs/          ADR, 시나리오
 
 ## 기술 스택
 
-Java 25, Spring Boot 4.2, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, OpenTelemetry(OTLP) + Grafana Tempo, Prometheus + Grafana, Spring Cloud Gateway, Spring Security(OAuth2 Resource Server, JWT RS256), Redis, Testcontainers, ArchUnit
+Java 25, Spring Boot 4.2, Gradle Kotlin DSL(멀티모듈), PostgreSQL 18, Flyway, Kafka 4.4(KRaft), Kafka Connect + Debezium 3.7, Spring for Apache Kafka, OpenTelemetry(OTLP) + Grafana Alloy·Tempo·Loki, Prometheus + Grafana, Spring Cloud Gateway, Spring Security(OAuth2 Resource Server, JWT RS256), Redis, Testcontainers, ArchUnit

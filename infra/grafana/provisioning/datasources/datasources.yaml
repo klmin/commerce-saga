@@ -1,4 +1,6 @@
 # Grafana 데이터 소스 (로컬 개발용, 익명 접근)
+# trace ↔ 로그: Tempo span 에서 "Logs for this span" → 같은 서비스·trace_id 의 Loki 로그,
+# Loki 로그의 trace_id(structured metadata) → Tempo trace (ADR 0013)
 apiVersion: 1
 datasources:
   - name: Tempo
@@ -7,6 +9,29 @@ datasources:
     access: proxy
     url: http://tempo:3200
     isDefault: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        tags:
+          - key: service.name
+            value: service_name
+        customQuery: true
+        query: '{$${__tags}} | trace_id="$${__span.traceId}"'
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: Trace 보기
   - name: Prometheus
     uid: prometheus
     type: prometheus

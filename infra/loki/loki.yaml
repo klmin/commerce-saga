@@ -1,0 +1,36 @@
+# Loki 단일 바이너리, 로컬 디스크 저장 (로컬·CI 용). 서비스 로그를 Alloy 가 OTLP 로 넣는다 (ADR 0013)
+# 컨테이너를 내리면 로그는 사라진다 (보존이 필요 없는 로컬 확인용)
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /tmp/loki
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# OTLP 로그의 trace_id·span_id 는 structured metadata 로 들어간다 (tsdb + v13 스키마가 필요)
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  allow_structured_metadata: true
+
+analytics:
+  reporting_enabled: false

@@ -58,9 +58,11 @@ jobs:
       - name: 인프라 기동
         run: |
           docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
-          # Tempo 이미지에는 healthcheck 를 둘 도구가 없어 여기서 준비를 기다린다 (시나리오 11)
-          for i in $(seq 1 60); do curl -sf http://localhost:3210/ready > /dev/null && break; sleep 2; done
-          curl -sf http://localhost:3210/ready
+          # Tempo·Loki·Alloy 이미지에는 healthcheck 를 둘 도구가 없어 여기서 준비를 기다린다 (시나리오 11)
+          for url in http://localhost:3210/ready http://localhost:3110/ready http://localhost:12346/-/ready; do
+            for i in $(seq 1 60); do curl -sf $url > /dev/null && break; sleep 2; done
+            curl -sf $url > /dev/null || { echo "준비 안 됨: $url"; exit 1; }
+          done
 
       - name: 서비스 기동
         run: |
@@ -188,3 +190,5 @@ jobs:
             echo "===== connect"
             docker compose -f infra/docker-compose.yml logs --tail 150 connect || true
           fi
+          echo "===== alloy"
+          docker compose -f infra/docker-compose.yml logs --tail 50 alloy || true

@@ -136,6 +136,8 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
         }
         sagaPort.update(saga);
         executor.execute(action, saga, now);
+        // Saga 진행을 로그로도 남긴다. trace_id 가 붙어 Loki 에서 주문 한 건의 흐름을 trace 와 함께 본다 (ADR 0013)
+        log.info("Saga 진행: {} -> {} (orderId={})", reply.type(), saga.state(), reply.orderId());
     }
 
     @Override

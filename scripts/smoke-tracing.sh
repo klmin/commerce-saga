@@ -8,6 +8,8 @@
 #   11a. 정상 주문: 요청에 traceparent 를 직접 넣고, 그 trace id 하나에 다섯 서비스의 span 이 모두 달리는지
 #        (HTTP → inventory.command → inventory.reply → point.command → … → order.events 를 받는 inventory·notification)
 #   11b. 결제 실패 주문: 보상(RefundPoint, ReleaseStock)까지 같은 trace 에 이어지는지
+#   11c. 그 trace 안에서 찍은 로그가 trace_id 와 함께 Loki 에 들어와, trace id 로 여러 서비스의 로그가 찾히는지
+#        (서비스 → OTLP → Alloy → Loki. Grafana 의 span → 로그, 로그 → trace 링크가 이것을 쓴다)
 # 메시지는 outbox 를 거치므로 trace 문맥은 outbox.traceparent → Kafka 헤더 traceparent → 리스너 observation 으로 넘어간다 (ADR 0013)
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
@@ -16,6 +18,7 @@ source "$(dirname "$0")/lib/auth.sh"
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 TEMPO_URL=${TEMPO_URL:-http://localhost:3210}
+LOKI_URL=${LOKI_URL:-http://localhost:3110}
 USER_ID=${USER_ID:-1}
 PRODUCT_ID=${PRODUCT_ID:-1}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
@@ -112,5 +115,23 @@ wait_until "trace 에 span 12개" "$TIMEOUT_SECONDS" trace_has "$trace" 12
 echo "  ok  주문 …${id: -8} CANCELLED, trace $trace"
 expect_services "$trace"
 trace_json "$trace" | spans_in | sed 's/^/      /'
+
+echo "== 11c. 같은 trace 의 로그가 Loki 에 (trace_id 로 검색)"
+logs_of() { # trace-id → Loki 응답
+  curl -sf -G "$LOKI_URL/loki/api/v1/query_range" \
+    --data-urlencode "query={service_name=~\".+\"} | trace_id=\"$1\"" \
+    --data-urlencode "start=$(( $(date +%s) - 600 ))000000000" --data-urlencode "limit=200" || true
+}
+log_services() { logs_of "$1" | { grep -oE '"service_name":"[^"]+"' || true; } | sed -E 's/.*:"//; s/"$//' | sort -u | tr '\n' ' '; }
+# Saga 진행(order-service INFO)과 취소 알림(notification-service INFO)은 이 trace 의 리스너 span 안에서 찍힌다
+has_logs() { # trace-id
+  local got
+  got=" $(log_services "$1")"
+  [[ "$got" == *" order-service "* && "$got" == *" notification-service "* ]]
+}
+# 로그도 서비스가 묶어서 내보내고(기본 1초) Alloy 가 다시 묶어 보낸다
+wait_until "trace $trace 의 로그" "$TIMEOUT_SECONDS" has_logs "$trace" \
+  || { echo "FAIL: trace $trace 로 찾은 로그의 서비스: $(log_services "$trace")" >&2; exit 1; }
+echo "  ok  trace_id 로 찾은 로그의 서비스: $(log_services "$trace")"
 
 echo "PASS"

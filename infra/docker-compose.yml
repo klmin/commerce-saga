@@ -7,8 +7,10 @@
 # - Kafka UI   : http://localhost:8989
 # - Kafka Connect (Debezium) REST : http://localhost:8088  (커넥터 등록은 scripts/register-connectors.sh)
 #   커넥터를 등록하지 않으면 아무것도 발행하지 않는다. relay 모드는 docs/PROGRESS.md 7절 참고
-# - Tempo      : OTLP http://localhost:4328 (서비스 trace 수신), API http://localhost:3210
-# - Grafana    : http://localhost:3030 (trace·대시보드, 익명 접근)
+# - Alloy      : OTLP http://localhost:4328 (서비스 trace·로그 수신 → Tempo·Loki), UI http://localhost:12346
+# - Tempo      : API http://localhost:3210 (trace 저장)
+# - Loki       : API http://localhost:3110 (로그 저장)
+# - Grafana    : http://localhost:3030 (trace·로그·대시보드, 익명 접근)
 # - Prometheus : http://localhost:9091 (메트릭, 경보 규칙)
 # - Redis      : localhost:6380 (auth-service 의 refresh token·로그인 실패 횟수. 6379 는 흔히 다른 Redis 가 써서 피함)
 # 포트는 infra/.env 로 바꿀 수 있다 (.env.example 참고). 계정·비밀번호는 로컬 개발용 값이다.
@@ -150,8 +152,23 @@ services:
       postgres-init:
         condition: service_completed_successfully
 
-  # 분산 트레이싱 (ADR 0013). 서비스가 OTLP 로 span 을 보낸다 (OTLP_TRACING_ENDPOINT, 기본 http://localhost:4328/v1/traces)
-  # 호스트 포트는 다른 관측성 스택과 겹치지 않게 표준(4318·3200)에서 비켜 둔다
+  # OTLP 수집기 (ADR 0013). 서비스가 trace·로그를 여기로 보낸다 (OTLP_TRACING_ENDPOINT·OTLP_LOGGING_ENDPOINT,
+  # 기본 http://localhost:4328/v1/traces·/v1/logs) → trace 는 tempo, 로그는 loki
+  # 호스트 포트는 다른 관측성 스택과 겹치지 않게 표준(4318·12345)에서 비켜 둔다
+  alloy:
+    image: grafana/alloy:v1.21.3
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    ports:
+      - "${OTLP_HTTP_PORT:-4328}:4318"
+      - "${ALLOY_PORT:-12346}:12345"
+    depends_on:
+      - tempo
+      - loki
+    # 이미지에 wget·curl 이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:12346/-/ready
+
+  # 분산 트레이싱 저장소 (ADR 0013). alloy 가 OTLP 로 넣는다. 호스트 포트는 조회 API 만 (표준 3200 에서 비킴)
   tempo:
     image: grafana/tempo:2.10.10
     command: ["-config.file=/etc/tempo.yaml"]
@@ -159,8 +176,17 @@ services:
       - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
     ports:
       - "${TEMPO_PORT:-3210}:3200"
-      - "${OTLP_HTTP_PORT:-4328}:4318"
     # 이미지에 셸·wget 이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:3210/ready
+
+  # 로그 저장소 (ADR 0013). alloy 가 OTLP 로 넣고 Grafana 에서 trace ↔ 로그를 오간다. 호스트 포트는 표준 3100 에서 비킴
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
+    ports:
+      - "${LOKI_PORT:-3110}:3100"
+    # 이미지에 셸이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:3110/ready
 
   # 메트릭·경보 (ADR 0013). 호스트에서 뜬 서비스의 /actuator/prometheus 와 kafka-exporter 를 긁고 경보 규칙(prometheus/rules)을 평가한다
   # 호스트 포트는 다른 Prometheus 와 겹치지 않게 9091
@@ -189,7 +215,7 @@ services:
       kafka:
         condition: service_healthy
 
-  # trace(Explore → Tempo), 메트릭·경보(대시보드 "commerce-saga", Alerting). 로컬 개발용 익명 관리자
+  # trace(Explore → Tempo)·로그(Explore → Loki, trace 와 서로 링크), 메트릭·경보(대시보드 "commerce-saga", Alerting). 로컬 개발용 익명 관리자
   grafana:
     image: grafana/grafana:13.2.6
     environment:
@@ -203,6 +229,7 @@ services:
       - "${GRAFANA_PORT:-3030}:3000"
     depends_on:
       - tempo
+      - loki
 
 volumes:
   postgres-data:
