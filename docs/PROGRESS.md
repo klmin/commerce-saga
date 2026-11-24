@@ -472,6 +472,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 - 인증: 이미 나간 access token 은 최대 15분 유효(즉시 차단 없음). 로그인 잠금은 아이디 기준이라 남이 내 계정을 15분 잠글 수 있음(IP 제한은 Gateway rate limit). 동시 refresh 유예(20초) 안의 옛 refresh token 은 access token 을 받을 수 있음(회전은 못 함) (ADR 0008)
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). `ConsumerLagHigh` 경보로 잡는다
 - trace: 단계 타임아웃 재전송·결제 보정 후 응답은 원래 trace 에 잇지 못하고 새 trace 로 시작한다(주문 id 검색으로 모임). 이으려면 Saga 행에 처음 traceparent 를 저장 (ADR 0013)
+- 수집기 Alloy 는 한 개(SPOF): 멈추면 메트릭·trace·로그가 같이 빈다. `MetricsPipelineDown` 경보로 알리는 데까지. 여러 개로 늘리려면 clustering(scrape 분산) + trace id 로 나누는 앞단(tail sampling) (ADR 0013 "메트릭도 Alloy 로")
 - 경보 문턱값은 시연용(짧음), 경보 전달(Alertmanager)은 없음. 운영 값은 ADR 0013 표
 
 ## 6. 작업 방식 (매 PR 동일)

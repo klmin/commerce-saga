@@ -17,25 +17,69 @@ app.kubernetes.io/managed-by: {{ .root.Release.Service }}
 {{ .Release.Name }}-kafka-bootstrap:9092
 {{- end -}}
 
-{{/* Prometheus 설정 (templates/observability.yaml). infra/prometheus/prometheus.yml 과 같은 job·라벨, 대상만 클러스터 Service */}}
-{{- define "commerce.prometheusConfig" -}}
-global:
-  scrape_interval: 5s
-  evaluation_interval: 5s
-
-rule_files:
-  - /etc/prometheus/rules/*.yml
-
-scrape_configs:
-  - job_name: services
-    metrics_path: /actuator/prometheus
-    static_configs:
+{{/* alloy 가 메트릭을 긁을 서비스 (config.alloy 의 METRICS_SERVICE_TARGETS). compose 와 같은 라벨, 주소만 클러스터 Service */}}
+{{- define "commerce.metricsServiceTargets" -}}
+{{- $targets := list }}
 {{- range $name, $svc := .Values.services }}
-      - targets: ['{{ $name }}:{{ $svc.port }}']
-        labels: {service: {{ $name }}}
+{{- $targets = append $targets (dict "__address__" (printf "%s:%v" $name $svc.port) "service" $name) }}
 {{- end }}
+{{- toJson $targets }}
+{{- end -}}
 
-  - job_name: kafka
-    static_configs:
-      - targets: ['kafka-exporter:9308']
+{{/* k8s 에만 있는 수집 (alloy 가 config.alloy 와 같은 폴더에서 읽는다). 노드 kubelet 의 컨테이너 지표(cAdvisor):
+     메모리·limit·CPU·OOM. 이 namespace 의 컨테이너만, 쓰는 지표만 남긴다(경보 ContainerMemoryNearLimit) */}}
+{{- define "commerce.kubernetesAlloy" -}}
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+// API 서버의 노드 프록시로 읽는다(노드 IP·kubelet 인증서를 몰라도 된다). 권한은 ClusterRole alloy
+discovery.relabel "cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc:443"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/${1}/proxy/metrics/cadvisor"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets           = discovery.relabel.cadvisor.output
+  job_name          = "cadvisor"
+  scheme            = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  scrape_interval   = "15s"
+  forward_to        = [prometheus.relabel.cadvisor.receiver]
+
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  }
+}
+
+prometheus.relabel "cadvisor" {
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  rule {
+    source_labels = ["namespace"]
+    regex         = "{{ .Release.Namespace }}"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "container_(memory_working_set_bytes|spec_memory_limit_bytes|cpu_usage_seconds_total|oom_events_total)"
+    action        = "keep"
+  }
+}
 {{- end -}}

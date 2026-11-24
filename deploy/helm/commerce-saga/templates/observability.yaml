@@ -1,6 +1,7 @@
 # 관측성 (ADR 0013, 후속 3 이후 추가). compose(infra/)와 같은 구성을 클러스터 안에 둔다:
 #   서비스 ──OTLP(trace·로그)──▶ alloy ──▶ tempo (trace), loki (로그)
-#   prometheus ──pull──▶ 서비스 /actuator/prometheus, kafka-exporter (lag·DLT), 경보 규칙
+#   alloy ──scrape──▶ 서비스 /actuator/prometheus, kafka-exporter (lag·DLT), tempo·loki·prometheus·alloy 자신,
+#                     노드 kubelet 의 컨테이너 메모리(k8s 만, kubernetes.alloy) ──remote_write──▶ prometheus (저장·경보 규칙)
 #   grafana: Tempo·Loki·Prometheus 데이터 소스(span ↔ 로그 링크)와 대시보드 commerce-saga
 # Service 이름이 compose 의 컨테이너 이름과 같아서 설정 파일(files/observability, infra/ 의 사본)을 그대로 쓴다.
 # 저장은 emptyDir 이다(Pod 가 바뀌면 사라짐). 로컬·CI 확인용이고 운영이면 오브젝트 스토리지·보존 기간을 정한다
@@ -17,6 +18,39 @@ metadata:
 data:
   config.alloy: |-
 {{ .Files.Get (printf "%s/config.alloy" $files) | indent 4 }}
+  kubernetes.alloy: |-
+{{ include "commerce.kubernetesAlloy" . | indent 4 }}
+---
+# kubelet 의 컨테이너 지표(cAdvisor)를 API 서버 프록시로 읽는다 → 노드 조회 권한
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-alloy
+  labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/proxy, nodes/metrics]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-alloy
+  labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Namespace }}-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: {{ .Release.Namespace }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,6 +58,8 @@ metadata:
   name: alloy
   labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
 spec:
+  # 한 개. 여러 개면 같은 대상을 겹쳐 긁고 tail sampling 이 trace 를 나눠 받는다 (ADR 0013 "수집기 하나")
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: alloy
@@ -31,15 +67,19 @@ spec:
     metadata:
       labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 8 }}
       annotations:
-        checksum/config: {{ .Files.Get (printf "%s/config.alloy" $files) | sha256sum }}
+        checksum/config: {{ printf "%s%s" (.Files.Get (printf "%s/config.alloy" $files)) (include "commerce.kubernetesAlloy" .) | sha256sum }}
     spec:
+      serviceAccountName: alloy
       containers:
         - name: alloy
           image: {{ $o.alloy.image }}
-          args: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+          # 폴더를 주면 안의 *.alloy 를 한 설정으로 읽는다 (config.alloy 는 compose 와 같은 사본, kubernetes.alloy 는 k8s 만)
+          args: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy"]
           env:
             - name: TRACE_SAMPLING_PERCENT
               value: {{ $o.traceSamplingPercent | quote }}
+            - name: METRICS_SERVICE_TARGETS
+              value: {{ include "commerce.metricsServiceTargets" . | quote }}
           ports:
             - { name: otlp-http, containerPort: 4318 }
             - { name: otlp-grpc, containerPort: 4317 }
@@ -190,8 +230,8 @@ spec:
   ports:
     - { name: http, port: 3100, targetPort: http }
 ---
-# compose 의 prometheus.yml 과 같은 job·라벨(경보 규칙이 job="services" 를 본다). 대상만 클러스터 Service 이름
-{{- $promConfig := include "commerce.prometheusConfig" . }}
+# compose 의 prometheus.yml 사본. 직접 긁지 않고 alloy 의 remote_write 를 받는다
+{{- $promConfig := .Files.Get (printf "%s/prometheus.yml" $files) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -234,6 +274,7 @@ spec:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
             - --storage.tsdb.retention.time=2d
+            - --web.enable-remote-write-receiver
           ports:
             - { name: http, containerPort: 9090 }
           readinessProbe:

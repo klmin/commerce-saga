@@ -35,6 +35,7 @@ jobs:
           diff infra/alloy/config.alloy $d/config.alloy
           diff infra/tempo/tempo.yaml $d/tempo.yaml
           diff infra/loki/loki.yaml $d/loki.yaml
+          diff infra/prometheus/prometheus.yml $d/prometheus.yml
           diff infra/prometheus/rules/commerce.yml $d/commerce.yml
           diff infra/grafana/provisioning/datasources/datasources.yaml $d/datasources.yaml
           diff infra/grafana/provisioning/dashboards/dashboards.yaml $d/dashboards.yaml
@@ -102,7 +103,7 @@ jobs:
       - name: 분산 트레이싱·로그 (시나리오 11)
         run: bash scripts/smoke-tracing.sh
 
-      # Prometheus 가 서비스 7개와 kafka-exporter 를 긁고 있는지 (경보 규칙이 이 job 들을 본다)
+      # alloy 가 서비스 7개와 kafka-exporter 를 긁어 Prometheus 로 보내고 있는지 (경보 규칙이 이 job 들을 본다)
       - name: 메트릭 대상
         run: |
           up_count() { curl -sf -G http://localhost:9091/api/v1/query --data-urlencode "query=$1" | grep -oE '"value":\[[^]]*"1"\]' | wc -l; }

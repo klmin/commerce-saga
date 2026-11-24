@@ -55,6 +55,11 @@ debezium:
   resources:
     requests: { cpu: 100m, memory: 512Mi }
     limits: { memory: 1Gi }
+  # 비우면 Strimzi 가 힙을 limit 의 75%(-Xms=-Xmx 약 742Mi)로 잡는다. 힙 밖(메타스페이스·스레드 120여 개·코드 캐시·GC)이
+  # 약 300Mi 라 합이 1Gi 를 넘어 OOMKilled 가 반복됐다. 실제 힙 사용은 약 200Mi → 512Mi 로 두고 힙 밖 여유를 남긴다
+  jvmOptions:
+    "-Xms": 256m
+    "-Xmx": 512m
 
 # 백엔드 서비스. 이름 = 이미지 이름 = k8s Service 이름. outbox: 이 서비스 DB 의 outbox 를 Debezium 이 읽는다
 services:
@@ -136,9 +141,11 @@ observability:
   environment: local
   alloy:
     image: grafana/alloy:v1.21.3
+    # trace·로그에 더해 메트릭 수집(서비스·관측성 스택·노드 컨테이너 지표)까지 한다. 트래픽 없이 ~170Mi,
+    # tail sampling 이 trace 를 decision_wait 동안 들고 있어 부하 때 더 쓴다 → 256Mi 는 빠듯해 올린다
     resources:
-      requests: { cpu: 50m, memory: 128Mi }
-      limits: { memory: 256Mi }
+      requests: { cpu: 50m, memory: 192Mi }
+      limits: { memory: 512Mi }
   tempo:
     image: grafana/tempo:2.10.10
     # 수집보다 검색(Grafana 에서 trace 찾기)이 메모리를 쓴다. 512Mi 는 1시간 범위 검색 한 번에 OOMKilled 됐고(그때 WAL 의

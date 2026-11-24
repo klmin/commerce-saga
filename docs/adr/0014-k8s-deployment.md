@@ -80,12 +80,12 @@
 
 ## 관측성 추가 결정 (2026-11-24, ADR 0013 로그·수집기 다음)
 
-- 차트 `templates/observability.yaml` 에 compose 와 같은 구성을 둔다: alloy(OTLP 수집기) → tempo·loki, prometheus(서비스 7개·kafka-exporter, 경보 규칙), grafana(데이터 소스·대시보드). `observability.enabled` 기본 true
-- **Service 이름을 compose 컨테이너 이름과 같게** 해서 설정 파일을 그대로 쓴다. Helm 은 차트 밖 파일을 못 읽어 `files/observability` 에 사본을 두고 CI 가 `diff` 로 같은지 본다(초기화 SQL 과 같은 방식). Prometheus 설정만 대상 주소가 달라 템플릿으로 만든다(job·라벨은 같아 경보 규칙을 그대로 쓴다)
+- 차트 `templates/observability.yaml` 에 compose 와 같은 구성을 둔다: alloy(수집기: trace·로그 → tempo·loki, 메트릭을 긁어 → prometheus), prometheus(저장·경보 규칙), grafana(데이터 소스·대시보드). `observability.enabled` 기본 true. 메트릭 수집을 Alloy 로 옮긴 것은 2026-11-25 (ADR 0013 "메트릭도 Alloy 로")
+- **Service 이름을 compose 컨테이너 이름과 같게** 해서 설정 파일을 그대로 쓴다. Helm 은 차트 밖 파일을 못 읽어 `files/observability` 에 사본을 두고 CI 가 `diff` 로 같은지 본다(초기화 SQL 과 같은 방식). 서비스 주소만 달라서 alloy 환경 변수 `METRICS_SERVICE_TARGETS` 를 `values.services` 로 만들어 넣는다(job·라벨은 같아 경보 규칙을 그대로 쓴다). k8s 에만 있는 수집(노드 kubelet 의 컨테이너 메모리, `kubernetes.alloy`)은 차트 템플릿에 두고, 이를 위해 alloy 에 ServiceAccount·ClusterRole(노드 읽기)을 준다
 - 공식 Helm 차트(grafana/loki, kube-prometheus-stack 등)를 쓰지 않았다: 단일 바이너리 하나씩이면 되는 로컬·CI 규모에 비해 무겁고(오퍼레이터·CRD·여러 컴포넌트), compose 와 설정이 갈라진다. 운영이면 이 차트들과 오브젝트 스토리지로 바꾼다
-- kafka-exporter 는 compose 와 같은 이미지를 Deployment 로 둔다. Strimzi 의 `kafkaExporter` 는 Service 를 만들지 않아 Prometheus 가 정적 대상으로 긁을 수 없다(Pod 디스커버리는 RBAC 가 더 든다)
+- kafka-exporter 는 compose 와 같은 이미지를 Deployment 로 둔다. Strimzi 의 `kafkaExporter` 는 Service 를 만들지 않아 정적 대상으로 긁을 수 없다(Pod 디스커버리는 RBAC 가 더 든다)
 - 저장은 emptyDir(Pod 가 바뀌면 사라짐). 밖으로는 열지 않는다(edge 는 화면만). `scripts/k8s-port-forward.sh` 가 Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091 을 compose 와 같은 포트로 연결한다
-- CI `kind` 잡이 시나리오 11(11a·11b·11c: trace 하나에 다섯 서비스, 주문 id 검색, 같은 trace_id 로그가 Loki 에)과 Prometheus 대상(서비스 7 + kafka-exporter up, 경보 규칙 적재)을 확인한다
+- CI `kind` 잡이 시나리오 11(11a·11b·11c: trace 하나에 다섯 서비스, 주문 id 검색, 같은 trace_id 로그가 Loki 에)과 메트릭 수집(alloy 가 보낸 서비스 7 + kafka-exporter up, 경보 규칙 적재)을 확인한다
 
 ## 멀티 아키텍처 이미지 (2026-11-24, K-4 다음)
 

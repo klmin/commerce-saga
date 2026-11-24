@@ -33,6 +33,9 @@ spec:
     producer.enable.idempotence: true
     offset.flush.interval.ms: 1000
   resources: {{- toYaml .Values.debezium.resources | nindent 4 }}
+  {{- with .Values.debezium.jvmOptions }}
+  jvmOptions: {{- toYaml . | nindent 4 }}
+  {{- end }}
   template:
     connectContainer:
       env:

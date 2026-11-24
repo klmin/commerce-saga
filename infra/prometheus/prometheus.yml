@@ -1,32 +1,8 @@
-# 로컬·CI 용 Prometheus. 서비스는 호스트에서 뜨므로 host.docker.internal 로 긁는다 (compose 의 extra_hosts)
+# 로컬·CI 용 Prometheus. 메트릭 저장·조회와 경보 규칙만 맡는다 (ADR 0013)
+# 직접 긁지 않는다. Alloy 가 서비스·kafka-exporter·관측성 스택을 긁어 remote_write 로 넣는다(--web.enable-remote-write-receiver).
+# 그래서 /targets 화면은 비어 있다. 수집 대상 상태는 up{job="..."} 또는 Alloy UI(http://localhost:12346)로 본다
 global:
-  scrape_interval: 5s
   evaluation_interval: 5s
 
 rule_files:
   - /etc/prometheus/rules/*.yml
-
-scrape_configs:
-  # 각 서비스 /actuator/prometheus: Saga·결제·outbox 메트릭(commerce_*), JVM, HTTP, Kafka 클라이언트
-  - job_name: services
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['host.docker.internal:8081']
-        labels: {service: order-service}
-      - targets: ['host.docker.internal:8082']
-        labels: {service: inventory-service}
-      - targets: ['host.docker.internal:8083']
-        labels: {service: point-service}
-      - targets: ['host.docker.internal:8084']
-        labels: {service: payment-service}
-      - targets: ['host.docker.internal:8085']
-        labels: {service: notification-service}
-      - targets: ['host.docker.internal:8086']
-        labels: {service: auth-service}
-      - targets: ['host.docker.internal:8000']
-        labels: {service: gateway}
-
-  # 컨슈머 그룹 lag, 토픽 끝 오프셋(DLT 적재 확인). 서비스가 죽어 있어도 브로커 기준으로 보인다
-  - job_name: kafka
-    static_configs:
-      - targets: ['kafka-exporter:9308']
