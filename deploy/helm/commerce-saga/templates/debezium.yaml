@@ -13,11 +13,12 @@ spec:
   image: {{ include "commerce.image" (dict "name" "connect" "root" .) }}
   replicas: 1
   bootstrapServers: {{ include "commerce.kafkaBootstrap" . }}
+  # Strimzi v1 은 워커 그룹·내부 토픽을 config 가 아니라 spec 필드로 받는다
+  groupId: commerce-connect
+  configStorageTopic: _connect-configs
+  offsetStorageTopic: _connect-offsets
+  statusStorageTopic: _connect-status
   config:
-    group.id: commerce-connect
-    config.storage.topic: _connect-configs
-    offset.storage.topic: _connect-offsets
-    status.storage.topic: _connect-status
     config.storage.replication.factor: {{ .Values.kafka.replicas }}
     offset.storage.replication.factor: {{ .Values.kafka.replicas }}
     status.storage.replication.factor: {{ .Values.kafka.replicas }}
