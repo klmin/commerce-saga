@@ -1,17 +1,19 @@
 package com.klmin.commerce.orderservice.order.adapter.in.web;
 
+import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
-import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
 import com.klmin.commerce.orderservice.order.application.port.in.ListMyOrdersQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.ListMyOrdersUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.OrderSummaryResult;
+import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderResult;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderUseCase;
-import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedException;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
+import com.klmin.commerce.orderservice.order.domain.Points;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,7 +58,7 @@ class OrderControllerTest {
     ListMyOrdersUseCase listMyOrdersUseCase;
 
     private static Order order(long userId) {
-        return Order.place(UUID.randomUUID(), userId, List.of(new OrderLine(10L, 2, 1_000L)), 0L,
+        return Order.place(UUID.randomUUID(), UserId.of(userId), List.of(OrderLine.of(10L, 2, 1_000L)), Points.ZERO,
                 Instant.parse("2026-11-22T00:00:00Z"));
     }
 

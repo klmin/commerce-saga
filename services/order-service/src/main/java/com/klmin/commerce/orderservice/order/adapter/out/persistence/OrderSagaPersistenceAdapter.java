@@ -1,8 +1,11 @@
 package com.klmin.commerce.orderservice.order.adapter.out.persistence;
 
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
+import com.klmin.commerce.orderservice.order.domain.Money;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
+import com.klmin.commerce.orderservice.order.domain.Points;
 import com.klmin.commerce.orderservice.order.domain.SagaHistoryEntry;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
@@ -37,8 +40,8 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
 
     @Override
     public void insert(OrderSaga saga) {
-        repository.save(new OrderSagaJpaEntity(saga.orderId(), saga.userId(), saga.pointAmount(),
-                saga.paidAmount(), saga.state(), saga.pointUsed(), saga.failureReason(), saga.stepResends(),
+        repository.save(new OrderSagaJpaEntity(saga.orderId(), saga.userId().value(), saga.pointAmount().value(),
+                saga.paidAmount().value(), saga.state(), saga.pointUsed(), saga.failureReason(), saga.stepResends(),
                 saga.createdAt(), saga.updatedAt(), toEmbeddables(saga.history())));
     }
 
@@ -58,7 +61,8 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
     }
 
     private static OrderSaga toDomain(OrderSagaJpaEntity e) {
-        return OrderSaga.restore(e.getOrderId(), e.getUserId(), e.getPointAmount(), e.getPaidAmount(),
+        return OrderSaga.restore(e.getOrderId(), UserId.of(e.getUserId()), Points.of(e.getPointAmount()),
+                Money.of(e.getPaidAmount()),
                 e.getState(), e.isPointUsed(), e.getFailureReason(), e.getStepResends(),
                 e.getHistory().stream()
                         .map(h -> new SagaHistoryEntry(h.getEvent(), h.getState(), h.getReason(), h.getOccurredAt()))

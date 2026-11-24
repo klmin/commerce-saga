@@ -6,7 +6,9 @@ import com.klmin.commerce.orderservice.order.application.port.in.GetOrderSagaUse
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
+import com.klmin.commerce.orderservice.order.domain.Points;
 import com.klmin.commerce.orderservice.order.domain.SagaEventType;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +39,7 @@ class OrderSagaControllerTest {
     @Test
     void getSaga_returnsStateAndTimeline() throws Exception {
         Instant t0 = Instant.parse("2026-11-22T00:00:00Z");
-        Order order = Order.place(UUID.randomUUID(), 1L, List.of(new OrderLine(1L, 1, 1_000L)), 0L, t0);
+        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(1L, 1, 1_000L)), Points.ZERO, t0);
         OrderSaga saga = OrderSaga.start(order, t0);
         saga.handle(SagaEventType.STOCK_RESERVED, null, t0.plusSeconds(1));
         saga.handle(SagaEventType.PAYMENT_FAILED, "declined", t0.plusSeconds(2));

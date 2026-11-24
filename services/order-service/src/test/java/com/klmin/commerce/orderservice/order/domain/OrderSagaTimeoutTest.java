@@ -26,7 +26,8 @@ class OrderSagaTimeoutTest {
 
     /** 합계 10,000 */
     private static OrderSaga start(long pointAmount) {
-        Order order = Order.place(UUID.randomUUID(), 1L, List.of(new OrderLine(10L, 2, 5_000L)), pointAmount, T0);
+        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(10L, 2, 5_000L)),
+                Points.of(pointAmount), T0);
         return OrderSaga.start(order, T0);
     }
 
@@ -76,8 +77,8 @@ class OrderSagaTimeoutTest {
         OrderSaga saga = start(3_000L);
         reply(saga, STOCK_RESERVED);
 
-        assertThat(timeout(saga)).isEqualTo(new SagaAction.UsePoint(3_000L));
-        assertThat(timeout(saga)).isEqualTo(new SagaAction.UsePoint(3_000L));
+        assertThat(timeout(saga)).isEqualTo(new SagaAction.UsePoint(Points.of(3_000L)));
+        assertThat(timeout(saga)).isEqualTo(new SagaAction.UsePoint(Points.of(3_000L)));
         // 차감됐는지 모른다. 환불은 차감 기록이 없어도 안전하므로 환불 → 재고 해제 순으로 되돌린다
         assertThat(timeout(saga)).isEqualTo(new SagaAction.RefundPoint());
         assertThat(saga.state()).isEqualTo(SagaState.REFUNDING_POINT);
@@ -111,12 +112,12 @@ class OrderSagaTimeoutTest {
 
         // 결과가 애매하므로 재고·포인트보다 오래 다시 묻는다
         for (int i = 0; i < MAX_PAYMENT_RESENDS; i++) {
-            assertThat(timeout(saga)).isEqualTo(new SagaAction.Pay(7_000L));
+            assertThat(timeout(saga)).isEqualTo(new SagaAction.Pay(Money.of(7_000L)));
         }
         assertThat(saga.state()).isEqualTo(SagaState.PAYING);
 
         // 그래도 응답이 없으면 결제 취소부터. 승인됐다면 결제 서비스가 환불한다
-        assertThat(timeout(saga)).isEqualTo(new SagaAction.CancelPayment(7_000L));
+        assertThat(timeout(saga)).isEqualTo(new SagaAction.CancelPayment(Money.of(7_000L)));
         assertThat(saga.state()).isEqualTo(SagaState.CANCELLING_PAYMENT);
         assertThat(saga.state().isCompensating()).isTrue();
         assertThat(saga.failureReason()).isEqualTo("timeout: no reply in PAYING after 4 resends");
@@ -161,7 +162,7 @@ class OrderSagaTimeoutTest {
 
         // 결제 취소도 보상이라 포기하지 않는다
         for (int i = 0; i < MAX_PAYMENT_RESENDS + 3; i++) {
-            assertThat(timeout(saga)).isEqualTo(new SagaAction.CancelPayment(10_000L));
+            assertThat(timeout(saga)).isEqualTo(new SagaAction.CancelPayment(Money.of(10_000L)));
         }
         assertThat(saga.state()).isEqualTo(SagaState.CANCELLING_PAYMENT);
     }
@@ -193,7 +194,7 @@ class OrderSagaTimeoutTest {
         reply(saga, STOCK_RESERVED);
 
         assertThat(saga.stepResends()).isZero();
-        assertThat(timeout(saga)).isEqualTo(new SagaAction.UsePoint(3_000L));
+        assertThat(timeout(saga)).isEqualTo(new SagaAction.UsePoint(Points.of(3_000L)));
     }
 
     @Test

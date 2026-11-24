@@ -4,6 +4,8 @@ import com.klmin.commerce.orderservice.order.application.port.out.LoadOrderPort;
 import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
+import com.klmin.commerce.orderservice.order.domain.Points;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -37,19 +39,19 @@ class OrderPersistenceAdapter implements LoadOrderPort, SaveOrderPort {
     }
 
     private static OrderJpaEntity toEntity(Order order) {
-        return new OrderJpaEntity(order.id(), order.userId(), order.status(), order.totalAmount(),
-                order.pointAmount(), order.cancelReason(), order.createdAt(), order.updatedAt(),
+        return new OrderJpaEntity(order.id(), order.userId().value(), order.status(), order.totalAmount().value(),
+                order.pointAmount().value(), order.cancelReason(), order.createdAt(), order.updatedAt(),
                 order.lines().stream()
-                        .map(l -> new OrderLineEmbeddable(l.productId(), l.quantity(), l.unitPrice()))
+                        .map(l -> new OrderLineEmbeddable(l.productId().value(), l.quantity().value(), l.unitPrice().value()))
                         .toList());
     }
 
     private static Order toDomain(OrderJpaEntity entity) {
-        return Order.restore(entity.getId(), entity.getUserId(),
+        return Order.restore(entity.getId(), UserId.of(entity.getUserId()),
                 entity.getLines().stream()
-                        .map(l -> new OrderLine(l.getProductId(), l.getQuantity(), l.getUnitPrice()))
+                        .map(l -> OrderLine.of(l.getProductId(), l.getQuantity(), l.getUnitPrice()))
                         .toList(),
-                entity.getPointAmount(), entity.getStatus(), entity.getCancelReason(), entity.getCreatedAt(),
+                Points.of(entity.getPointAmount()), entity.getStatus(), entity.getCancelReason(), entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }
 }

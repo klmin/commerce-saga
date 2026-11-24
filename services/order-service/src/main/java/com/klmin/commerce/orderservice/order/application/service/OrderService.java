@@ -22,7 +22,9 @@ import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
+import com.klmin.commerce.orderservice.order.domain.Points;
 import com.klmin.commerce.orderservice.order.domain.SagaAction;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -74,10 +76,11 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     public PlaceOrderResult placeOrder(PlaceOrderCommand command) {
         Instant now = clock.instant();
         List<OrderLine> lines = command.lines().stream()
-                .map(l -> new OrderLine(l.productId(), l.quantity(), l.unitPrice()))
+                .map(l -> OrderLine.of(l.productId(), l.quantity(), l.unitPrice()))
                 .toList();
         // 도메인 검증을 먼저 해서 잘못된 요청은 키를 선점하지 않는다 (어차피 롤백되지만 기다림을 줄인다)
-        Order order = Order.place(UuidCreator.getTimeOrderedEpoch(), command.userId(), lines, command.pointAmount(), now);
+        Order order = Order.place(UuidCreator.getTimeOrderedEpoch(), UserId.of(command.userId()), lines,
+                Points.of(command.pointAmount()), now);
         if (command.idempotencyKey() != null) {
             String hash = OrderRequestHash.of(command);
             Optional<OrderIdempotencyPort.KeyRecord> existing =
@@ -98,7 +101,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
             throw new IdempotencyKeyReusedException();
         }
         Order first = loadOrderPort.findById(existing.orderId())
-                .filter(o -> o.isOwnedBy(command.userId()))
+                .filter(o -> o.isOwnedBy(UserId.of(command.userId())))
                 .orElseThrow(() -> new IllegalStateException("idempotency key without order: " + existing.orderId()));
         log.info("같은 Idempotency-Key 재요청, 처음 주문 반환 (userId={}, orderId={})", command.userId(), first.id());
         return new PlaceOrderResult(first, false);
@@ -108,7 +111,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     @Transactional(readOnly = true)
     public Order getOrder(GetOrderQuery query) {
         return loadOrderPort.findById(query.orderId())
-                .filter(order -> order.isOwnedBy(query.userId()))
+                .filter(order -> order.isOwnedBy(UserId.of(query.userId())))
                 .orElseThrow(() -> new OrderNotFoundException(query.orderId()));
     }
 
@@ -144,7 +147,7 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
     @Transactional(readOnly = true)
     public OrderSaga getSaga(GetOrderQuery query) {
         return sagaPort.findByOrderId(query.orderId())
-                .filter(saga -> saga.userId() == query.userId())
+                .filter(saga -> saga.isOwnedBy(UserId.of(query.userId())))
                 .orElseThrow(() -> new SagaNotFoundException(query.orderId()));
     }
 }

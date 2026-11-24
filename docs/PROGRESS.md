@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-24 (후속 3 K-3 PR = 후속 3 마지막, PR #41 머지 후)
+- 마지막 갱신: 2026-11-25 (DDD 후보 1 값 객체 시작, order-service PR)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, 이번 PR). 다음은 0절 2번(DDD 후보·후속 4 중 사용자 결정, 아직 안 정함)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)까지 끝났다. 다음 단계는 사용자가 고른다: DDD 후보 1·2 또는 후속 4(검색). 시작 전에 묻는다.** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 후보 1(값 객체)·후보 2(컨텍스트 맵·용어집 ADR)는 아직 결정 전("F-2 시작 메모" 끝). 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)까지 끝났다. 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 지금은 값 객체 진행 중.** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 후보 1(값 객체)·후보 2(컨텍스트 맵·용어집 ADR)는 아직 결정 전("F-2 시작 메모" 끝). 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -87,6 +87,7 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| (이번 PR) | DDD 후보 1 값 객체 ① order-service: `Money`·`Points`·`Quantity`·`UserId`·`ProductId`(record, 생성 때 검증). `Order`·`OrderLine`·`OrderSaga`·`SagaAction`·`SagaCommandPort` 가 사용. 1P = 1원 환산은 `Points.toMoney()` 한 곳. DB 컬럼·메시지 계약·port.in Command·조회 DTO 는 원시 타입 그대로, 어댑터·서비스 입구에서 변환 |
 | #1~#6 | 1단계: 뼈대·CI·AGENTS.md, 인프라 compose, 메시지 계약·outbox, order·inventory 기본 흐름, 시나리오 0 |
 | #7~#11 | 2단계: 메시지 계약 확장, 재고 해제·확정, 포인트, 가짜 PG(장애 주입), Saga 오케스트레이터·보상, 알림, 시나리오 1·8 |
 | #12 | 3-A 멱등 컨슈머 (`processed_message`), 오프셋 되감기 스크립트, 시나리오 3, ADR 0006, 스키마 호환 규칙(ADR 0005) |
@@ -350,7 +351,7 @@ F-2 = 후속 2 마지막. 남은 화면: 포인트(잔액·내역), 결제 내�
 **DDD 점검 결과와 후속 후보 (2026-11-24 사용자 질문. 후보는 결정 필요)**
 - 이미 된 것: 서비스 = bounded context(DB 분리, 메시지로만 연결, 계약은 `messaging-contract`). 행위를 가진 애그리거트(`Order`·`OrderSaga`·`Stock`·`StockReservation`·`PointAccount`·`Payment`·`User`·`RefreshFamily`, setter 없음). 도메인 모델과 JPA 엔티티 분리(ADR 0002: 애그리거트는 순수 자바, `@Entity` 는 어댑터 안 package-private, ArchUnit 이 검사). 루트마다 리포지토리(포트), 다른 애그리거트는 ID 참조, 쓰기만 애그리거트·조회는 DTO
 - 의도적 타협(바꾸지 않음): 재고 예약은 한 트랜잭션에서 여러 `Stock` + `StockReservation` 을 바꾼다(ADR 0002). 도메인 이벤트 객체 없이 애플리케이션 서비스가 outbox 포트에 쓴다. notification 은 단순 구조
-- 후보 1 (중간 규모, 후속 2 밖이라 **시작 전에 사용자에게 묻는다**): 값 객체. 금액·포인트·수량·userId 가 `long`/`int` 라 "0 이상"·"포인트와 원화 구분" 규칙이 흩어져 있다 → `Money`·`Points`·`Quantity` 등. 추천 시점은 F-2 다음 별도 PR
+- 후보 1 (2026-11-25 시작, 서비스마다 PR): 값 객체. 원칙: 규칙이 있는 값만 감싼다, 도메인 안에서만 쓰고 DB 컬럼·메시지 계약·port.in Command·조회 DTO 는 원시 타입(스키마·계약 변경 없음), 서비스끼리 공유하지 않고 서비스마다 자기 타입(서비스 경계 규칙). 도메인 이벤트 객체는 도입하지 않는다(이벤트 종류가 적고 발행 지점이 한 곳, `SagaAction`·`boolean` 반환으로 도메인이 이미 결정) — 후보 2 ADR 에 이유를 적는다. 원래 메모: 금액·포인트·수량·userId 가 `long`/`int` 라 "0 이상"·"포인트와 원화 구분" 규칙이 흩어져 있다 → `Money`·`Points`·`Quantity` 등. 추천 시점은 F-2 다음 별도 PR
 - 후보 2 (작음): 컨텍스트 맵 + 용어집 ADR(서비스 관계: 오케스트레이터·참여자·순수 소비자·공개 이벤트. 용어: 예약·확정·해제, 차감·환불, 보상). F-2b 끝에 붙여도 된다
 
 ### 프론트엔드 준비 메모 (2026-11-23 정리, A-3·F-1 시작 전에 읽기)
