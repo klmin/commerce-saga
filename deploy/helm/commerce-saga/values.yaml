@@ -127,8 +127,11 @@ edge:
 # 밖으로는 열지 않는다. 보려면 scripts/k8s-port-forward.sh (Grafana http://localhost:3030)
 observability:
   enabled: true
-  # 서비스 trace 샘플링 (로컬·CI 는 전부)
+  # 서비스 trace 샘플링. 1.0 그대로 둔다: 서비스는 전부 보내고 alloy 가 tail sampling 으로 고른다
   tracingSampling: "1.0"
+  # alloy tail sampling: 오류·1초 넘는 trace 는 늘 남기고 actuator trace 는 늘 버린다. 나머지 중 남길 비율(%).
+  # 로컬·CI 는 전부. 트래픽이 많은 환경이면 낮춘다 (예: 10)
+  traceSamplingPercent: "100"
   # trace·로그의 deployment.environment.name. 같은 Loki·Tempo 에 여러 환경이 섞여도 나눠 볼 수 있게 한다
   environment: local
   alloy:

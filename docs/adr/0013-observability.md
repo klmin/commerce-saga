@@ -41,7 +41,7 @@ HTTP 요청 (traceparent)                      ┌─ inventory-service ──�
 
 - 서비스: `spring-boot-starter-opentelemetry`(Micrometer Tracing + OTel 브리지 + OTLP exporter). 표준(W3C trace context, OTLP)만 쓰므로 수집 백엔드는 바꿀 수 있다
 - 로컬·CI: Grafana Tempo 2.10 단일 바이너리 + Grafana (`infra/docker-compose.yml`). Tempo를 고른 이유는 다음 PR의 메트릭(Prometheus)과 같은 Grafana에서 trace ↔ 메트릭을 오가기 위해서다. Jaeger도 OTLP를 받으므로 비교 대상이었지만 UI가 따로 생긴다
-- 샘플링: 로컬·CI는 전부(1.0). 운영이라면 `TRACING_SAMPLING_PROBABILITY`로 낮추거나 tail sampling(Collector)으로 오류·느린 trace만 남긴다
+- 샘플링: 로컬·CI는 전부(1.0). 운영이라면 `TRACING_SAMPLING_PROBABILITY`로 낮추거나 tail sampling(Collector)으로 오류·느린 trace만 남긴다 → 수집기를 넣은 뒤 tail sampling 으로 했다(아래 "로그와 수집기")
 - OTLP 메트릭 export는 끈다(starter가 가져오는 레지스트리). 메트릭은 Prometheus가 긁어 간다(아래)
 - 호스트 포트는 Tempo API 3210, OTLP 4328(아래 로그 절부터는 Alloy 가 받는다). 같은 PC에서 다른 관측성 스택이 표준 포트(3200, 4318)를 쓰고 있어도 겹치지 않게 비켜 뒀다
 
@@ -95,6 +95,7 @@ trace 는 "어디서 얼마나"를 보여 주지만 "왜"(거절 사유, 무시�
 - **메트릭은 Alloy 를 거치지 않는다.** Prometheus 가 그대로 긁는다(pull 이라 죽은 서비스가 `up=0` 으로 보이고, 경보 규칙이 이미 Prometheus 에 있다)
 - order-service 는 Saga 전이마다 `Saga 진행: <응답> -> <상태>` 를 남긴다. 주문 한 건의 흐름을 trace 와 같은 trace_id 의 로그로 함께 본다
 - 시나리오 11c 가 결제 실패 주문의 trace id 로 Loki 에서 order·notification 두 서비스의 로그가 찾히는지 CI 에서 확인한다
+- **샘플링은 Alloy 에서 (tail sampling, 2026-11-24 추가)**. 서비스는 전부 보내고(`TRACING_SAMPLING_PROBABILITY=1.0`), Alloy 가 trace 를 10초 모았다가 고른다. 오류(status ERROR, 그리고 `@ExceptionHandler` 가 처리해 ERROR 가 아닌 5xx 는 `outcome=SERVER_ERROR`)·1초 넘는 trace 는 늘 남기고(4xx 는 서버가 정상으로 거절한 것이라 남기지 않고 건수는 메트릭으로 본다), actuator(헬스 체크·Prometheus 수집) trace 는 늘 버리며, 나머지는 `TRACE_SAMPLING_PERCENT`(기본 100, 차트 `observability.traceSamplingPercent`)만큼 남긴다. 서비스에서 비율을 낮추는 head sampling 은 오류가 날 요청인지 모르고 버리지만, tail sampling 은 끝난 trace 를 보고 정해 오류·지연을 놓치지 않는다. 비율은 trace id 로 정하고, 남긴 trace 의 늦은 span 은 decision cache 로 같은 결정을 따른다. 기다리는 시간은 10초다. 비율이 100% 면 결과가 같기 때문이고, 비율을 낮추면 30초로 올린다(오래 걸린 Saga 의 늦은 오류 span 을 놓치지 않게). 대가는 Alloy 메모리와 Tempo 에 보이기까지의 지연, 그리고 Alloy 를 여러 개 띄우면 trace id 로 나눠 주는 앞단(loadbalancing exporter)이 필요하다는 것. 로그는 샘플링하지 않는다
 - k8s(Helm)도 같은 구성을 클러스터 안에 둔다(`templates/observability.yaml`, 설정 파일은 `files/observability` 사본). 끄면(`observability.enabled=false`) 서비스는 trace 샘플링 0·로그 export 끔 (ADR 0014 "관측성")
 
 ## 결과
