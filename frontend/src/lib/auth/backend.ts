@@ -97,6 +97,56 @@ export async function refresh(refreshToken: string, client: ClientInfo): Promise
   return toSession(res);
 }
 
+const loginSession = z.object({
+  sessionId: z.string(),
+  agent: z.string().nullable(),
+  createdAt: z.string(),
+  lastUsedAt: z.string(),
+  expiresAt: z.string(),
+  current: z.boolean(),
+});
+
+export type LoginSession = z.infer<typeof loginSession>;
+
+function bearer(accessToken: string): Record<string, string> {
+  return { Authorization: `Bearer ${accessToken}` };
+}
+
+/**
+ * 내 로그인 기기(refresh token family) 목록. refresh token 을 같이 보내면 이 기기가 current 로 표시된다.
+ * GET 이라 쿠키가 실려도 CSRF 헤더가 필요 없다. access token 이 만료·위조면 ApiError(401)
+ */
+export async function listSessions(
+  accessToken: string,
+  refreshToken: string | undefined,
+  client: ClientInfo,
+): Promise<LoginSession[]> {
+  const headers: Record<string, string> = bearer(accessToken);
+  if (refreshToken) {
+    headers.Cookie = `refresh_token=${refreshToken}`;
+  }
+  const res = await call("/auth/sessions", { headers }, client);
+  return z.array(loginSession).parse(await res.json());
+}
+
+/** 그 기기 로그아웃. 남의 세션·없는 세션이면 ApiError(404) (auth-service 가 토큰 sub 와 소유자를 비교) */
+export async function revokeSession(
+  accessToken: string,
+  sessionId: string,
+  client: ClientInfo,
+): Promise<void> {
+  await call(
+    `/auth/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE", headers: bearer(accessToken) },
+    client,
+  );
+}
+
+/** 모든 기기 로그아웃 (이 기기 포함). 쿠키 없이 Bearer 로만 보낸다 */
+export async function logoutAll(accessToken: string, client: ClientInfo): Promise<void> {
+  await call("/auth/logout-all", { method: "POST", headers: bearer(accessToken) }, client);
+}
+
 /** 이미 없는 세션이어도 성공으로 본다 */
 export async function logout(refreshToken: string, client: ClientInfo): Promise<void> {
   await call(

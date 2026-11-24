@@ -8,6 +8,7 @@ import {
   ACCESS_COOKIE,
   clearedCookies,
   REFRESH_COOKIE,
+  rolesFromAccessToken,
   type Session,
   sessionCookies,
   userIdFromAccessToken,
@@ -24,6 +25,11 @@ export async function refreshToken(): Promise<string | undefined> {
 /** 화면 표시용 로그인 사용자 id (토큰 서명 검증은 백엔드가 한다) */
 export async function currentUserId(): Promise<number | undefined> {
   return userIdFromAccessToken(await accessToken());
+}
+
+/** 관리자 메뉴를 보일지 (권한 검사는 백엔드가 한다) */
+export async function isAdmin(): Promise<boolean> {
+  return rolesFromAccessToken(await accessToken()).includes("ADMIN");
 }
 
 /** Server Action 에서만 부른다 (쿠키는 응답을 보내기 전에만 바꿀 수 있다) */

@@ -13,7 +13,7 @@ docker compose -f infra/docker-compose.yml up -d --wait
 # frontend
 cp .env.example .env.local   # 기본값 그대로면 없어도 된다
 npm ci
-npm run dev -- --port 3001   # 3000 은 Grafana 가 쓴다
+npm run dev                  # http://localhost:3500 (package.json 에 고정. 3000 대는 다른 도구가 쓴다)
 ```
 
 개발용 계정은 루트 README 의 시드 사용자(`user1`~`user4`). 새로 가입하면 몇 초 안에 가입 축하 1,000P 가 생긴다(시나리오 13).
@@ -31,6 +31,8 @@ npm run dev -- --port 3001   # 3000 은 Grafana 가 쓴다
 | `/points`           | 잔액 + 포인트 내역(주문 사용·가입 축하 지급, 최신순 커서). 주문 사용은 누르면 주문 상세              |
 | `/payments`         | 결제 내역 (최신순 커서, 상태: 결제 완료·거절·확인 중·결제 전 취소·환불됨)                            |
 | `/notifications`    | 알림 (order.events 를 받은 notification-service, 최신순 커서)                                        |
+| `/sessions`         | 로그인 기기 (헤더의 사용자 번호). 다른 기기 로그아웃, 모든 기기에서 로그아웃                         |
+| `/admin`            | 관리자(ADMIN 만, 아니면 404): 결제 장애 주입(승인·거절·지연), DLT 는 Kafka UI·`scripts/dlt.sh` 안내  |
 | `/login`, `/signup` | 로그인, 회원가입(바로 로그인)                                                                        |
 
 상품 가격은 서버가 정하지 않고 Next 의 고정 목록 값을 보낸다(상품 서비스가 없다, PROGRESS 준비 메모 #5).
@@ -50,7 +52,7 @@ npm run dev -- --port 3001   # 3000 은 Grafana 가 쓴다
 - `npm run test:e2e` - Playwright (앱과 백엔드가 떠 있어야 함)
 - `npm run typecheck` - `next typegen && tsc --noEmit`
 
-CI(`.github/workflows/frontend.yml`)는 format·lint·typecheck·test·build·Docker 이미지 빌드를 돈다.
+CI(`.github/workflows/frontend.yml`)는 format·lint·typecheck·test·build·Docker 이미지 빌드를 돈다. 브라우저 e2e 는 `.github/workflows/browser-e2e.yml` 이 인프라 + 서비스 7개 + `next start` 를 띄워 `e2e/` 전체를 돈다(F-2b).
 
 ## 구조
 
@@ -75,7 +77,7 @@ E2E는 Playwright로 `e2e/`에 둔다. 떠 있는 앱과 백엔드를 대상으�
 
 ```bash
 npx playwright install chromium            # 처음 한 번
-E2E_BASE_URL=http://localhost:3001 npm run test:e2e
+npm run test:e2e   # 기본 http://localhost:3500, 다른 주소는 E2E_BASE_URL
 ```
 
 ## UI 컴포넌트

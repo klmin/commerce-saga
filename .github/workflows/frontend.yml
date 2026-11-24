@@ -1,7 +1,7 @@
 name: frontend
 
 # Next.js 화면 (후속 2 F-1, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지.
-# 백엔드 전체 + Next 를 띄우는 브라우저 e2e(Playwright)는 로컬 시나리오로 두고, CI 에 넣을지는 F-2 끝에 정한다
+# 백엔드 전체 + Next 를 띄우는 브라우저 e2e(Playwright)는 browser-e2e 워크플로 (F-2b)
 on:
   push:
     branches: [main]
