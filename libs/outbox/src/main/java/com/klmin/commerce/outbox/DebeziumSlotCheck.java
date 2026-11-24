@@ -11,7 +11,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * <p>
  * 이 모드의 {@link OutboxWriter} 는 행을 넣고 바로 지우므로, slot(커넥터)이 만들어지기 전에 쓴 outbox 는
  * WAL 에서 읽을 수 없어 발행되지 않는다. 서비스는 outbox 테이블(Flyway)을 만든 뒤 커넥터가 등록되어야 하므로
- * 기동을 막지는 않고 경고만 남긴다. 운영 순서: 서비스 기동 → 커넥터 등록 → 트래픽.
+ * 기동을 막지는 않고 경고만 남긴다. 그 사이의 쓰기는 {@link OutboxWriter} 가 {@link OutboxNotReadyException} 으로
+ * 롤백시켜 잃지 않는다. 운영 순서: 서비스 기동 → 커넥터 등록 → 트래픽.
  */
 class DebeziumSlotCheck implements ApplicationListener<ApplicationReadyEvent> {
 
@@ -34,7 +35,8 @@ class DebeziumSlotCheck implements ApplicationListener<ApplicationReadyEvent> {
             long slots = jdbc.sql(COUNT_SLOTS).query(Long.class).single();
             if (slots == 0) {
                 log.warn("outbox.relay.enabled=false(Debezium relay) 인데 이 DB 에 logical replication slot 이 없다. "
-                        + "커넥터를 등록하기 전에 쓴 outbox 메시지는 발행되지 않는다 (scripts/register-connectors.sh)");
+                        + "커넥터가 slot 을 만들 때까지 outbox 쓰기는 롤백된다(OutboxNotReadyException, 재시도로 이어짐). "
+                        + "커넥터를 등록한다 (scripts/register-connectors.sh, k8s 는 KafkaConnector)");
             } else {
                 log.info("Debezium relay 모드: logical replication slot {}개 확인", slots);
             }

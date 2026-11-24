@@ -12,11 +12,17 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Debezium relay 모드(넣고 바로 지우기)에서도 INSERT 가 WAL 에 남아 커넥터가 읽을 수 있는지,
@@ -30,6 +36,7 @@ class OutboxWriterIntegrationTest {
             .withCommand("postgres", "-c", "wal_level=logical");
 
     private static final String SLOT = "outbox_writer_test";
+    private static final String PUBLICATION = "outbox_writer_test_pub";
 
     private JdbcClient jdbc;
     private TransactionTemplate tx;
@@ -54,6 +61,73 @@ class OutboxWriterIntegrationTest {
         jdbc.sql("select pg_drop_replication_slot(slot_name) from pg_replication_slots where slot_name = ?")
                 .param(SLOT).query().listOfRows();
         jdbc.sql("select pg_create_logical_replication_slot(?, 'test_decoding')").param(SLOT).query().listOfRows();
+        // Debezium 커넥터가 만드는 것처럼 outbox 를 publication 에 넣는다 (Debezium 모드 쓰기의 전제)
+        jdbc.sql("drop publication if exists " + PUBLICATION).update();
+        jdbc.sql("create publication " + PUBLICATION + " for table outbox").update();
+    }
+
+    @Test
+    void debezium_모드는_slot_이나_publication_이_없으면_쓰지_않고_롤백한다() {
+        var writer = new OutboxWriter(jdbc, json, true);
+
+        jdbc.sql("drop publication " + PUBLICATION).update();
+        assertThatThrownBy(() -> tx.execute(status -> writer.append("inventory.command", "order-1", "ReserveStock",
+                Map.of("a", 1)))).isInstanceOf(OutboxNotReadyException.class);
+        jdbc.sql("create publication " + PUBLICATION + " for table outbox").update();
+        jdbc.sql("select pg_drop_replication_slot(?)").param(SLOT).query().listOfRows();
+        assertThatThrownBy(() -> tx.execute(status -> writer.append("inventory.command", "order-2", "ReserveStock",
+                Map.of("a", 1)))).isInstanceOf(OutboxNotReadyException.class);
+        assertThat(outboxCount()).isZero();
+
+        // 커넥터가 slot 을 만들면 바로 풀린다
+        jdbc.sql("select pg_create_logical_replication_slot(?, 'test_decoding')").param(SLOT).query().listOfRows();
+        UUID id = tx.execute(status -> writer.append("inventory.command", "order-3", "ReserveStock", Map.of("a", 1)));
+        assertThat(walChanges()).anySatisfy(c -> assertThat(c).startsWith("table public.outbox: INSERT:")
+                .contains(id.toString()));
+    }
+
+    @Test
+    void 준비_확인은_된_뒤에만_잠깐_재사용하고_slot_이_사라지면_다시_막힌다() {
+        var clock = new MutableClock(Instant.parse("2026-11-24T00:00:00Z"));
+        var readiness = new DebeziumRelayReadiness(jdbc, clock, Duration.ofSeconds(5));
+
+        assertThat(readiness.ready()).isTrue();
+        jdbc.sql("select pg_drop_replication_slot(?)").param(SLOT).query().listOfRows();
+        assertThat(readiness.ready()).isTrue(); // 5초 안에는 조회하지 않는다
+        clock.advance(Duration.ofSeconds(5));
+        assertThat(readiness.ready()).isFalse();
+        // 준비 전에는 매번 조회해 slot 이 생기면 바로 true
+        jdbc.sql("select pg_create_logical_replication_slot(?, 'test_decoding')").param(SLOT).query().listOfRows();
+        assertThat(readiness.ready()).isTrue();
+        assertThat(RelayReadiness.ALWAYS.ready()).isTrue();
+    }
+
+    private static final class MutableClock extends Clock {
+
+        private Instant now;
+
+        MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration d) {
+            now = now.plus(d);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
     }
 
     @Test
