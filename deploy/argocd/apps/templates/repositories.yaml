@@ -1,0 +1,18 @@
+# OCI Helm 저장소 (공개, 인증 없음). ArgoCD 는 repository Secret 으로 OCI 를 켠다
+{{- range $name, $url := dict "strimzi" "quay.io/strimzi-helm" "envoyproxy" "docker.io/envoyproxy" }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-{{ $name }}
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+stringData:
+  name: {{ $name }}
+  type: helm
+  enableOCI: "true"
+  url: {{ $url }}
+{{- end }}

@@ -97,3 +97,62 @@ jobs:
             echo "===== $d"
             kubectl -n commerce logs deployment/$d --tail=80 || true
           done
+
+  # 후속 3 K-3: 같은 구성을 ArgoCD(GitOps)로. root Application 하나만 apply 하면 ArgoCD 가 이 PR 의 커밋을 GitHub 에서 가져와
+  # Strimzi·Envoy Gateway·commerce-saga 를 sync 한다. 외부 입구는 edge(Gateway API) 하나이고 화면만 연다
+  argocd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v4.3.2
+
+      - name: app-of-apps 차트 lint
+        run: helm lint deploy/argocd/apps
+
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          version: v0.33.0
+          cluster_name: commerce-saga
+
+      # ArgoCD 는 GitHub 에서 가져온다. PR 이면 PR 의 head 커밋(같은 저장소 브랜치라 공개 저장소에 있다)
+      - name: ArgoCD 로 배포 (이미지 → kind, root Application → sync)
+        env:
+          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash scripts/k8s-argocd.sh
+
+      # edge 로 화면이 열리는지. Envoy 의 Service 를 로컬로 연결한다 (kind 에는 LoadBalancer 가 없다)
+      - name: edge 로 화면
+        run: |
+          svc=$(kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o name | head -1)
+          [ -n "$svc" ] || { echo "edge Service 없음"; exit 1; }
+          kubectl -n envoy-gateway-system port-forward "$svc" 18080:80 > /dev/null 2>&1 &
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:18080/login && break; sleep 1; done
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/login)
+          [ "$code" = 200 ] || { echo "edge /login → $code"; exit 1; }
+          # Spring Gateway(/api, /auth)는 edge 로 나가지 않는다: Next 의 화면 경로로만 처리된다
+          curl -s -o /dev/null -w 'edge /api/orders → %{http_code}\n' http://localhost:18080/api/orders
+
+      - name: port-forward
+        run: bash scripts/k8s-port-forward.sh
+
+      - name: 주문 Saga·보상 (시나리오 0·1)
+        run: bash scripts/smoke-saga.sh
+
+      - name: 상태·로그
+        if: always()
+        run: |
+          kubectl -n argocd get applications -o wide || true
+          kubectl -n argocd get application commerce-saga -o jsonpath='{.status.conditions}{"\n"}{.status.operationState.message}{"\n"}' || true
+          kubectl -n commerce get pods,kafka,kafkaconnector,gateway,httproute -o wide || true
+          kubectl -n commerce get events --sort-by=.lastTimestamp | tail -30 || true

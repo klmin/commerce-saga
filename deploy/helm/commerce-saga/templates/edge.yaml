@@ -1,0 +1,61 @@
+{{- if .Values.edge.enabled }}
+# edge: 클러스터 밖으로 여는 유일한 입구 (Gateway API, 후속 3 K-3).
+# 화면(Next)만 연다. 브라우저는 Next 만 보고 Next 서버만 Spring Gateway 를 부른다(ADR 0011) → Spring Gateway·서비스·DB·Kafka 는 내부망
+{{- if .Values.edge.gatewayClass.create }}
+# Envoy Gateway 가 만드는 Envoy 의 Service 타입. 클라우드는 LoadBalancer, kind 는 LoadBalancer 가 없어 ClusterIP
+# (LoadBalancer 로 두면 주소를 못 받아 Gateway 가 Programmed 가 되지 않는다)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: {{ .Values.edge.gatewayClass.name }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: {{ .Values.edge.serviceType }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.edge.gatewayClass.name }}
+spec:
+  controllerName: {{ .Values.edge.gatewayClass.controllerName }}
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: {{ .Values.edge.gatewayClass.name }}
+    namespace: {{ .Release.Namespace }}
+---
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Release.Name }}-edge
+spec:
+  gatewayClassName: {{ .Values.edge.gatewayClass.name }}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      {{- with .Values.edge.hostname }}
+      hostname: {{ . | quote }}
+      {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-frontend
+spec:
+  parentRefs:
+    - name: {{ .Release.Name }}-edge
+  {{- with .Values.edge.hostname }}
+  hostnames: [{{ . | quote }}]
+  {{- end }}
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: frontend
+          port: {{ .Values.frontend.port }}
+{{- end }}

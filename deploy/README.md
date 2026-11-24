@@ -42,3 +42,30 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **heartbeat 토픽**(`__debezium-heartbeat.<커넥터>`)은 브로커 자동 생성을 껐으므로 `KafkaTopic` 으로 만든다
 - `debezium.enabled=false` 면 KafkaConnect 없이 서비스의 스케줄러 relay 로 돈다
 - CI 확인: 커넥터 5개 Ready, 스모크 뒤 outbox 5개가 비어 있음(넣고 바로 지움), 활성 replication slot 5개
+
+## ArgoCD 로 올리기 (K-3, GitOps)
+
+`deploy/argocd/root.yaml`(app-of-apps) 하나만 apply 하면 ArgoCD 가 Git 에서 나머지를 가져와 맞춘다.
+
+| Application | 무엇 | wave |
+|---|---|---|
+| `commerce-saga-root` | `deploy/argocd/apps` 차트. 아래 셋과 OCI Helm 저장소 Secret 을 만든다 | |
+| `strimzi` | Strimzi 오퍼레이터(OCI `quay.io/strimzi-helm`) | -2 |
+| `envoy-gateway` | Envoy Gateway(OCI `docker.io/envoyproxy/gateway-helm`, Gateway API CRD 포함) | -2 |
+| `commerce-saga` | `deploy/helm/commerce-saga` 를 같은 커밋에서, `edge.enabled=true` | 0 |
+
+```bash
+kind create cluster --name commerce-saga
+REVISION=<push 된 커밋 또는 브랜치> scripts/k8s-argocd.sh   # 이미지 → kind, ArgoCD 설치, root apply, Synced·Healthy 대기
+kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-system get svc \
+  -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o jsonpath='{.items[0].metadata.name}') 18080:80
+# 화면: http://localhost:18080
+```
+
+## 결정 (K-3)
+
+- **GitOps 는 app-of-apps**. 자식 Application 은 작은 Helm 차트(`argocd/apps`)라 `revision` 하나로 모든 자식이 같은 커밋을 본다(CI 는 PR 커밋을 넣는다). 자식 순서는 sync-wave(플랫폼 먼저), CRD 가 아직 없을 때는 `SkipDryRunOnMissingResource` + 재시도
+- **edge = Gateway API(`Gateway`·`HTTPRoute`), 구현은 Envoy Gateway**. ingress-nginx 는 2026년에 은퇴해 Ingress 대신 k8s 표준 다음 API 를 쓴다. **화면(Next)만 연다**: 브라우저는 Next 만 보고 Next 서버만 Spring Gateway 를 부른다(ADR 0011). Spring Gateway·서비스·DB·Kafka·Redis 는 내부망
+- Envoy 의 Service 타입은 값(`edge.serviceType`). kind 는 LoadBalancer 가 없어 ClusterIP, 클라우드는 LoadBalancer
+- 이미지는 여전히 `kind load`(레지스트리 없음). 레지스트리에 올리면 ArgoCD 만으로 끝난다
+- CI `k8s` 워크플로의 `argocd` 잡이 Synced·Healthy, edge 로 화면, 시나리오 0·1 을 확인한다

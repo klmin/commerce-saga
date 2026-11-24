@@ -106,3 +106,15 @@ frontend:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 384Mi }
+
+# edge (Gateway API). 화면만 밖으로 연다. 구현은 Envoy Gateway (deploy/argocd 가 설치한다)
+edge:
+  enabled: false
+  # 비우면 모든 호스트. 실제 도메인을 쓰면 채운다
+  hostname: ""
+  # Envoy 의 Service 타입. 클라우드는 LoadBalancer
+  serviceType: ClusterIP
+  gatewayClass:
+    create: true
+    name: commerce-edge
+    controllerName: gateway.envoyproxy.io/gatewayclass-controller

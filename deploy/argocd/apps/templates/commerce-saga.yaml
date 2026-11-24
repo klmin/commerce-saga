@@ -1,0 +1,33 @@
+# 애플리케이션: deploy/helm/commerce-saga 차트를 같은 커밋에서. Strimzi·Gateway API CRD 가 생길 때까지는 dry-run 을 건너뛰고 재시도한다
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: commerce-saga
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.revision }}
+    path: deploy/helm/commerce-saga
+    helm:
+      releaseName: commerce
+      valuesObject: {{- toYaml (merge (dict "image" (dict "tag" .Values.imageTag)) .Values.commerceValues) | nindent 8 }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 20
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 2m

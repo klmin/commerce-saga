@@ -1,0 +1,5 @@
+apiVersion: v2
+name: commerce-saga-apps
+description: ArgoCD 자식 Application 묶음 (app-of-apps). deploy/argocd/root.yaml 이 쓴다
+type: application
+version: 0.1.0

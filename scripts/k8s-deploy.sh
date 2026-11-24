@@ -46,6 +46,11 @@ for s in $SERVICES frontend connect; do
   kind load docker-image "commerce-saga/$s:$TAG" --name "$KIND_CLUSTER" > /dev/null
 done
 
+# ArgoCD 로 배포할 때(scripts/k8s-argocd.sh)는 이미지까지만. 나머지는 ArgoCD 가 Git 에서 맞춘다
+if [ "${IMAGES_ONLY:-false}" = true ]; then
+  exit 0
+fi
+
 echo "== Strimzi $STRIMZI_VERSION"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - > /dev/null
 helm upgrade --install strimzi oci://quay.io/strimzi-helm/strimzi-kafka-operator \

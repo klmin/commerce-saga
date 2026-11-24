@@ -6,7 +6,7 @@
 - DB 저장과 메시지 발행의 이중 쓰기 → **Transactional Outbox** + relay (스케줄러 → **Debezium CDC**)
 - at-least-once 전달로 같은 메시지가 여러 번 온다 → **멱등 처리**, 늦은 응답에 단계가 되돌아가지 않는 상태 머신
 
-> 3단계(신뢰성)까지 완료, `v0.3-reliability`가 완성 기준이다. 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정), 타임아웃·장애 복구(멈춘 Saga 재전송·보상, 결제 타임아웃 PG 조회 보정, 늦은 승인 자동 환불). 후속 1(관측성)도 완료: 분산 트레이싱(주문 한 건 = trace 하나), 메트릭·경보(결제 UNKNOWN·환불 대기·멈춘 Saga·lag·DLT·slot 적체). 후속 2(인증 + 프론트엔드)도 완료: 자체 JWT auth-service, Spring Cloud Gateway, 서비스 JWT 검증, 프론트용 백엔드 보강(내 주문·결제·포인트 내역, 주문 Idempotency-Key, 가입 → 포인트 계정), Next.js 화면(로그인·가입, 상품·주문·주문 상세 Saga 타임라인, 포인트·결제 내역·알림, 로그인 기기 관리, 관리자 결제 장애 주입)과 CI 브라우저 e2e. 그다음 k8s → 검색. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md), 왜 이 규모에 서비스를 나눴는지는 [ADR 0000](docs/adr/0000-why-msa.md).
+> 3단계(신뢰성)까지 완료, `v0.3-reliability`가 완성 기준이다. 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정), 타임아웃·장애 복구(멈춘 Saga 재전송·보상, 결제 타임아웃 PG 조회 보정, 늦은 승인 자동 환불). 후속 1(관측성)도 완료: 분산 트레이싱(주문 한 건 = trace 하나), 메트릭·경보(결제 UNKNOWN·환불 대기·멈춘 Saga·lag·DLT·slot 적체). 후속 2(인증 + 프론트엔드)도 완료: 자체 JWT auth-service, Spring Cloud Gateway, 서비스 JWT 검증, 프론트용 백엔드 보강(내 주문·결제·포인트 내역, 주문 Idempotency-Key, 가입 → 포인트 계정), Next.js 화면(로그인·가입, 상품·주문·주문 상세 Saga 타임라인, 포인트·결제 내역·알림, 로그인 기기 관리, 관리자 결제 장애 주입)과 CI 브라우저 e2e. 후속 3(k8s)도 완료: Helm 차트 하나(Postgres·Redis·Strimzi Kafka·서비스·화면), Strimzi KafkaConnect 의 Debezium relay, ArgoCD app-of-apps, Gateway API edge(화면만 공개), PR 마다 kind 에서 배포·스모크. 그다음 검색(후속 4). 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md), 왜 이 규모에 서비스를 나눴는지는 [ADR 0000](docs/adr/0000-why-msa.md).
 
 ## 아키텍처 (3단계)
 
@@ -129,7 +129,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0011 프론트엔드: Next.js + Tailwind + shadcn/ui, Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다(BFF), refresh 는 proxy.ts](docs/adr/0011-frontend-nextjs-bff-session.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
-- [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
+- [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, GitOps 는 ArgoCD, edge 는 Gateway API, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
 
 ## 구성
 
@@ -140,7 +140,7 @@ frontend/      Next.js 화면 (로그인·회원가입, 상품·주문·내 주�
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)
-deploy/        k8s 배포 (서비스 이미지, Helm 차트, 후속 3). deploy/README.md
+deploy/        k8s 배포 (서비스 이미지, Helm 차트, ArgoCD app-of-apps, 후속 3). deploy/README.md
 scripts/       스모크 테스트, 오프셋 되감기, DLT 조회·재처리, 커넥터 등록·중단 시나리오, 서비스 다운·결제 타임아웃 시나리오, relay 측정
 docs/          ADR, 시나리오
 ```
