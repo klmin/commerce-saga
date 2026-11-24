@@ -1,10 +1,15 @@
 name: codeql
 
+# docs·md 만 바뀐 커밋은 건너뛴다. 분석 대상(java-kotlin, actions)이 그대로라 결과가 같다.
+# 분석기 규칙 갱신은 주간 schedule 이 잡는다. 이 체크를 ruleset 필수 체크로 두면
+# 건너뛴 PR 이 대기 상태로 남으니, 그때는 job 안에서 경로를 보고 skip 하는 방식으로 바꾼다
 on:
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
     branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   schedule:
     - cron: '0 18 * * 0' # 매주 월요일 03:00 KST
 
