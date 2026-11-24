@@ -51,7 +51,7 @@ import static org.awaitility.Awaitility.await;
         "saga.timeout.max-resends=1",
         "saga.timeout.scan-interval=500ms"
 })
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, StubProductCatalogConfiguration.class})
 @Testcontainers(disabledWithoutDocker = true)
 class SagaTimeoutIntegrationTest {
 

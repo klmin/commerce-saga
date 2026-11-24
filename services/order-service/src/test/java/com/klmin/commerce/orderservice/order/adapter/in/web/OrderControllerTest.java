@@ -1,6 +1,8 @@
 package com.klmin.commerce.orderservice.order.adapter.in.web;
 
 import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedException;
+import com.klmin.commerce.orderservice.order.application.OrderPriceChangedException;
+import com.klmin.commerce.orderservice.order.application.ProductCatalogUnavailableException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
@@ -60,6 +62,31 @@ class OrderControllerTest {
     private static Order order(long userId) {
         return Order.place(UUID.randomUUID(), UserId.of(userId), List.of(OrderLine.of(10L, 2, 1_000L)), Points.ZERO,
                 Instant.parse("2026-11-22T00:00:00Z"));
+    }
+
+    @Test
+    void placeOrder_priceChanged_409_withCurrentPrices() throws Exception {
+        given(placeOrderUseCase.placeOrder(any())).willThrow(new OrderPriceChangedException(
+                List.of(new OrderPriceChangedException.CurrentPrice(10L, 1_200L))));
+
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.currentPrices[0].productId").value(10))
+                .andExpect(jsonPath("$.currentPrices[0].price").value(1200));
+    }
+
+    @Test
+    void placeOrder_productServiceDown_503_withoutInternalCause() throws Exception {
+        given(placeOrderUseCase.placeOrder(any())).willThrow(
+                new ProductCatalogUnavailableException(new RuntimeException("Connection refused: product-service")));
+
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Connection refused"))));
     }
 
     @Test

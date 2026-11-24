@@ -1,6 +1,8 @@
 package com.klmin.commerce.orderservice.common.web;
 
+import com.klmin.commerce.orderservice.common.error.ConflictException;
 import com.klmin.commerce.orderservice.common.error.DomainValidationException;
+import com.klmin.commerce.orderservice.common.error.ServiceUnavailableException;
 import com.klmin.commerce.orderservice.common.error.NotFoundException;
 import com.klmin.commerce.orderservice.common.error.UnprocessableRequestException;
 import org.slf4j.Logger;
@@ -38,6 +40,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     ProblemDetail handleNotFound(NotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    ProblemDetail handleConflict(ConflictException ex) {
+        ProblemDetail body = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ex.properties().forEach(body::setProperty);
+        return body;
+    }
+
+    // 내부 원인(연결 거부·타임아웃 등)은 응답에 넣지 않고 로그로만
+    @ExceptionHandler(ServiceUnavailableException.class)
+    ProblemDetail handleServiceUnavailable(ServiceUnavailableException ex) {
+        log.warn("의존 서비스 응답 없음: {}", ex.getCause() == null ? ex.getMessage() : ex.getCause().toString());
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(UnprocessableRequestException.class)

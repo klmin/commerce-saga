@@ -1,11 +1,14 @@
 import { productName } from "@/lib/products";
 
-export function orderTitle(order: { lines: { productId: number }[] }): string {
+export function orderTitle(
+  order: { lines: { productId: number }[] },
+  names?: Readonly<Record<number, string>>,
+): string {
   const [first, ...rest] = order.lines;
   if (!first) {
     return "주문";
   }
-  const name = productName(first.productId);
+  const name = productName(first.productId, names);
   return rest.length > 0 ? `${name} 외 ${rest.length}건` : name;
 }
 

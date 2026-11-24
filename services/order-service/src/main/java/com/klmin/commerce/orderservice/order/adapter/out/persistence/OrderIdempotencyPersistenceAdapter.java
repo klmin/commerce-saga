@@ -46,4 +46,11 @@ class OrderIdempotencyPersistenceAdapter implements OrderIdempotencyPort {
                 .query((rs, n) -> new KeyRecord(rs.getObject("order_id", UUID.class), rs.getString("request_hash")))
                 .single());
     }
+
+    @Override
+    public Optional<KeyRecord> find(long userId, String key) {
+        return jdbc.sql(SELECT).params(userId, key)
+                .query((rs, n) -> new KeyRecord(rs.getObject("order_id", UUID.class), rs.getString("request_hash")))
+                .optional();
+    }
 }

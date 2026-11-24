@@ -83,6 +83,9 @@ services:
     port: 8081
     db: order
     outbox: true
+    env:
+      # 주문 때 상품 가격 확인 (ADR 0016). Gateway 를 거치지 않고 클러스터 안에서
+      PRODUCT_SERVICE_URL: http://product-service:8087
   inventory-service:
     port: 8082
     db: inventory

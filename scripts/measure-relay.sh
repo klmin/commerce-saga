@@ -18,6 +18,8 @@
 #
 # k6 대신 bash + curl 을 쓴다 (CI·로컬에 추가 도구 없이 같은 방식으로 돌리려고)
 set -euo pipefail
+# 상품 1~3 시드 가격 (product-service V2). 서버 가격과 다르면 주문이 409 (ADR 0016)
+SEED_PRICES=(0 39000 25000 18000)
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
 
@@ -100,7 +102,7 @@ while [ "$sent" -lt "$ORDERS" ]; do
   for j in $(seq 1 "$batch"); do
     product=$(( ((sent + j) % 3) + 1 ))
     curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
-      -d "{\"lines\":[{\"productId\":$product,\"quantity\":1,\"unitPrice\":100}],\"pointAmount\":10}" \
+      -d "{\"lines\":[{\"productId\":$product,\"quantity\":1,\"unitPrice\":${SEED_PRICES[$product]}}],\"pointAmount\":10}" \
       | field orderId > "$tmp/ids/$j" &
   done
   wait

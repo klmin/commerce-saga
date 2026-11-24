@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { productById } from "@/lib/products";
+import { listProducts } from "@/lib/api/products";
 
 import { pointBalanceOrUndefined, stocksByProduct } from "../../shop-data";
 import { OrderForm } from "./order-form";
@@ -17,14 +17,19 @@ async function OrderFormWithData({ searchParams }: Pick<PageProps<"/orders/new">
   await connection();
   const raw = (await searchParams).productId;
   const productId = Number(typeof raw === "string" ? raw : NaN);
-  const [stocks, pointBalance] = await Promise.all([stocksByProduct(), pointBalanceOrUndefined()]);
+  const products = await listProducts();
+  const [stocks, pointBalance] = await Promise.all([
+    stocksByProduct(products),
+    pointBalanceOrUndefined(),
+  ]);
   return (
     <OrderForm
       // 폼을 열 때마다 새 키. 이 폼에서 다시 누르는 것은 같은 주문으로 처리된다
       idempotencyKey={randomUUID()}
+      products={products}
       stocks={stocks}
       pointBalance={pointBalance}
-      initialProductId={productById(productId)?.id}
+      initialProductId={products.find((p) => p.id === productId)?.id}
     />
   );
 }

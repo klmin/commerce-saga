@@ -41,7 +41,7 @@ get() { # path userId → 본문 (200 이 아니면 실패)
 }
 points() { get /api/points/me "$1" | field balance; }
 body() { # quantity
-  printf '{"lines":[{"productId":2,"quantity":%s,"unitPrice":1000}],"pointAmount":%s}' "$1" "$POINT"
+  printf '{"lines":[{"productId":2,"quantity":%s,"unitPrice":25000}],"pointAmount":%s}' "$1" "$POINT"
 }
 place() { # key quantity → "status orderId replayed"
   local out headers status i

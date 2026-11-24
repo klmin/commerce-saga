@@ -81,7 +81,7 @@ give_up_query='sum(commerce_saga_timeout_give_ups_total)'
 give_ups_before=$(metric "$give_up_query")
 fault DELAY 45000
 id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
-  -d '{"lines":[{"productId":1,"quantity":1,"unitPrice":1000}],"pointAmount":100}' \
+  -d '{"lines":[{"productId":1,"quantity":1,"unitPrice":39000}],"pointAmount":100}' \
   | sed -nE 's/.*"orderId":"([^"]+)".*/\1/p')
 echo "  주문 …${id: -8}"
 payment_status() { curl -s "$PAYMENT_URL/payments/orders/$id" -H "$(auth $USER_ID)" | sed -nE 's/.*"status":"([A-Z]+)".*/\1/p'; }
