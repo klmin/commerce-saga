@@ -8,6 +8,8 @@ import com.klmin.commerce.pointservice.point.application.port.out.PointGrantPort
 import com.klmin.commerce.pointservice.point.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.pointservice.point.domain.PointAccount;
 import com.klmin.commerce.pointservice.point.domain.PointGrant;
+import com.klmin.commerce.pointservice.point.domain.Points;
+import com.klmin.commerce.pointservice.point.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -52,11 +54,12 @@ class PointAccountService implements OpenPointAccountUseCase {
             log.info("이미 처리한 메시지 건너뜀: UserRegistered (messageId={}, userId={})", messageId, command.userId());
             return;
         }
-        PointAccount account = PointAccount.open(command.userId(), properties.signupBonus(), clock.instant());
+        PointAccount account = PointAccount.open(UserId.of(command.userId()), Points.of(properties.signupBonus()),
+                clock.instant());
         if (accountPort.insertIfAbsent(account)) {
-            if (properties.signupBonus() > 0) {
-                grantPort.save(PointGrant.signupBonus(UuidCreator.getTimeOrderedEpoch(), command.userId(),
-                        properties.signupBonus(), account.updatedAt()));
+            if (account.balance().isPositive()) {
+                grantPort.save(PointGrant.signupBonus(UuidCreator.getTimeOrderedEpoch(), account.userId(),
+                        account.balance(), account.updatedAt()));
             }
             log.info("포인트 계정 생성 (userId={}, 가입 축하 {}P)", command.userId(), properties.signupBonus());
         } else {

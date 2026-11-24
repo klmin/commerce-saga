@@ -21,6 +21,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.ConsumerFactory;
@@ -74,6 +75,9 @@ class PointIntegrationTest {
     @Autowired
     JsonMapper json;
 
+    @Autowired
+    JdbcTemplate jdbc;
+
     private Consumer<String, String> replyConsumer;
     private final List<ConsumerRecord<String, String>> received = new ArrayList<>();
 
@@ -90,18 +94,30 @@ class PointIntegrationTest {
 
     @Test
     void use_thenRefund_twice_returnsPointsOnce() {
-        long before = getPointBalanceUseCase.getBalance(1L).balance();
+        long before = getPointBalanceUseCase.getBalance(1L).balance().value();
         UUID orderId = UUID.randomUUID();
 
         send(orderId, UsePoint.TYPE, new UsePoint(orderId, 1L, 1_500L));
         assertThat(type(awaitReplies(orderId, 1).getFirst())).isEqualTo(PointUsed.TYPE);
-        assertThat(getPointBalanceUseCase.getBalance(1L).balance()).isEqualTo(before - 1_500L);
+        assertThat(getPointBalanceUseCase.getBalance(1L).balance().value()).isEqualTo(before - 1_500L);
 
         send(orderId, RefundPoint.TYPE, new RefundPoint(orderId));
         send(orderId, RefundPoint.TYPE, new RefundPoint(orderId));
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
         assertThat(replies.subList(1, 3)).allMatch(r -> PointRefunded.TYPE.equals(type(r)));
-        assertThat(getPointBalanceUseCase.getBalance(1L).balance()).isEqualTo(before);
+        assertThat(getPointBalanceUseCase.getBalance(1L).balance().value()).isEqualTo(before);
+    }
+
+    // 값 객체 도입 전에는 잘못된 커맨드의 거절 기록에 userId 0·음수 금액이 그대로 남았다. 그 주문의 보상이 막히지 않는다
+    @Test
+    void legacyRejectedUsage_withInvalidValues_stillRepliesRefunded() {
+        UUID orderId = UUID.randomUUID();
+        jdbc.update("insert into point_usages (order_id, user_id, amount, status, reason, created_at, updated_at, version) "
+                + "values (?, 0, -5, 'REJECTED', 'invalid command', now(), now(), 0)", orderId);
+
+        send(orderId, RefundPoint.TYPE, new RefundPoint(orderId));
+
+        assertThat(type(awaitReplies(orderId, 1).getFirst())).isEqualTo(PointRefunded.TYPE);
     }
 
     @Test
@@ -113,14 +129,14 @@ class PointIntegrationTest {
         ConsumerRecord<String, String> reply = awaitReplies(orderId, 1).getFirst();
         assertThat(type(reply)).isEqualTo(PointUseFailed.TYPE);
         assertThat(json.readValue(reply.value(), PointUseFailed.class).reason()).isEqualTo("insufficient points: userId=4");
-        assertThat(getPointBalanceUseCase.getBalance(4L).balance()).isZero();
+        assertThat(getPointBalanceUseCase.getBalance(4L).balance().value()).isZero();
     }
 
     // 같은 UsePoint 메시지가 동시에 두 번 처리될 때: 늦은 쪽은 앞 트랜잭션이 커밋될 때까지
     // processed_message PK 에서 기다렸다가 0건이 되어 건너뛴다. 포인트는 한 번만 차감되고 응답도 한 건
     @Test
     void sameMessageConcurrently_deductsOnce() throws Exception {
-        long before = getPointBalanceUseCase.getBalance(2L).balance();
+        long before = getPointBalanceUseCase.getBalance(2L).balance().value();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
         UsePointCommand command = new UsePointCommand(orderId, 2L, 700L);
@@ -150,7 +166,7 @@ class PointIntegrationTest {
         }
         CompletableFuture.allOf(first, second).get(30, TimeUnit.SECONDS);
 
-        assertThat(getPointBalanceUseCase.getBalance(2L).balance()).isEqualTo(before - 700L);
+        assertThat(getPointBalanceUseCase.getBalance(2L).balance().value()).isEqualTo(before - 700L);
         assertThat(type(awaitReplies(orderId, 1).getFirst())).isEqualTo(PointUsed.TYPE);
         long until = System.currentTimeMillis() + 2_000;
         while (System.currentTimeMillis() < until) {
@@ -170,15 +186,15 @@ class PointIntegrationTest {
         sendAuthEvent(userId, UUID.randomUUID(), event);  // 내용이 같은 다른 메시지
 
         await().atMost(Duration.ofSeconds(30)).ignoreExceptions()
-                .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId).balance()).isEqualTo(1_000L));
+                .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId).balance().value()).isEqualTo(1_000L));
         // 계정이 생긴 뒤 포인트를 쓰고, 늦게 온 같은 이벤트가 잔액을 되돌리지 않는지 본다
         usePointUseCase.use(UUID.randomUUID(), new UsePointCommand(UUID.randomUUID(), userId, 400L));
         sendAuthEvent(userId, UUID.randomUUID(), event);
         UUID marker = UUID.randomUUID();
         sendAuthEvent(userId + 1, marker, new UserRegistered(userId + 1, event.registeredAt()));
         await().atMost(Duration.ofSeconds(30)).ignoreExceptions()
-                .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId + 1).balance()).isEqualTo(1_000L));
-        assertThat(getPointBalanceUseCase.getBalance(userId).balance()).isEqualTo(600L);
+                .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId + 1).balance().value()).isEqualTo(1_000L));
+        assertThat(getPointBalanceUseCase.getBalance(userId).balance().value()).isEqualTo(600L);
         // 내역: 가입 축하 지급 한 번 + 주문 사용 (F-2a)
         assertThat(listMyPointHistoryUseCase.listMyHistory(new ListMyPointHistoryQuery(userId, null, 20)))
                 .extracting(PointHistoryEntryResult::kind, PointHistoryEntryResult::amount)
