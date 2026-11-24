@@ -436,6 +436,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 - DB 비밀번호: 서비스 DB Secret → Connect 컨테이너 env → 커넥터 `${env:...}`(EnvVarConfigProvider). CR 에 비밀번호를 쓰지 않음
 - CI `k8s`: 스모크 뒤 커넥터 5개 Ready, outbox 5개 비어 있음, 활성 replication slot 5개
 - CI 첫 실행 실패: Strimzi v1 `KafkaConnect` 는 워커 그룹·내부 토픽을 config 가 아니라 spec 필드(`groupId`, `configStorageTopic` 등)로 받는다 → 고침
+- Codex 반영 (P0): slot 이 생기기 전에 Debezium 모드로 쓰면 메시지를 잃는다(넣고 바로 지우므로). k8s 는 Pod 가 뜨자마자 Kafka 를 소비해 배포 순서로 막을 수 없다 → `OutboxWriter` 가 slot·publication 을 확인하고 없으면 `OutboxNotReadyException` 으로 롤백(리스너는 재시도, 유실 대신 지연). ADR 0014 K-2 추가 결정, `OutboxWriterIntegrationTest` 2개
 
 **K-3 (이번 PR) 에서 한 것 (결정·확인 사항)**
 - ArgoCD app-of-apps: `deploy/argocd/root.yaml` 하나만 apply. 자식(Strimzi·Envoy Gateway = OCI Helm, commerce-saga = 이 저장소 차트)은 `deploy/argocd/apps` 작은 Helm 차트라 `revision` 값 하나로 같은 커밋을 본다. 플랫폼 sync-wave -2, CRD 가 없을 때는 `SkipDryRunOnMissingResource` + 재시도. OCI 저장소는 repository Secret(`enableOCI`)
