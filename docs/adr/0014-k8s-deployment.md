@@ -28,7 +28,7 @@
 - **Postgres·Redis 는 오퍼레이터 없이** 차트 안의 StatefulSet·Deployment 로 둔다(compose 와 같은 단일 인스턴스). 새 오퍼레이터는 Strimzi 하나로 끝낸다. 운영이면 관리형 DB·오퍼레이터(CloudNativePG 등)로 바꿀 자리다
 - Postgres 초기화 SQL 은 `infra/postgres/init` 의 사본을 차트에 둔다(Helm 은 차트 밖 파일을 못 읽는다). CI 가 두 파일이 같은지 검사한다
 - 클러스터에 Tempo 가 없어 trace 를 내보내지 않는다(`TRACING_SAMPLING_PROBABILITY=0`)
-- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1. 여럿이면 키를 Secret 으로 넣는다
+- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1 에 `Recreate` 전략이다. RollingUpdate 면 재배포 중 키가 다른 옛·새 Pod 가 함께 응답해, 방금 받은 토큰이 다른 Pod 의 JWKS 로 검증돼 401 이 될 수 있다. 여럿이면 키를 Secret 으로 넣는다
 
 ### Kafka: Strimzi `Kafka` + `KafkaNodePool`(KRaft) + `KafkaTopic`, 버전 4.3.2
 
