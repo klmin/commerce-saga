@@ -1,6 +1,7 @@
 package com.klmin.commerce.paymentservice.payment.application.service;
 
 import com.klmin.commerce.paymentservice.payment.application.PaymentGatewayTimeoutException;
+import com.klmin.commerce.paymentservice.payment.application.PaymentGatewayUnavailableException;
 import com.klmin.commerce.paymentservice.payment.application.PaymentNotFoundException;
 import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentCommand;
 import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentUseCase;
@@ -36,6 +37,8 @@ import java.util.UUID;
 class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseCase, PaymentFaultUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
+
+    static final String CIRCUIT_OPEN_REASON = "PG unavailable (circuit open)";
 
     private final PaymentRecorder recorder;
     private final PaymentGatewayPort gateway;
@@ -73,6 +76,10 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
         } catch (PaymentGatewayTimeoutException e) {
             recorder.recordUnknown(messageId, command);
             return;
+        } catch (PaymentGatewayUnavailableException e) {
+            // 서킷 브레이커가 열려 PG 를 부르지 않았다 → 확정 실패. Saga 가 바로 보상한다 (4-4절 ③)
+            log.warn("PG 회로 열림, 결제 즉시 실패 (orderId={})", command.orderId());
+            result = GatewayResult.declined(CIRCUIT_OPEN_REASON);
         }
         recorder.record(messageId, command, result);
     }

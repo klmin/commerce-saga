@@ -53,6 +53,19 @@ class PaymentServiceTest {
     }
 
     @Test
+    void pay_circuitOpen_recordsDeclinedAndRepliesFailedAtOnce() {
+        gateway.circuitOpen = true;
+        UUID orderId = UUID.randomUUID();
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
+        assertThat(payments.store.get(orderId).reason()).isEqualTo(PaymentService.CIRCUIT_OPEN_REASON);
+        assertThat(replies.log).singleElement().satisfies(s -> assertThat(s).startsWith("failed:" + orderId));
+    }
+
+    @Test
     void pay_declined_recordsAndRepliesFailed() {
         gateway.change(new Settings(Mode.DECLINE, 0));
         UUID orderId = UUID.randomUUID();
@@ -126,11 +139,16 @@ class PaymentServiceTest {
         int calls;
         // true 면 approve 가 타임아웃 (PG 는 pgLedger 에 결과를 나중에 남길 수 있다)
         boolean timeout;
+        // true 면 서킷 브레이커가 열린 것처럼 PG 를 부르지 않는다
+        boolean circuitOpen;
         final Map<UUID, GatewayResult> pgLedger = new HashMap<>();
         final List<UUID> refunds = new ArrayList<>();
 
         @Override
         public GatewayResult approve(UUID orderId, long userId, Money amount) {
+            if (circuitOpen) {
+                throw new com.klmin.commerce.paymentservice.payment.application.PaymentGatewayUnavailableException(orderId);
+            }
             calls++;
             if (timeout) {
                 throw new PaymentGatewayTimeoutException(orderId);

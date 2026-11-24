@@ -118,6 +118,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
 | 13 | [가입 → auth.events(UserRegistered, outbox) → 포인트 계정 하나·가입 축하 1,000P → 그 포인트로 주문](docs/scenarios/13-signup-point-account.md) | 통과 (CI `e2e`) |
 | 14 | [목록에서 본 가격과 주문 때 가격이 다름 → 409 + 지금 가격 → 같은 키로 새 가격 주문(스냅샷), 판매 중지 422, 장바구니 가격 변경 표시·장바구니 주문](docs/scenarios/14-price-change.md) | CI `e2e` |
+| 15 | [PG 장애가 이어지면 서킷 브레이커가 열려 결제 즉시 실패·보상, 복구 후 시험 호출로 닫힘](docs/scenarios/15-pg-circuit-breaker.md) | CI `e2e` |
 
 ## 설계 결정 (ADR)
 
