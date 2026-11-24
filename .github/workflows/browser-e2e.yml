@@ -57,20 +57,20 @@ jobs:
           for svc in auth-service inventory-service point-service payment-service order-service notification-service gateway; do
             nohup java -jar services/$svc/build/libs/$svc-*.jar > logs/$svc.log 2>&1 &
           done
-          # 3000 은 Grafana. Next 서버만 Gateway(:8000)를 부른다 (ADR 0011)
-          (cd frontend && BACKEND_URL=http://localhost:8000 nohup npm run start -- --port 3001 > ../logs/frontend.log 2>&1 &)
+          # Next(:3500, package.json). Next 서버만 Gateway(:8000)를 부른다 (ADR 0011)
+          (cd frontend && BACKEND_URL=http://localhost:8000 nohup npm run start > ../logs/frontend.log 2>&1 &)
           for url in 8086 8081 8082 8083 8084 8085 8000; do
             url=http://localhost:$url/actuator/health
             for i in $(seq 1 60); do curl -sf "$url" | grep -q UP && break; sleep 2; done
             curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }
           done
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:3001/login && break; sleep 1; done
-          curl -sf -o /dev/null http://localhost:3001/login
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:3500/login && break; sleep 1; done
+          curl -sf -o /dev/null http://localhost:3500/login
 
       - name: Playwright
         working-directory: frontend
         env:
-          E2E_BASE_URL: http://localhost:3001
+          E2E_BASE_URL: http://localhost:3500
         run: npx playwright test
 
       - name: Playwright 결과 (실패 시)

@@ -13,7 +13,7 @@ docker compose -f infra/docker-compose.yml up -d --wait
 # frontend
 cp .env.example .env.local   # 기본값 그대로면 없어도 된다
 npm ci
-npm run dev -- --port 3001   # 3000 은 Grafana 가 쓴다
+npm run dev                  # http://localhost:3500 (package.json 에 고정. 3000 대는 다른 도구가 쓴다)
 ```
 
 개발용 계정은 루트 README 의 시드 사용자(`user1`~`user4`). 새로 가입하면 몇 초 안에 가입 축하 1,000P 가 생긴다(시나리오 13).
@@ -77,7 +77,7 @@ E2E는 Playwright로 `e2e/`에 둔다. 떠 있는 앱과 백엔드를 대상으�
 
 ```bash
 npx playwright install chromium            # 처음 한 번
-E2E_BASE_URL=http://localhost:3001 npm run test:e2e
+npm run test:e2e   # 기본 http://localhost:3500, 다른 주소는 E2E_BASE_URL
 ```
 
 ## UI 컴포넌트

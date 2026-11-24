@@ -60,7 +60,7 @@ flowchart LR
 ## 실행
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Tempo·Prometheus(9091)·Grafana(http://localhost:3000), Redis(6380)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Tempo·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380)
 ./gradlew :services:inventory-service:bootRun              # 8082   (각각 다른 터미널에서)
 ./gradlew :services:point-service:bootRun                  # 8083
 ./gradlew :services:payment-service:bootRun                # 8084
@@ -68,7 +68,7 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:notification-service:bootRun           # 8085 (선택)
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
-(cd frontend && npm ci && npm run dev -- --port 3001)     # 화면 http://localhost:3001 (3000 은 Grafana). frontend/README.md
+(cd frontend && npm ci && npm run dev)                 # 화면 http://localhost:3500. frontend/README.md
 ```
 
 ```bash

@@ -10,7 +10,7 @@
 2. `scripts/smoke-alerts.sh`
    - **12a**: `payment.command`에 깨진 JSON(`type: Pay`)을 넣는다 → payment-service가 `payment.command.DLT`로 옮김 → kafka-exporter의 DLT 끝 오프셋 증가 → `DeadLetterMessage{topic="payment.command.DLT"}`
    - **12b**: PG를 45초 늦춘다(시나리오 2b와 같은 상황) → 결제 `UNKNOWN` → Saga가 결제를 약 30초 기다리다 포기(`commerce_saga_timeout_give_ups_total` 증가) → `SagaTimeoutGiveUp` → `UNKNOWN`이 30초를 넘어 `PaymentResultUnknown` → PG가 늦게 승인 → 결제 서비스가 환불(`REFUNDED`) → `PaymentResultUnknown` 해제
-3. 눈으로 보려면 Grafana(http://localhost:3000) 대시보드 `commerce-saga`, 또는 Prometheus(http://localhost:9091/alerts)
+3. 눈으로 보려면 Grafana(http://localhost:3030) 대시보드 `commerce-saga`, 또는 Prometheus(http://localhost:9091/alerts)
 
 CI `e2e`가 두 relay 모드에서 시나리오 11 다음에 이 스크립트를 돈다.
 

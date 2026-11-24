@@ -9,7 +9,7 @@
    - 요청에 `traceparent`를 직접 넣어 trace id를 알고 시작한다
    - **11a**: 정상 주문 → `COMPLETED` → Tempo(`GET /api/traces/<id>`)에 span이 다 모일 때까지 기다린 뒤 서비스 다섯 개가 다 있는지, 주문 id로 검색(`{ span.messaging.kafka.message.key = "<orderId>" }`)해서 같은 trace 하나가 나오는지
    - **11b**: 결제 실패 주입(`DECLINE`) → `CANCELLED` → 보상 커맨드·응답까지 같은 trace에 있는지
-3. 눈으로 보려면 Grafana(http://localhost:3000) → Explore → Tempo → trace id 또는 TraceQL
+3. 눈으로 보려면 Grafana(http://localhost:3030) → Explore → Tempo → trace id 또는 TraceQL
 
 CI `e2e`가 두 relay 모드에서 시나리오 2 다음에 이 스크립트를 돈다.
 
