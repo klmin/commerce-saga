@@ -103,5 +103,6 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 
 - **레지스트리는 GHCR**: 저장소와 같은 곳, Actions 의 기본 `GITHUB_TOKEN` 으로 push. AWS IAM·OIDC 설정이 없다. public 패키지라 pull secret 도 없다
 - **태그를 Git 에 커밋하지 않는다**: main 은 PR 로만 바뀌어(ruleset) 봇 커밋이 어렵다. 대신 배포 브랜치 `release/eks` 를 이미지가 다 올라간 뒤에만 옮기고, ArgoCD 가 sync 하는 커밋 해시를 태그로 쓴다. Git 의 `release/eks` 가 곧 "지금 배포된 것"이다
+- **개발용 시드 사용자 없음**: `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`. 공개된 admin 비밀번호로 누구나 관리자(결제 장애 주입)가 되지 않게. 사용자는 회원가입, 관리자 역할은 DB 에서 따로 준다
 - **http 로 먼저**: TLS(도메인·ACM/cert-manager)를 붙이기 전이라 `COOKIE_SECURE`·`AUTH_COOKIE_SECURE` 를 `false` 로 둔다. https 를 붙이면 지운다
 - DB·Redis·Kafka 는 kind 와 같이 클러스터 안 단일 인스턴스(EBS PVC). 운영이면 RDS(logical replication)·ElastiCache·MSK 로 바꿀 자리
