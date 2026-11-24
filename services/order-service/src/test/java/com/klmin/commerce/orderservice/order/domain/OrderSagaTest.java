@@ -24,7 +24,8 @@ class OrderSagaTest {
 
     /** 합계 10,000 */
     private static OrderSaga start(long pointAmount) {
-        Order order = Order.place(UUID.randomUUID(), 1L, List.of(new OrderLine(10L, 2, 5_000L)), pointAmount, T0);
+        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(10L, 2, 5_000L)),
+                Points.of(pointAmount), T0);
         return OrderSaga.start(order, T0);
     }
 
@@ -37,8 +38,8 @@ class OrderSagaTest {
         OrderSaga saga = start(3_000L);
         assertThat(saga.state()).isEqualTo(SagaState.RESERVING_STOCK);
 
-        assertThat(on(saga, STOCK_RESERVED)).isEqualTo(new SagaAction.UsePoint(3_000L));
-        assertThat(on(saga, POINT_USED)).isEqualTo(new SagaAction.Pay(7_000L));
+        assertThat(on(saga, STOCK_RESERVED)).isEqualTo(new SagaAction.UsePoint(Points.of(3_000L)));
+        assertThat(on(saga, POINT_USED)).isEqualTo(new SagaAction.Pay(Money.of(7_000L)));
         assertThat(on(saga, PAYMENT_APPROVED)).isEqualTo(new SagaAction.Complete());
 
         assertThat(saga.state()).isEqualTo(SagaState.COMPLETED);
@@ -50,7 +51,7 @@ class OrderSagaTest {
     void noPoints_skipsPointStep() {
         OrderSaga saga = start(0L);
 
-        assertThat(on(saga, STOCK_RESERVED)).isEqualTo(new SagaAction.Pay(10_000L));
+        assertThat(on(saga, STOCK_RESERVED)).isEqualTo(new SagaAction.Pay(Money.of(10_000L)));
     }
 
     @Test

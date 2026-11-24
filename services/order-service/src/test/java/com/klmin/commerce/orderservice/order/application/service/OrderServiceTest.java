@@ -13,11 +13,14 @@ import com.klmin.commerce.orderservice.order.application.port.out.OrderEventPort
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
 import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPort;
 import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
+import com.klmin.commerce.orderservice.order.domain.Money;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
 import com.klmin.commerce.orderservice.order.domain.OrderStatus;
+import com.klmin.commerce.orderservice.order.domain.Points;
 import com.klmin.commerce.orderservice.order.domain.SagaEventType;
 import com.klmin.commerce.orderservice.order.domain.SagaState;
+import com.klmin.commerce.orderservice.order.domain.UserId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -126,7 +129,7 @@ class OrderServiceTest {
 
         assertThat(theirs.created()).isTrue();
         assertThat(theirs.order().id()).isNotEqualTo(mine.order().id());
-        assertThat(theirs.order().userId()).isEqualTo(2L);
+        assertThat(theirs.order().userId()).isEqualTo(UserId.of(2L));
     }
 
     @Test
@@ -335,8 +338,8 @@ class OrderServiceTest {
         }
 
         @Override
-        public void usePoint(UUID orderId, long userId, long amount) {
-            log.add("usePoint:" + orderId + ":" + userId + ":" + amount);
+        public void usePoint(UUID orderId, UserId userId, Points amount) {
+            log.add("usePoint:" + orderId + ":" + userId.value() + ":" + amount.value());
         }
 
         @Override
@@ -345,13 +348,13 @@ class OrderServiceTest {
         }
 
         @Override
-        public void pay(UUID orderId, long userId, long amount) {
-            log.add("pay:" + orderId + ":" + userId + ":" + amount);
+        public void pay(UUID orderId, UserId userId, Money amount) {
+            log.add("pay:" + orderId + ":" + userId.value() + ":" + amount.value());
         }
 
         @Override
-        public void cancelPayment(UUID orderId, long userId, long amount) {
-            log.add("cancelPayment:" + orderId + ":" + userId + ":" + amount);
+        public void cancelPayment(UUID orderId, UserId userId, Money amount) {
+            log.add("cancelPayment:" + orderId + ":" + userId.value() + ":" + amount.value());
         }
 
         @Override

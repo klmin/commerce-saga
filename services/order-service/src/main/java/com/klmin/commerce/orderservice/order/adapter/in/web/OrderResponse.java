@@ -22,9 +22,9 @@ record OrderResponse(
     }
 
     static OrderResponse from(Order order) {
-        return new OrderResponse(order.id(), order.userId(), order.status().name(), order.totalAmount(),
-                order.pointAmount(), order.paidAmount(), order.cancelReason(),
-                order.lines().stream().map(l -> new Line(l.productId(), l.quantity(), l.unitPrice())).toList(),
+        return new OrderResponse(order.id(), order.userId().value(), order.status().name(),
+                order.totalAmount().value(), order.pointAmount().value(), order.paidAmount().value(), order.cancelReason(),
+                order.lines().stream().map(l -> new Line(l.productId().value(), l.quantity().value(), l.unitPrice().value())).toList(),
                 order.createdAt(), order.updatedAt());
     }
 }

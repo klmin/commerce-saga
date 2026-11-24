@@ -28,9 +28,9 @@ public final class OrderSaga {
     public static final String TIMEOUT_GIVE_UP = "TIMEOUT_GIVE_UP";
 
     private final UUID orderId;
-    private final long userId;
-    private final long pointAmount;
-    private final long paidAmount;
+    private final UserId userId;
+    private final Points pointAmount;
+    private final Money paidAmount;
     private final Instant createdAt;
     private final List<SagaHistoryEntry> history;
     private SagaState state;
@@ -39,19 +39,16 @@ public final class OrderSaga {
     private int stepResends;
     private Instant updatedAt;
 
-    private OrderSaga(UUID orderId, long userId, long pointAmount, long paidAmount, SagaState state,
+    private OrderSaga(UUID orderId, UserId userId, Points pointAmount, Money paidAmount, SagaState state,
                       boolean pointUsed, String failureReason, int stepResends, List<SagaHistoryEntry> history,
                       Instant createdAt, Instant updatedAt) {
         this.orderId = Objects.requireNonNull(orderId, "orderId");
-        if (pointAmount < 0 || paidAmount < 0) {
-            throw new IllegalArgumentException("amounts must not be negative");
-        }
         if (stepResends < 0) {
             throw new IllegalArgumentException("stepResends must not be negative");
         }
-        this.userId = userId;
-        this.pointAmount = pointAmount;
-        this.paidAmount = paidAmount;
+        this.userId = Objects.requireNonNull(userId, "userId");
+        this.pointAmount = Objects.requireNonNull(pointAmount, "pointAmount");
+        this.paidAmount = Objects.requireNonNull(paidAmount, "paidAmount");
         this.state = Objects.requireNonNull(state, "state");
         this.pointUsed = pointUsed;
         this.failureReason = failureReason;
@@ -68,7 +65,7 @@ public final class OrderSaga {
                 List.of(new SagaHistoryEntry(STARTED, SagaState.RESERVING_STOCK, null, now)), now, now);
     }
 
-    public static OrderSaga restore(UUID orderId, long userId, long pointAmount, long paidAmount, SagaState state,
+    public static OrderSaga restore(UUID orderId, UserId userId, Points pointAmount, Money paidAmount, SagaState state,
                                     boolean pointUsed, String failureReason, int stepResends,
                                     List<SagaHistoryEntry> history, Instant createdAt, Instant updatedAt) {
         return new OrderSaga(orderId, userId, pointAmount, paidAmount, state, pointUsed, failureReason, stepResends,
@@ -173,14 +170,14 @@ public final class OrderSaga {
     }
 
     private SagaAction afterStockReserved() {
-        if (pointAmount > 0) {
+        if (pointAmount.isPositive()) {
             return moveTo(SagaState.USING_POINT, new SagaAction.UsePoint(pointAmount));
         }
         return afterPointUsed();
     }
 
     private SagaAction afterPointUsed() {
-        if (paidAmount > 0) {
+        if (paidAmount.isPositive()) {
             return moveTo(SagaState.PAYING, new SagaAction.Pay(paidAmount));
         }
         return complete();
@@ -233,15 +230,19 @@ public final class OrderSaga {
         return orderId;
     }
 
-    public long userId() {
+    public boolean isOwnedBy(UserId userId) {
+        return this.userId.equals(userId);
+    }
+
+    public UserId userId() {
         return userId;
     }
 
-    public long pointAmount() {
+    public Points pointAmount() {
         return pointAmount;
     }
 
-    public long paidAmount() {
+    public Money paidAmount() {
         return paidAmount;
     }
 

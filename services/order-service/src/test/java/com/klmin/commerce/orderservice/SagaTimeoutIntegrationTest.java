@@ -107,13 +107,13 @@ class SagaTimeoutIntegrationTest {
 
         awaitCount(order, OrderCancelled.TYPE, 1);
         awaitStatus(order, OrderStatus.CANCELLED);
-        OrderSaga saga = getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), order.userId()));
+        OrderSaga saga = getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), order.userId().value()));
         assertThat(saga.history()).extracting(SagaHistoryEntry::event).containsExactly(
                 OrderSaga.STARTED, OrderSaga.TIMEOUT_RESEND, OrderSaga.TIMEOUT_GIVE_UP,
                 SagaEventType.STOCK_RELEASED.name());
         assertThat(saga.history()).extracting(SagaHistoryEntry::state).containsExactly(
                 SagaState.RESERVING_STOCK, SagaState.RESERVING_STOCK, SagaState.RELEASING_STOCK, SagaState.CANCELLED);
-        assertThat(getOrderUseCase.getOrder(new GetOrderQuery(order.id(), order.userId())).cancelReason())
+        assertThat(getOrderUseCase.getOrder(new GetOrderQuery(order.id(), order.userId().value())).cancelReason())
                 .isEqualTo("timeout: no reply in RESERVING_STOCK after 1 resends");
     }
 
@@ -126,7 +126,7 @@ class SagaTimeoutIntegrationTest {
         reply(order, Topics.INVENTORY_REPLY, StockReserved.TYPE, new StockReserved(order.id()));
 
         awaitCount(order, Pay.TYPE, 1);
-        assertThat(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), order.userId())).state())
+        assertThat(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), order.userId().value())).state())
                 .isEqualTo(SagaState.PAYING);
         assertThat(count(order, ReleaseStock.TYPE)).isZero();
     }
@@ -162,7 +162,7 @@ class SagaTimeoutIntegrationTest {
 
     private void awaitStatus(Order order, OrderStatus expected) {
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
-                assertThat(getOrderUseCase.getOrder(new GetOrderQuery(order.id(), order.userId())).status())
+                assertThat(getOrderUseCase.getOrder(new GetOrderQuery(order.id(), order.userId().value())).status())
                         .isEqualTo(expected));
     }
 
