@@ -68,6 +68,20 @@ spec:
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            # trace·로그는 클러스터 안 alloy 로 (templates/observability.yaml). 관측성을 끄면 내보내지 않는다(보내면 실패 로그만 쌓인다)
+            {{- if $root.Values.observability.enabled }}
+            - name: TRACING_SAMPLING_PROBABILITY
+              value: {{ $root.Values.observability.tracingSampling | quote }}
+            - name: OTLP_TRACING_ENDPOINT
+              value: http://alloy:4318/v1/traces
+            - name: OTLP_LOGGING_ENDPOINT
+              value: http://alloy:4318/v1/logs
+            {{- else }}
+            - name: TRACING_SAMPLING_PROBABILITY
+              value: "0"
+            - name: OTLP_LOGGING_EXPORT_ENABLED
+              value: "false"
+            {{- end }}
             {{- if $svc.outbox }}
             # Debezium 이 outbox 를 읽으면 스케줄러 relay 를 끈다 (outbox 는 넣고 바로 지운다, ADR 0004)
             - name: OUTBOX_RELAY_ENABLED

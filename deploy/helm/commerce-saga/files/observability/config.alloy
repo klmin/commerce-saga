@@ -1,0 +1,37 @@
+// OTLP 수집기 (ADR 0013). 서비스는 trace·로그를 여기 하나로 보낸다 → trace 는 Tempo, 로그는 Loki
+// 서비스는 수집기 주소(OTLP_TRACING_ENDPOINT·OTLP_LOGGING_ENDPOINT)만 알고, 저장소를 바꿔도 서비스 설정은 그대로다
+// 메트릭은 여기를 거치지 않는다. Prometheus 가 /actuator/prometheus 를 긁는다 (pull, 서비스가 죽은 것도 up=0 으로 보인다)
+
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+    logs   = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlphttp.tempo.input]
+    logs   = [otelcol.exporter.otlphttp.loki.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint = "http://tempo:4318"
+  }
+}
+
+// Loki 3 는 OTLP 를 그대로 받는다 (/otlp/v1/logs). service.name → 라벨 service_name, trace_id·span_id → structured metadata
+otelcol.exporter.otlphttp "loki" {
+  client {
+    endpoint = "http://loki:3100/otlp"
+  }
+}

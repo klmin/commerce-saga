@@ -95,7 +95,7 @@ trace 는 "어디서 얼마나"를 보여 주지만 "왜"(거절 사유, 무시�
 - **메트릭은 Alloy 를 거치지 않는다.** Prometheus 가 그대로 긁는다(pull 이라 죽은 서비스가 `up=0` 으로 보이고, 경보 규칙이 이미 Prometheus 에 있다)
 - order-service 는 Saga 전이마다 `Saga 진행: <응답> -> <상태>` 를 남긴다. 주문 한 건의 흐름을 trace 와 같은 trace_id 의 로그로 함께 본다
 - 시나리오 11c 가 결제 실패 주문의 trace id 로 Loki 에서 order·notification 두 서비스의 로그가 찾히는지 CI 에서 확인한다
-- k8s(Helm)에는 아직 수집기·저장소가 없어 `OTLP_LOGGING_EXPORT_ENABLED=false` 로 끈다(trace 샘플링 0 과 같은 이유)
+- k8s(Helm)도 같은 구성을 클러스터 안에 둔다(`templates/observability.yaml`, 설정 파일은 `files/observability` 사본). 끄면(`observability.enabled=false`) 서비스는 trace 샘플링 0·로그 export 끔 (ADR 0014 "관측성")
 
 ## 결과
 
