@@ -21,7 +21,7 @@ libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에�
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 frontend/                  Next.js 화면 (App Router, Tailwind, shadcn/ui). Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다 (ADR 0011)
 build-logic/               공통 빌드 설정 (convention plugin)
-infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect, Redis, Tempo·Prometheus·Grafana)
+infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect, Redis, Alloy·Tempo·Loki·Prometheus·Grafana)
 scripts/                   커넥터 등록, 부하 생성, 장애 주입, 스모크 테스트
 docs/adr/                  설계 결정 기록
 docs/scenarios/            시나리오별 재현 방법·결과

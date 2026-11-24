@@ -42,7 +42,7 @@ HTTP 요청 (traceparent)                      ┌─ inventory-service ──�
 - 서비스: `spring-boot-starter-opentelemetry`(Micrometer Tracing + OTel 브리지 + OTLP exporter). 표준(W3C trace context, OTLP)만 쓰므로 수집 백엔드는 바꿀 수 있다
 - 로컬·CI: Grafana Tempo 2.10 단일 바이너리 + Grafana (`infra/docker-compose.yml`). Tempo를 고른 이유는 다음 PR의 메트릭(Prometheus)과 같은 Grafana에서 trace ↔ 메트릭을 오가기 위해서다. Jaeger도 OTLP를 받으므로 비교 대상이었지만 UI가 따로 생긴다
 - 샘플링: 로컬·CI는 전부(1.0). 운영이라면 `TRACING_SAMPLING_PROBABILITY`로 낮추거나 tail sampling(Collector)으로 오류·느린 trace만 남긴다 → 수집기를 넣은 뒤 tail sampling 으로 했다(아래 "로그와 수집기")
-- OTLP 메트릭 export는 끈다(starter가 가져오는 레지스트리). 메트릭은 Prometheus가 긁어 간다(아래)
+- OTLP 메트릭 export는 끈다(starter가 가져오는 레지스트리). 메트릭은 `/actuator/prometheus` 를 긁어 간다(아래, 지금은 Alloy 가 긁어 Prometheus 로 보낸다)
 - 호스트 포트는 Tempo API 3210, OTLP 4328(아래 로그 절부터는 Alloy 가 받는다). 같은 PC에서 다른 관측성 스택이 표준 포트(3200, 4318)를 쓰고 있어도 겹치지 않게 비켜 뒀다
 
 ### 메트릭·경보: 정합성이 깨지기 전 신호를 본다 (후속 1 O-2)
@@ -78,7 +78,7 @@ trace는 "이 주문이 어떻게 지나갔나"를 답하지만, "지금 어딘�
 | `OutboxBacklog` | 미발행 outbox가 30초 넘음 | 1~2분 | 스케줄러 relay가 Kafka에 못 보냄 |
 | `ReplicationSlotLag` | slot이 WAL 100 MB 넘게 붙잡음 1분 | 디스크 크기에 맞춰 (예: 여유 공간의 10%) | Debezium 커넥터 중단·막힘 (시나리오 5, ADR 0004 위험 2) |
 
-- 수집: Prometheus 3.15(compose, 호스트 포트 9091, 다른 Prometheus와 겹치지 않게). 서비스는 호스트에서 뜨므로 `host.docker.internal`(리눅스 CI는 `host-gateway`)로 긁는다
+- 저장·경보: Prometheus 3.15(compose, 호스트 포트 9091, 다른 Prometheus와 겹치지 않게). 수집은 처음엔 Prometheus 가 직접 했고, 지금은 Alloy 가 긁어 보낸다(아래 "메트릭도 Alloy 로"). 서비스는 호스트에서 뜨므로 `host.docker.internal`(리눅스 CI는 `host-gateway`)로 긁는다
 - lag·DLT는 서비스 메트릭(Kafka 클라이언트 `records-lag`) 대신 kafka-exporter를 쓴다. 서비스가 죽으면 서비스 메트릭도 같이 사라지는데, 그때가 lag를 봐야 할 때라서다. kafka-exporter 1.11은 Kafka Connect 그룹의 할당 정보를 해석하지 못해 오류 로그를 남기지만, 서비스 컨슈머 그룹 lag는 정상으로 나온다
 - 경보 전달(Alertmanager → 메일·메신저)은 두지 않았다. Prometheus·Grafana에서 firing을 확인하는 데까지가 범위다. 운영이면 Alertmanager로 심각도별 라우팅을 둔다
 - Grafana 대시보드 `commerce-saga`(프로비저닝): firing 경보 표, 단계별 진행 중 Saga·가장 오래된 나이, 재전송·포기, 결제 `UNKNOWN`·환불 대기, 그룹별 lag, DLT, outbox·slot 적체
@@ -92,11 +92,45 @@ trace 는 "어디서 얼마나"를 보여 주지만 "왜"(거절 사유, 무시�
 - **수집기: Grafana Alloy 1.21** (OpenTelemetry Collector 배포판). 서비스는 trace·로그를 OTLP 로 Alloy 하나에 보내고, Alloy 가 trace 는 Tempo, 로그는 Loki 로 나눈다(`infra/alloy/config.alloy`). 서비스는 수집기 주소만 알아서 저장소를 바꾸거나 tail sampling·필터를 넣어도 서비스 설정은 그대로다. 호스트 OTLP 포트 4328 은 Tempo 대신 Alloy 로 옮겼고(서비스 설정 기본값 그대로), Alloy UI 는 12346
 - **로그 보내는 법: OTLP (파일·stdout 수집이 아니라).** 로컬·CI 는 서비스가 호스트에서 `java -jar`로 돌아 컨테이너 로그가 아니다. Spring Boot 4.2 는 OTLP 로그 exporter(`management.opentelemetry.logging.export.otlp.endpoint`)까지만 만들고 Logback appender 는 붙이지 않아서, 서비스마다 `OpenTelemetryLoggingConfig` 가 기동 후 root logger 에 OpenTelemetry appender 를 붙인다(`opentelemetry-logback-appender-1.0`). 콘솔 로그는 그대로다. span 안에서 찍은 로그는 `trace_id`·`span_id` 가 함께 가고, Loki 는 이것을 structured metadata 로, `service.name` 을 라벨 `service_name` 으로 둔다
 - **Grafana 링크**: Tempo span → "Related logs" 는 `{service_name="<서비스>"} | trace_id="<trace>"`, Loki 로그의 `trace_id` → Tempo trace (`infra/grafana/provisioning/datasources`)
-- **메트릭은 Alloy 를 거치지 않는다.** Prometheus 가 그대로 긁는다(pull 이라 죽은 서비스가 `up=0` 으로 보이고, 경보 규칙이 이미 Prometheus 에 있다)
+- ~~메트릭은 Alloy 를 거치지 않는다.~~ → 2026-11-25 에 바꿨다(아래 "메트릭도 Alloy 로")
 - order-service 는 Saga 전이마다 `Saga 진행: <응답> -> <상태>` 를 남긴다. 주문 한 건의 흐름을 trace 와 같은 trace_id 의 로그로 함께 본다
 - 시나리오 11c 가 결제 실패 주문의 trace id 로 Loki 에서 order·notification 두 서비스의 로그가 찾히는지 CI 에서 확인한다
 - **샘플링은 Alloy 에서 (tail sampling, 2026-11-24 추가)**. 서비스는 전부 보내고(`TRACING_SAMPLING_PROBABILITY=1.0`), Alloy 가 trace 를 10초 모았다가 고른다. 오류(status ERROR, 그리고 `@ExceptionHandler` 가 처리해 ERROR 가 아닌 5xx 는 `outcome=SERVER_ERROR`)·1초 넘는 trace 는 늘 남기고(4xx 는 서버가 정상으로 거절한 것이라 남기지 않고 건수는 메트릭으로 본다), actuator(헬스 체크·Prometheus 수집) trace 는 늘 버리며, 나머지는 `TRACE_SAMPLING_PERCENT`(기본 100, 차트 `observability.traceSamplingPercent`)만큼 남긴다. 서비스에서 비율을 낮추는 head sampling 은 오류가 날 요청인지 모르고 버리지만, tail sampling 은 끝난 trace 를 보고 정해 오류·지연을 놓치지 않는다. 비율은 trace id 로 정하고, 남긴 trace 의 늦은 span 은 decision cache 로 같은 결정을 따른다. 기다리는 시간은 10초다. 비율이 100% 면 결과가 같기 때문이고, 비율을 낮추면 30초로 올린다(오래 걸린 Saga 의 늦은 오류 span 을 놓치지 않게). 대가는 Alloy 메모리와 Tempo 에 보이기까지의 지연, 그리고 Alloy 를 여러 개 띄우면 trace id 로 나눠 주는 앞단(loadbalancing exporter)이 필요하다는 것. 로그는 샘플링하지 않는다
 - k8s(Helm)도 같은 구성을 클러스터 안에 둔다(`templates/observability.yaml`, 설정 파일은 `files/observability` 사본). 끄면(`observability.enabled=false`) 서비스는 trace 샘플링 0·로그 export 끔 (ADR 0014 "관측성")
+
+### 메트릭도 Alloy 로: 수집기 하나, Prometheus 는 저장·경보 (2026-11-25 변경)
+
+처음엔 "메트릭은 Alloy 를 거치지 않는다(Prometheus 가 직접 긁는다)"로 했다. 그런데 로컬 클러스터에서 tempo(검색 중 메모리 512Mi 초과)와 Kafka Connect(Strimzi 기본 힙 75% + 힙 밖 > 1Gi)가 몇 시간 동안 `OOMKilled` 를 반복했는데 아무 경보도 없었다. 관측성 스택 자신과 컨테이너 메모리는 수집 대상이 아니었기 때문이다. 수집 대상을 늘리면서 수집을 한 곳으로 모은다.
+
+```
+trace  : 서비스 ──OTLP push──▶ Alloy ──▶ Tempo
+로그   : 서비스 ──OTLP push──▶ Alloy ──▶ Loki
+메트릭 : Alloy ──scrape(pull)──▶ 서비스 7개 · kafka-exporter · tempo · loki · prometheus · alloy 자신
+                               · (k8s 만) 노드 kubelet 의 컨테이너 지표(cAdvisor)
+               ──remote_write──▶ Prometheus (--web.enable-remote-write-receiver, 저장·경보 규칙)
+```
+
+- **수집기는 Alloy 하나.** 수집 대상·라벨·필터를 한 파일(`infra/alloy/config.alloy`)에서 본다. 저장소를 바꿔도(예: Mimir) remote_write 주소만 바꾼다. 다른 프로젝트(klmin-drive)와 같은 구성이다
+- 처음 결정의 이유는 그대로 지켜진다: Alloy 의 scrape 도 pull 이라 죽은 서비스는 `up=0` 으로 남고(`ServiceDown`), 경보 규칙은 Prometheus 에 그대로 둔다. job·라벨(`job="services"`, `service`, `job="kafka"`)도 같아서 경보·대시보드·CI 쿼리를 바꾸지 않았다
+- compose 와 k8s 가 같은 `config.alloy` 를 쓴다(CI 가 사본 `diff`). 환경마다 다른 서비스 주소는 `METRICS_SERVICE_TARGETS`(JSON, compose 는 `host.docker.internal:<포트>`, 차트는 `values.services` 로 만든 `<Service>:<포트>`)로 받는다. k8s 에만 있는 수집(cAdvisor)은 차트가 같은 폴더에 `kubernetes.alloy` 를 더 넣고 Alloy 가 폴더째 읽는다(`alloy run /etc/alloy`). cAdvisor 는 API 서버의 노드 프록시로 읽어 ServiceAccount 와 ClusterRole(`nodes`, `nodes/proxy`, `nodes/metrics` 읽기)이 생긴다. 이 namespace 의 컨테이너만, 메모리·limit·CPU·OOM 네 지표만 남긴다
+- Prometheus 는 직접 긁지 않으므로 `/targets` 는 비어 있다. 수집 상태는 `up{job="…"}` 이나 Alloy UI(compose http://localhost:12346)로 본다
+- 새 경보(그룹 `observability`)
+  - `MetricsPipelineDown`: `up{job="alloy"}` 가 1분 동안 없음. **수집기가 하나라 Alloy 가 멈추면 메트릭이 통째로 끊기고 `ServiceDown` 도 울리지 않는다**(판단할 `up` 이 없음). 그래서 "사라짐"을 본다. 관측성 스택 자기 지표는 15초 간격으로 긁는다(기본 60초면 1분 창에서 틈이 생겨 잘못 울릴 수 있다)
+  - `ObservabilityTargetDown`: tempo·loki `up=0` 1분
+  - `ContainerMemoryNearLimit`: 컨테이너 working set 이 limit 의 90% 를 2분 (k8s 만 값이 있다). OOMKilled 직전 신호
+- 확인: 로컬 클러스터의 임시 namespace 에 차트의 관측성 부분만 올려 job 7종(services 7·kafka·tempo·loki·prometheus·alloy·cadvisor)이 들어오고 `service` 라벨이 그대로인 것, Alloy 를 0개로 줄이면 약 40초 뒤 `MetricsPipelineDown` 이 firing 되는 것을 봤다. CI `kind` 잡은 기존처럼 `up{job="services"}`=7·`up{job="kafka"}`=1 을 확인한다
+- Alloy 메모리 limit 256Mi → 512Mi (트래픽 없이 ~170Mi, tail sampling 이 trace 를 10초 들고 있다)
+
+**Alloy 가 단일 장애점(SPOF)이 되는 문제**
+
+수집기를 하나로 모으면 Alloy 가 멈출 때 trace·로그·메트릭이 같이 끊긴다. 지금은 Alloy 를 **한 개**로 두고 위 `MetricsPipelineDown` 으로 "끊겼다는 것"을 알리는 데까지 한다. 서비스·Saga 처리는 Alloy 와 무관하게 계속되고, k8s 는 죽은 Pod 를 다시 띄운다(그 사이 메트릭은 빈다).
+
+replicas 만 늘리면 해결되지 않는다.
+- 메트릭: 각 Alloy 가 같은 대상을 전부 긁어 같은 시계열이 겹쳐 들어간다. Alloy **clustering**(`--cluster.enabled`, 헤드리스 Service 로 서로 찾기, `prometheus.scrape` 의 `clustering { enabled = true }`)을 켜야 대상을 나눠 긁고, 하나가 죽으면 남은 쪽이 넘겨받는다
+- trace: tail sampling 은 한 trace 의 span 이 **같은 Alloy** 에 모여야 판단할 수 있다. 여러 개면 앞단에 trace id 로 나눠 주는 계층(`otelcol.exporter.loadbalancing`)이 필요하다
+- 로그: 상태가 없어 Service 뒤에 여러 개를 둬도 된다
+
+운영(EKS)에서 수집 공백이 문제가 되면 위 순서로 HA 를 붙인다(clustering 으로 scrape 분산 → 2단 trace 수집). 노드마다 하나씩 도는 DaemonSet(파일 로그·kubelet 수집)과 중앙 Deployment(OTLP 수신·tail sampling)로 나누는 구성이 흔하다
 
 ## 결과
 

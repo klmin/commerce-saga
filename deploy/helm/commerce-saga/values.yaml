@@ -141,9 +141,11 @@ observability:
   environment: local
   alloy:
     image: grafana/alloy:v1.21.3
+    # trace·로그에 더해 메트릭 수집(서비스·관측성 스택·노드 컨테이너 지표)까지 한다. 트래픽 없이 ~170Mi,
+    # tail sampling 이 trace 를 decision_wait 동안 들고 있어 부하 때 더 쓴다 → 256Mi 는 빠듯해 올린다
     resources:
-      requests: { cpu: 50m, memory: 128Mi }
-      limits: { memory: 256Mi }
+      requests: { cpu: 50m, memory: 192Mi }
+      limits: { memory: 512Mi }
   tempo:
     image: grafana/tempo:2.10.10
     # 수집보다 검색(Grafana 에서 trace 찾기)이 메모리를 쓴다. 512Mi 는 1시간 범위 검색 한 번에 OOMKilled 됐고(그때 WAL 의

@@ -152,8 +152,9 @@ services:
       postgres-init:
         condition: service_completed_successfully
 
-  # OTLP 수집기 (ADR 0013). 서비스가 trace·로그를 여기로 보낸다 (OTLP_TRACING_ENDPOINT·OTLP_LOGGING_ENDPOINT,
-  # 기본 http://localhost:4328/v1/traces·/v1/logs) → trace 는 tempo, 로그는 loki
+  # 수집기 (ADR 0013). 서비스가 trace·로그를 여기로 보내고 (OTLP_TRACING_ENDPOINT·OTLP_LOGGING_ENDPOINT,
+  # 기본 http://localhost:4328/v1/traces·/v1/logs) → trace 는 tempo, 로그는 loki.
+  # 메트릭도 여기서 긁는다: 호스트에서 뜬 서비스 /actuator/prometheus, kafka-exporter, 관측성 스택 → prometheus 로 remote_write
   # 호스트 포트는 다른 관측성 스택과 겹치지 않게 표준(4318·12345)에서 비켜 둔다
   alloy:
     image: grafana/alloy:v1.21.3
@@ -163,12 +164,24 @@ services:
     environment:
       # tail sampling: 오류·느린 trace 를 뺀 나머지 중 남길 비율(%). actuator trace 는 늘 버린다
       TRACE_SAMPLING_PERCENT: ${TRACE_SAMPLING_PERCENT:-100}
+      # 메트릭을 긁을 서비스 7개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
+      METRICS_SERVICE_TARGETS: >-
+        [{"__address__":"host.docker.internal:8081","service":"order-service"},
+        {"__address__":"host.docker.internal:8082","service":"inventory-service"},
+        {"__address__":"host.docker.internal:8083","service":"point-service"},
+        {"__address__":"host.docker.internal:8084","service":"payment-service"},
+        {"__address__":"host.docker.internal:8085","service":"notification-service"},
+        {"__address__":"host.docker.internal:8086","service":"auth-service"},
+        {"__address__":"host.docker.internal:8000","service":"gateway"}]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${OTLP_HTTP_PORT:-4328}:4318"
       - "${ALLOY_PORT:-12346}:12345"
     depends_on:
       - tempo
       - loki
+      - prometheus
     # 이미지에 wget·curl 이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:12346/-/ready
 
   # 분산 트레이싱 저장소 (ADR 0013). alloy 가 OTLP 로 넣는다. 호스트 포트는 조회 API 만 (표준 3200 에서 비킴)
@@ -191,17 +204,16 @@ services:
       - "${LOKI_PORT:-3110}:3100"
     # 이미지에 셸이 없어 healthcheck 를 두지 않는다. 준비 여부는 호스트에서 http://localhost:3110/ready
 
-  # 메트릭·경보 (ADR 0013). 호스트에서 뜬 서비스의 /actuator/prometheus 와 kafka-exporter 를 긁고 경보 규칙(prometheus/rules)을 평가한다
+  # 메트릭 저장·경보 (ADR 0013). 직접 긁지 않고 alloy 가 보내는(remote_write) 메트릭을 받아 경보 규칙(prometheus/rules)을 평가한다
   # 호스트 포트는 다른 Prometheus 와 겹치지 않게 9091
   prometheus:
     image: prom/prometheus:v3.15.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=2d
+      - --web.enable-remote-write-receiver
     volumes:
       - ./prometheus:/etc/prometheus:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "${PROMETHEUS_PORT:-9091}:9090"
     healthcheck:

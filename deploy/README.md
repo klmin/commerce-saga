@@ -47,6 +47,8 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 
 차트가 alloy·tempo·loki·prometheus·kafka-exporter·grafana 를 같이 올린다(`observability.enabled`, 기본 true, ADR 0014 "관측성"). 밖으로는 열지 않으니 `scripts/k8s-port-forward.sh` 로 연결해서 Grafana http://localhost:3030 → Explore(Tempo, span 의 Related logs → Loki) 또는 대시보드 commerce-saga 를 본다. 설정 파일은 `files/observability` 에 있는 `infra/` 의 사본이라, 바꿀 때는 `infra/` 를 고치고 복사한다(CI 가 diff 로 확인)
 
+메트릭은 alloy 가 모두 긁어 Prometheus 로 보낸다(ADR 0013 "메트릭도 Alloy 로"). 서비스·kafka-exporter 에 더해 tempo·loki·prometheus·alloy 자신과, k8s 에서는 이 namespace 컨테이너의 메모리·limit·CPU(노드 kubelet, `kubernetes.alloy`)도 들어온다. 그래서 Prometheus 의 `/targets` 는 비어 있고, 수집 상태는 `up{job="services"}` 같은 쿼리나 `kubectl -n commerce port-forward svc/alloy 12346:12345` 뒤 Alloy UI 로 본다. 컨테이너가 limit 에 가까우면 `ContainerMemoryNearLimit`, alloy 가 멈추면 `MetricsPipelineDown` 경보가 뜬다. alloy 는 한 개라 멈추면 메트릭·trace·로그가 같이 빈다(SPOF, 여러 개로 늘리는 방법은 ADR 0013)
+
 서비스의 trace·로그에는 `service.name`(= `spring.application.name`) 말고도 OTel 표준 resource 속성이 붙는다: `service.namespace`, `service.version`(이미지 태그), `deployment.environment.name`(`observability.environment`, 기본 `local`, EKS 는 `eks`), `service.instance.id`·`k8s.pod.name`·`k8s.node.name`·`k8s.namespace.name`. 파드 값은 Downward API 로 넣은 `OTEL_RESOURCE_ATTRIBUTES` 를 Spring Boot 가 읽는다(`templates/services.yaml`). replica 가 여럿이어도 어느 파드·노드의 trace·로그인지 보인다
 
 ## ArgoCD 로 올리기 (K-3, GitOps)
