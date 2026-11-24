@@ -13,10 +13,14 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-/** @param pointAmount 사용할 포인트 (생략하면 0). 합계보다 크면 400 */
+/**
+ * @param pointAmount 사용할 포인트 (생략하면 0). 합계보다 크면 400
+ * @param fromCart    장바구니에서 주문하면 true: 주문한 상품을 장바구니에서 뺀다 (생략하면 false)
+ */
 record PlaceOrderRequest(
         @NotEmpty @Size(max = Order.MAX_LINES) List<@Valid @NotNull LineRequest> lines,
-        @PositiveOrZero Long pointAmount) {
+        @PositiveOrZero Long pointAmount,
+        Boolean fromCart) {
 
     record LineRequest(
             @NotNull @Positive Long productId,
@@ -28,6 +32,6 @@ record PlaceOrderRequest(
         return new PlaceOrderCommand(userId, lines.stream()
                 .map(l -> new PlaceOrderCommand.Line(l.productId(), l.quantity(), l.unitPrice()))
                 .toList(),
-                pointAmount == null ? 0L : pointAmount, idempotencyKey);
+                pointAmount == null ? 0L : pointAmount, idempotencyKey, Boolean.TRUE.equals(fromCart));
     }
 }

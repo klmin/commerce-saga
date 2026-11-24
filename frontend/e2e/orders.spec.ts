@@ -108,3 +108,20 @@ test("남의 주문은 볼 수 없다 (소유권, 없는 주문과 같은 화면
   await expect(other.getByRole("heading", { name: "페이지를 찾을 수 없습니다" })).toBeVisible();
   await other.close();
 });
+
+test("장바구니에 담아 주문하면 주문한 상품이 장바구니에서 빠진다 (후속 4-1c)", async ({ page }) => {
+  await signUpFresh(page);
+  await page.getByRole("button", { name: "무선 마우스 장바구니 담기" }).click();
+  await expect(page).toHaveURL(/\/cart$/);
+  const items = page.getByRole("list", { name: "장바구니 상품" }).getByRole("listitem");
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toContainText("무선 마우스");
+  await expect(page.getByText("25,000원").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "주문하기" }).click();
+  await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}$/);
+  await expect(page.getByTestId("saga-state")).toHaveText("완료", { timeout: 20_000 });
+
+  await page.goto("/cart");
+  await expect(page.getByText("장바구니가 비어 있습니다.")).toBeVisible();
+});

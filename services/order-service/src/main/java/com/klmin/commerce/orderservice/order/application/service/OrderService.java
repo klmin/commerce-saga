@@ -11,6 +11,7 @@ import com.klmin.commerce.orderservice.order.application.port.in.HandleSagaReply
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderResult;
 import com.klmin.commerce.orderservice.order.application.port.in.SagaReplyCommand;
+import com.klmin.commerce.orderservice.order.application.port.out.CartPort;
 import com.klmin.commerce.orderservice.order.application.port.out.LoadOrderPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderEventPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderIdempotencyPort;
@@ -53,11 +54,12 @@ class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderS
     private final SagaActionExecutor executor;
     private final ProcessedMessagePort processedMessagePort;
     private final OrderIdempotencyPort idempotencyPort;
+    private final CartPort cartPort;
     private final Clock clock;
 
     OrderService(LoadOrderPort loadOrderPort, SaveOrderPort saveOrderPort, OrderSagaPort sagaPort,
                  SagaCommandPort commandPort, OrderEventPort eventPort, ProcessedMessagePort processedMessagePort,
-                 OrderIdempotencyPort idempotencyPort,
+                 OrderIdempotencyPort idempotencyPort, CartPort cartPort,
                  Clock clock) {
         this.loadOrderPort = loadOrderPort;
         this.saveOrderPort = saveOrderPort;
@@ -66,6 +68,7 @@ class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderS
         this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort);
         this.processedMessagePort = processedMessagePort;
         this.idempotencyPort = idempotencyPort;
+        this.cartPort = cartPort;
         this.clock = clock;
     }
 
@@ -103,6 +106,10 @@ class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderS
         saveOrderPort.insert(order);
         sagaPort.insert(OrderSaga.start(order, now));
         commandPort.reserveStock(order);
+        if (command.fromCart()) {
+            // 주문이 롤백되면 장바구니도 그대로 남는다 (같은 트랜잭션)
+            cartPort.deleteAll(order.userId(), order.lines().stream().map(OrderLine::productId).toList());
+        }
         return new PlaceOrderResult(order, true);
     }
 

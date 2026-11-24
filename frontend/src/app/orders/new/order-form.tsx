@@ -21,6 +21,10 @@ type Props = {
   pointBalance?: number;
   /** 상품 목록에서 고르고 온 상품 */
   initialProductId?: number;
+  /** 처음 수량 (장바구니 주문) */
+  initialQuantities?: Record<number, number>;
+  /** 장바구니 주문이면 주문한 상품이 장바구니에서 빠진다 */
+  fromCart?: boolean;
 };
 
 function toNumber(text: string): number {
@@ -38,13 +42,24 @@ export function OrderForm({
   stocks,
   pointBalance,
   initialProductId,
+  initialQuantities,
+  fromCart = false,
 }: Props) {
   const [state, formAction, pending] = useActionState<OrderFormState, FormData>(placeOrderAction, {
     idempotencyKey,
   });
   const id = useId();
   const [quantities, setQuantities] = useState<Record<number, string>>(() =>
-    Object.fromEntries(products.map((p) => [p.id, p.id === initialProductId ? "1" : ""])),
+    Object.fromEntries(
+      products.map((p) => [
+        p.id,
+        initialQuantities?.[p.id] !== undefined
+          ? String(initialQuantities[p.id])
+          : p.id === initialProductId
+            ? "1"
+            : "",
+      ]),
+    ),
   );
   const [point, setPoint] = useState("");
 
@@ -84,6 +99,7 @@ export function OrderForm({
     >
       <input type="hidden" name="idempotencyKey" value={state.idempotencyKey} />
       <input type="hidden" name="productIds" value={shown.map((p) => p.id).join(",")} />
+      {fromCart && <input type="hidden" name="fromCart" value="true" />}
       {shown.map((p) => (
         <span key={p.id} hidden>
           <input type="hidden" name={`name-${p.id}`} value={p.name} />

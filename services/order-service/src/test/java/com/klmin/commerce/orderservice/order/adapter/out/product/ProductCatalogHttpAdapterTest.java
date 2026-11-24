@@ -60,7 +60,8 @@ class ProductCatalogHttpAdapterTest {
         List<CatalogProduct> products = adapter.findByIds(List.of(1L, 2L, 3L));
 
         assertThat(query.get()).isEqualTo("ids=1,2,3");
-        assertThat(products).containsExactly(new CatalogProduct(1, 39_000, true), new CatalogProduct(2, 25_000, false));
+        assertThat(products).containsExactly(new CatalogProduct(1, "키보드", 39_000, true),
+                new CatalogProduct(2, "마우스", 25_000, false));
     }
 
     @Test

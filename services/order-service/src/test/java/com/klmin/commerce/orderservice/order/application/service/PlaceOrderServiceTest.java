@@ -30,15 +30,16 @@ class PlaceOrderServiceTest {
     private final OrderServiceTest.Recording sent = new OrderServiceTest.Recording();
     private final InMemoryIdempotencyKeys keys = new InMemoryIdempotencyKeys();
     private final FakeCatalog catalog = new FakeCatalog();
+    private final InMemoryCart cart = new InMemoryCart();
     private final PlaceOrderService service = new PlaceOrderService(
-            new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(), keys,
+            new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(), keys, cart,
                     Clock.fixed(Instant.parse("2026-11-25T00:00:00Z"), ZoneOffset.UTC)),
             catalog);
 
     @BeforeEach
     void prices() {
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, 1_000L, true));
-        catalog.products.put(11L, new ProductCatalogPort.CatalogProduct(11L, 500L, true));
+        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 1_000L, true));
+        catalog.products.put(11L, new ProductCatalogPort.CatalogProduct(11L, "b", 500L, true));
     }
 
     private static PlaceOrderCommand command(String key, long price10) {
@@ -57,8 +58,42 @@ class PlaceOrderServiceTest {
     }
 
     @Test
+    void fromCart_removesOrderedLinesOnly() {
+        java.time.Instant t = Instant.parse("2026-11-25T00:00:00Z");
+        var user = com.klmin.commerce.orderservice.order.domain.UserId.of(1L);
+        for (long id : new long[] {10L, 11L, 12L}) {
+            cart.upsert(user, new com.klmin.commerce.orderservice.order.domain.CartItem(
+                    com.klmin.commerce.orderservice.order.domain.ProductId.of(id),
+                    com.klmin.commerce.orderservice.order.domain.Quantity.of(1),
+                    com.klmin.commerce.orderservice.order.domain.Money.of(1), t), t);
+        }
+
+        service.placeOrder(new PlaceOrderCommand(1L, command(null, 1_000L).lines(), 0L, null, true));
+
+        assertThat(cart.findByUserId(user)).extracting(i -> i.productId().value()).containsExactly(12L);
+    }
+
+    @Test
+    void notFromCart_keepsCart_andFailedOrderKeepsCart() {
+        java.time.Instant t = Instant.parse("2026-11-25T00:00:00Z");
+        var user = com.klmin.commerce.orderservice.order.domain.UserId.of(1L);
+        cart.upsert(user, new com.klmin.commerce.orderservice.order.domain.CartItem(
+                com.klmin.commerce.orderservice.order.domain.ProductId.of(10L),
+                com.klmin.commerce.orderservice.order.domain.Quantity.of(1),
+                com.klmin.commerce.orderservice.order.domain.Money.of(1), t), t);
+
+        service.placeOrder(command(null, 1_000L));
+        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 1_200L, true));
+        assertThatThrownBy(() -> service.placeOrder(
+                new PlaceOrderCommand(1L, command(null, 1_000L).lines(), 0L, null, true)))
+                .isInstanceOf(OrderPriceChangedException.class);
+
+        assertThat(cart.findByUserId(user)).hasSize(1);
+    }
+
+    @Test
     void priceChanged_409_withCurrentPrices_andNoOrder() {
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, 1_200L, true));
+        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 1_200L, true));
 
         assertThatThrownBy(() -> service.placeOrder(command("k1", 1_000L)))
                 .isInstanceOfSatisfying(OrderPriceChangedException.class, e -> assertThat(e.currentPrices())
@@ -73,7 +108,7 @@ class PlaceOrderServiceTest {
 
     @Test
     void priceDropped_alsoConflicts() {
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, 900L, true));
+        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 900L, true));
 
         assertThatThrownBy(() -> service.placeOrder(command(null, 1_000L)))
                 .isInstanceOf(OrderPriceChangedException.class);
@@ -85,7 +120,7 @@ class PlaceOrderServiceTest {
         assertThatThrownBy(() -> service.placeOrder(command(null, 1_000L)))
                 .isInstanceOf(ProductNotOrderableException.class).hasMessageContaining("11");
 
-        catalog.products.put(11L, new ProductCatalogPort.CatalogProduct(11L, 500L, false));
+        catalog.products.put(11L, new ProductCatalogPort.CatalogProduct(11L, "b", 500L, false));
         assertThatThrownBy(() -> service.placeOrder(command(null, 1_000L)))
                 .isInstanceOf(ProductNotOrderableException.class);
         assertThat(orders.store).isEmpty();
@@ -113,7 +148,7 @@ class PlaceOrderServiceTest {
     @Test
     void replay_returnsFirstOrder_evenIfPriceChangedOrCatalogDown() {
         PlaceOrderResult first = service.placeOrder(command("k3", 1_000L));
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, 2_000L, true));
+        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 2_000L, true));
         catalog.down = true;
 
         PlaceOrderResult again = service.placeOrder(command("k3", 1_000L));
