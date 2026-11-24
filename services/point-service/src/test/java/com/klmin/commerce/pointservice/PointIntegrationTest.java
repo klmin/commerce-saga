@@ -9,6 +9,9 @@ import com.klmin.commerce.contract.point.PointUsed;
 import com.klmin.commerce.contract.point.RefundPoint;
 import com.klmin.commerce.contract.point.UsePoint;
 import com.klmin.commerce.pointservice.point.application.port.in.GetPointBalanceUseCase;
+import com.klmin.commerce.pointservice.point.application.port.in.ListMyPointHistoryQuery;
+import com.klmin.commerce.pointservice.point.application.port.in.ListMyPointHistoryUseCase;
+import com.klmin.commerce.pointservice.point.application.port.in.PointHistoryEntryResult;
 import com.klmin.commerce.pointservice.point.application.port.in.UsePointCommand;
 import com.klmin.commerce.pointservice.point.application.port.in.UsePointUseCase;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -37,6 +40,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -53,6 +57,9 @@ class PointIntegrationTest {
 
     @Autowired
     UsePointUseCase usePointUseCase;
+
+    @Autowired
+    ListMyPointHistoryUseCase listMyPointHistoryUseCase;
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -172,6 +179,10 @@ class PointIntegrationTest {
         await().atMost(Duration.ofSeconds(30)).ignoreExceptions()
                 .untilAsserted(() -> assertThat(getPointBalanceUseCase.getBalance(userId + 1).balance()).isEqualTo(1_000L));
         assertThat(getPointBalanceUseCase.getBalance(userId).balance()).isEqualTo(600L);
+        // 내역: 가입 축하 지급 한 번 + 주문 사용 (F-2a)
+        assertThat(listMyPointHistoryUseCase.listMyHistory(new ListMyPointHistoryQuery(userId, null, 20)))
+                .extracting(PointHistoryEntryResult::kind, PointHistoryEntryResult::amount)
+                .containsExactly(tuple("ORDER", 400L), tuple("SIGNUP_BONUS", 1_000L));
     }
 
     private void sendAuthEvent(long userId, UUID messageId, UserRegistered event) {
