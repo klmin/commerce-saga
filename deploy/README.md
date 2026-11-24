@@ -31,5 +31,5 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **Postgres 초기화 SQL** 은 `infra/postgres/init` 의 사본(`helm/commerce-saga/files`). Helm 은 차트 밖 파일을 읽지 못한다. CI 가 두 파일이 같은지 검사한다
 - **relay**: K-1 은 스케줄러 relay. 배포 기준인 Debezium(ADR 0004)은 K-2 에서 Strimzi `KafkaConnect`·`KafkaConnector` 로
 - **trace**: 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0`
-- **auth-service 서명 키**: 주지 않으면 띄울 때마다 임시 키다(ADR 0008). 그래서 replicas 1. 여럿이면 키를 Secret 으로 넣는다
+- **auth-service 서명 키**: 주지 않으면 띄울 때마다 임시 키다(ADR 0008). 그래서 replicas 1 에 `Recreate` 전략(재배포 때 키가 다른 옛·새 Pod 가 함께 응답하지 않게). 여럿이면 키를 Secret 으로 넣는다
 - **이미지**: kind 노드에 직접 넣는다(`kind load docker-image`). 레지스트리에 올리면 `image.registry` 만 채운다

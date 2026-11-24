@@ -38,6 +38,10 @@ metadata:
   labels: {{- $labels | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas | default 1 }}
+  {{- with $svc.strategy }}
+  strategy:
+    type: {{ . }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}

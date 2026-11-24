@@ -60,6 +60,8 @@ services:
       AUTH_FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/dev-seed
     # 서명 키를 주지 않으면 띄울 때마다 새 임시 키다(ADR 0008). 인스턴스 여럿이면 키를 Secret 으로 넣어야 한다
     replicas: 1
+    # 옛 Pod 와 새 Pod 가 서로 다른 임시 키로 함께 응답하지 않게, 옛 Pod 를 먼저 내린다 (RollingUpdate 면 방금 받은 토큰이 다른 Pod 의 JWKS 로 401)
+    strategy: Recreate
   order-service:
     port: 8081
     db: order
