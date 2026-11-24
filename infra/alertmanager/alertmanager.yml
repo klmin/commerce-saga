@@ -1,0 +1,32 @@
+# 경보 전달 (ADR 0013 "경보 전달"). Prometheus 가 firing 경보를 보내면 심각도별로 묶어 Discord 웹훅으로 보낸다
+# 웹훅 URL 은 비밀값이라 이 파일에 넣지 않는다. entrypoint.sh 가 기동 때 URL 파일을 확인하고
+#   있으면 이 파일 그대로, 없으면 receiver 를 "null"(아무 데도 안 보냄)로 바꿔 띄운다 → URL 없이도 기동한다
+#   compose: 환경 변수 DISCORD_WEBHOOK_URL (셸에서 export 하거나 infra/.env 에. .env 는 gitignore)
+#   k8s:     Secret alertmanager-discord 의 webhook-url (차트 values observability.alertmanager.discordWebhookSecret)
+# compose 와 k8s 가 같은 파일을 쓴다(차트 files/observability 사본, CI 가 diff)
+route:
+  receiver: discord
+  # 같은 경보 이름·심각도끼리 메시지 하나로 묶는다(topic·service 별 경보가 한꺼번에 울려도 한 번)
+  group_by: [alertname, severity]
+  # warning: 잠깐 튀었다 사라지는 것은 보내지 않도록 오래 모았다가 보낸다
+  group_wait: 2m
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    # critical: 데이터 정합성·전체 수집이 걸린 것(서비스 다운, 보상 멈춤, 환불 대기, slot 적체, 수집기 멈춤). 바로 보내고 자주 다시 알린다
+    - matchers: ['severity="critical"']
+      receiver: discord
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 30m
+
+receivers:
+  - name: discord
+    discord_configs:
+      - webhook_url_file: /alertmanager/discord-webhook-url
+        send_resolved: true
+        # 제목: [FIRING:2] SagaStuck (warning). 본문: 경보마다 summary 한 줄
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})'
+        message: '{{ range .Alerts }}{{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} {{ .Annotations.summary }}{{ "\n" }}{{ end }}'
+  # 웹훅 URL 이 없을 때. 경보는 Alertmanager UI·API 에서만 보인다
+  - name: "null"
