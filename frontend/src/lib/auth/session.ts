@@ -77,16 +77,29 @@ export function refreshTokenFrom(headers: Headers): { value: string; maxAge: num
  * 이 값으로 권한을 판단하지 않는다
  */
 export function userIdFromAccessToken(token: string | undefined): number | undefined {
+  const id = Number(claimsOf(token)?.sub);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+/**
+ * access token 의 roles (USER, ADMIN). 메뉴를 보일지 정하는 데만 쓴다: 관리자 API 권한은 Gateway·서비스가
+ * 서명된 토큰으로 검사한다 (위조한 쿠키로 메뉴가 보여도 API 는 403)
+ */
+export function rolesFromAccessToken(token: string | undefined): string[] {
+  const roles = claimsOf(token)?.roles;
+  return Array.isArray(roles) ? roles.filter((r): r is string => typeof r === "string") : [];
+}
+
+function claimsOf(token: string | undefined): Record<string, unknown> | undefined {
   const payload = token?.split(".")[1];
   if (!payload) {
     return undefined;
   }
   try {
-    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
-      sub?: unknown;
-    };
-    const id = Number(json.sub);
-    return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+    const json: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return typeof json === "object" && json !== null
+      ? (json as Record<string, unknown>)
+      : undefined;
   } catch {
     return undefined;
   }
