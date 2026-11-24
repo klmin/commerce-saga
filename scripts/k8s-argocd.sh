@@ -29,12 +29,26 @@ helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-hel
   --set dex.enabled=false --set notifications.enabled=false \
   --set 'configs.params.server\.insecure=true' > /dev/null
 
-echo "== root Application (revision $REVISION, image.tag $TAG)"
+echo "== root Application (revision $REVISION, image.tag $TAG, namespace $NAMESPACE)"
 sed -e "s|targetRevision: main|targetRevision: $REVISION|" -e "s|value: main|value: $REVISION|" \
-  -e "s|value: dev|value: $TAG|" deploy/argocd/root.yaml | kubectl apply -f -
+  -e "s|value: dev|value: $TAG|" -e "s|value: commerce|value: $NAMESPACE|" \
+  deploy/argocd/root.yaml | kubectl apply -f -
 
 app_state() { # name -> "<sync> <health>"
   kubectl -n argocd get application "$1" -o jsonpath='{.status.sync.status} {.status.health.status}' 2> /dev/null || true
+}
+
+# 다시 돌릴 때는 apply 직후에도 앞 배포의 Synced·Healthy 가 남아 있다. 이번 값이 자식까지 내려가고 그 커밋으로 sync 됐는지 본다
+this_deploy_applied() {
+  local tag ns rev
+  tag=$(kubectl -n argocd get application commerce-saga -o jsonpath='{.spec.source.helm.valuesObject.image.tag}' 2> /dev/null || true)
+  ns=$(kubectl -n argocd get application commerce-saga -o jsonpath='{.spec.destination.namespace}' 2> /dev/null || true)
+  [ "$tag" = "$TAG" ] && [ "$ns" = "$NAMESPACE" ] || return 1
+  # REVISION 이 커밋 해시면 그 커밋으로 sync 했는지까지 (브랜치 이름이면 해시를 몰라 건너뛴다)
+  if [[ "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
+    rev=$(kubectl -n argocd get application commerce-saga -o jsonpath='{.status.sync.revision}' 2> /dev/null || true)
+    [[ "$rev" == "$REVISION"* ]] || return 1
+  fi
 }
 
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
@@ -46,6 +60,7 @@ while :; do
     line="$line $app=[${s:-없음}]"
     [ "$s" = "Synced Healthy" ] || all_ok=false
   done
+  this_deploy_applied || { all_ok=false; line="$line (이번 revision·태그 반영 전)"; }
   $all_ok && break
   if [ "$(date +%s)" -gt "$deadline" ]; then
     echo "FAIL: ${TIMEOUT_SECONDS}초 안에 Synced·Healthy 가 아님:$line" >&2
@@ -62,5 +77,11 @@ echo "  모두 Synced·Healthy:$line"
 if kubectl -n "$NAMESPACE" get kafkaconnect > /dev/null 2>&1; then
   kubectl -n "$NAMESPACE" wait kafkaconnector --all --for=condition=Ready --timeout=5m
 fi
+# 이번 태그의 Pod 로 다 바뀌었는지 (Healthy 는 옛 Pod 로도 날 수 있다)
+for d in auth-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+  image=$(kubectl -n "$NAMESPACE" get deployment "$d" -o jsonpath='{.spec.template.spec.containers[0].image}')
+  [[ "$image" == *":$TAG" ]] || { echo "FAIL: $d 이미지가 $image (기대 태그 $TAG)" >&2; exit 1; }
+  kubectl -n "$NAMESPACE" rollout status deployment/"$d" --timeout=5m > /dev/null
+done
 kubectl -n "$NAMESPACE" get pods
 echo "OK: ArgoCD 로 배포 완료"
