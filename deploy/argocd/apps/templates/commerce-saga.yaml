@@ -14,7 +14,7 @@ spec:
     path: deploy/helm/commerce-saga
     helm:
       releaseName: commerce
-      valuesObject: {{- toYaml .Values.commerceValues | nindent 8 }}
+      valuesObject: {{- toYaml (merge (dict "image" (dict "tag" .Values.imageTag)) .Values.commerceValues) | nindent 8 }}
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.namespace }}

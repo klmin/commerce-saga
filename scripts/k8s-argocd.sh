@@ -19,8 +19,9 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-1200}
 
 cd "$(dirname "$0")/.."
 
-# ArgoCD 는 Git 의 차트 값(image.tag=dev)으로 배포하므로 같은 태그로 넣는다
-TAG=dev IMAGES_ONLY=true bash scripts/k8s-deploy.sh
+# 빌드마다 새 태그로 넣고 같은 값을 root → 자식 Application 의 image.tag 로 넘긴다 (같은 태그면 다시 돌려도 Pod 가 옛 이미지로 남는다)
+TAG=${TAG:-dev-$(date +%Y%m%d%H%M%S)}
+TAG=$TAG IMAGES_ONLY=true bash scripts/k8s-deploy.sh
 
 echo "== ArgoCD (chart $ARGOCD_CHART_VERSION)"
 helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm \
@@ -28,9 +29,9 @@ helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-hel
   --set dex.enabled=false --set notifications.enabled=false \
   --set 'configs.params.server\.insecure=true' > /dev/null
 
-echo "== root Application (revision $REVISION)"
+echo "== root Application (revision $REVISION, image.tag $TAG)"
 sed -e "s|targetRevision: main|targetRevision: $REVISION|" -e "s|value: main|value: $REVISION|" \
-  deploy/argocd/root.yaml | kubectl apply -f -
+  -e "s|value: dev|value: $TAG|" deploy/argocd/root.yaml | kubectl apply -f -
 
 app_state() { # name -> "<sync> <health>"
   kubectl -n argocd get application "$1" -o jsonpath='{.status.sync.status} {.status.health.status}' 2> /dev/null || true

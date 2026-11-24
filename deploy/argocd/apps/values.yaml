@@ -1,6 +1,8 @@
 # 자식 Application 이 볼 저장소·커밋. root.yaml 의 helm parameter 로 덮는다
 repoURL: https://github.com/klmin/commerce-saga.git
 revision: main
+# commerce-saga 이미지 태그. 같은 태그로 다시 넣으면 Pod 템플릿이 그대로라 새 이미지로 안 바뀐다 → root 가 빌드마다 새 값을 준다
+imageTag: dev
 
 # commerce-saga 가 들어갈 namespace (Strimzi 오퍼레이터도 같은 namespace 의 CR 만 본다)
 namespace: commerce

@@ -441,7 +441,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 **K-3 (이번 PR) 에서 한 것 (결정·확인 사항)**
 - ArgoCD app-of-apps: `deploy/argocd/root.yaml` 하나만 apply. 자식(Strimzi·Envoy Gateway = OCI Helm, commerce-saga = 이 저장소 차트)은 `deploy/argocd/apps` 작은 Helm 차트라 `revision` 값 하나로 같은 커밋을 본다. 플랫폼 sync-wave -2, CRD 가 없을 때는 `SkipDryRunOnMissingResource` + 재시도. OCI 저장소는 repository Secret(`enableOCI`)
 - edge: Gateway API(`Gateway`·`HTTPRoute`) + Envoy Gateway(v1.10.0). ingress-nginx 은퇴(2026)로 Ingress 대신 표준의 다음 API. **화면(Next)만 공개**(ADR 0011 BFF), Spring Gateway·서비스·DB·Kafka·Redis 는 내부망. Envoy Service 타입은 값(kind = ClusterIP, LoadBalancer 면 주소가 없어 Programmed 안 됨)
-- `scripts/k8s-argocd.sh`: 이미지 → kind(`TAG=dev`, 차트 기본값과 같게), ArgoCD(chart 10.18.0) 설치, root apply(PR 커밋으로 바꿔 넣음), 네 Application Synced·Healthy + 커넥터 Ready 대기
+- `scripts/k8s-argocd.sh`: 이미지 → kind(빌드마다 새 태그, root → 자식 Application 의 `image.tag` 로 전달. Codex P1: `dev` 고정이면 다시 돌려도 옛 이미지로 Synced·Healthy), ArgoCD(chart 10.18.0) 설치, root apply(PR 커밋으로 바꿔 넣음), 네 Application Synced·Healthy + 커넥터 Ready 대기
 - CI `k8s` 의 `argocd` 잡: 위 스크립트 → edge 로 `/login` 200 → port-forward → 시나리오 0·1. 첫 실행에 통과
 - 후속 3 완료. 태그(예: `v0.5-k8s`)는 사용자에게 묻는다
 
