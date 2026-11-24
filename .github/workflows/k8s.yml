@@ -118,7 +118,10 @@ jobs:
           version: v4.3.2
 
       - name: app-of-apps 차트 lint
-        run: helm lint deploy/argocd/apps
+        run: |
+          helm lint deploy/argocd/apps
+          # EKS 값(K-4)도 렌더링되는지
+          helm lint deploy/argocd/apps -f deploy/argocd/apps/values-eks.yaml
 
       - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:

@@ -9,6 +9,9 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
+# Postgres·Kafka PVC 의 StorageClass. 비우면 클러스터 기본 (kind 는 standard, EKS 는 EBS CSI 의 gp3 등)
+storageClass: ""
+
 # 서비스 공통 환경변수
 common:
   env:
@@ -114,6 +117,8 @@ edge:
   hostname: ""
   # Envoy 의 Service 타입. 클라우드는 LoadBalancer
   serviceType: ClusterIP
+  # Envoy Service 의 annotation (클라우드 LB 설정. 예: AWS 는 service.beta.kubernetes.io/aws-load-balancer-scheme)
+  serviceAnnotations: {}
   gatewayClass:
     create: true
     name: commerce-edge
