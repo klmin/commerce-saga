@@ -1,7 +1,8 @@
 name: k8s
 
-# 후속 3 K-1: kind 클러스터에 Helm 차트(deploy/helm/commerce-saga)로 전체를 올리고 Saga 스모크를 돈다.
-# 클러스터를 상시 띄우지 않고 PR 마다 여기서 검증한다 (브리프 5절). Kafka 는 Strimzi, Postgres·Redis 는 차트 안 StatefulSet·Deployment
+# 후속 3: kind 클러스터에 Helm 차트(deploy/helm/commerce-saga)로 전체를 올리고 Saga 스모크를 돈다.
+# 클러스터를 상시 띄우지 않고 PR 마다 여기서 검증한다 (브리프 5절). Kafka 는 Strimzi, Postgres·Redis 는 차트 안 StatefulSet·Deployment.
+# relay 는 배포 기준인 Debezium(ADR 0004): Strimzi KafkaConnect + 서비스별 KafkaConnector (K-2)
 on:
   push:
     branches: [main]
@@ -65,6 +66,21 @@ jobs:
       - name: 주문 Idempotency-Key (시나리오 10)
         run: bash scripts/smoke-idempotency.sh
 
+      # 스케줄러가 아니라 Debezium 이 발행했다는 증거 (e2e 워크플로의 debezium 모드 확인과 같음):
+      # 커넥터 5개 Ready, outbox 는 넣고 바로 지워져 비어 있고, 서비스 DB 마다 replication slot 이 살아 있다
+      - name: Debezium relay 확인 (커넥터 Ready, outbox 비어 있음, slot)
+        run: |
+          kubectl -n commerce get kafkaconnector
+          kubectl -n commerce wait kafkaconnector --all --for=condition=Ready --timeout=1m
+          for s in order inventory point payment auth; do
+            n=$(kubectl -n commerce exec statefulset/postgres -- psql -U postgres -d ${s}_db -tAc "select count(*) from outbox")
+            echo "${s}_db outbox rows=$n"
+            [ "$n" = "0" ] || { echo "${s}_db outbox 에 행이 남음"; exit 1; }
+          done
+          kubectl -n commerce exec statefulset/postgres -- psql -U postgres -tAc "select slot_name, database, active from pg_replication_slots"
+          active=$(kubectl -n commerce exec statefulset/postgres -- psql -U postgres -tAc "select count(*) from pg_replication_slots where active")
+          [ "$active" = "5" ] || { echo "활성 slot 이 $active 개 (기대 5)"; exit 1; }
+
       - name: 화면이 Gateway 를 거쳐 뜨는지
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3500/login)
@@ -73,7 +89,9 @@ jobs:
       - name: 상태·로그
         if: always()
         run: |
-          kubectl -n commerce get pods,kafka,kafkatopic -o wide || true
+          kubectl -n commerce get pods,kafka,kafkatopic,kafkaconnect,kafkaconnector -o wide || true
+          # Strimzi 는 Deployment 대신 StrimziPodSet 으로 Pod 를 띄운다
+          kubectl -n commerce logs -l strimzi.io/kind=KafkaConnect --tail=80 || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
           for d in auth-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
             echo "===== $d"

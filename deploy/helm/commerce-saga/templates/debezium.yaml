@@ -1,0 +1,105 @@
+{{- if .Values.debezium.enabled }}
+# Debezium outbox relay (ADR 0004 의 배포 기준). Strimzi KafkaConnect 하나에 서비스마다 KafkaConnector 하나.
+# 커넥터 설정은 compose 의 infra/connect/<서비스>-outbox.json 과 같다. 서비스는 OUTBOX_RELAY_ENABLED=false 로 뜬다
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnect
+metadata:
+  name: {{ .Release.Name }}
+  annotations:
+    # 커넥터를 REST 가 아니라 KafkaConnector CR 로 관리한다
+    strimzi.io/use-connector-resources: "true"
+spec:
+  version: {{ .Values.kafka.version }}
+  image: {{ include "commerce.image" (dict "name" "connect" "root" .) }}
+  replicas: 1
+  bootstrapServers: {{ include "commerce.kafkaBootstrap" . }}
+  # Strimzi v1 은 워커 그룹·내부 토픽을 config 가 아니라 spec 필드로 받는다
+  groupId: commerce-connect
+  configStorageTopic: _connect-configs
+  offsetStorageTopic: _connect-offsets
+  statusStorageTopic: _connect-status
+  config:
+    config.storage.replication.factor: {{ .Values.kafka.replicas }}
+    offset.storage.replication.factor: {{ .Values.kafka.replicas }}
+    status.storage.replication.factor: {{ .Values.kafka.replicas }}
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter.schemas.enable: false
+    header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+    # 커넥터 설정의 ${env:<DB>_DB_PASSWORD} 를 아래 env(각 서비스 DB Secret)에서 읽는다
+    config.providers: env
+    config.providers.env.class: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+    producer.acks: all
+    producer.enable.idempotence: true
+    offset.flush.interval.ms: 1000
+  resources: {{- toYaml .Values.debezium.resources | nindent 4 }}
+  template:
+    connectContainer:
+      env:
+        {{- range $name, $svc := .Values.services }}
+        {{- if $svc.outbox }}
+        - name: {{ upper $svc.db }}_DB_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: {{ $name }}-db, key: password }
+        {{- end }}
+        {{- end }}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.outbox }}
+{{- $connector := printf "%s-outbox" $svc.db }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnector
+metadata:
+  name: {{ $connector }}
+  labels:
+    strimzi.io/cluster: {{ $.Release.Name }}
+spec:
+  class: io.debezium.connector.postgresql.PostgresConnector
+  tasksMax: 1
+  config:
+    plugin.name: pgoutput
+    database.hostname: postgres
+    database.port: 5432
+    database.user: {{ $svc.db }}_svc
+    database.password: "${env:{{ upper $svc.db }}_DB_PASSWORD}"
+    database.dbname: {{ $svc.db }}_db
+    topic.prefix: {{ $connector }}
+    table.include.list: public.outbox
+    slot.name: {{ $svc.db }}_outbox_slot
+    publication.name: {{ $svc.db }}_outbox_pub
+    publication.autocreate.mode: filtered
+    snapshot.mode: initial
+    poll.interval.ms: 100
+    # 트래픽이 없는 DB 의 slot 위치를 앞으로 옮긴다 (시나리오 5)
+    heartbeat.interval.ms: 10000
+    heartbeat.action.query: "select pg_logical_emit_message(false, 'heartbeat', now()::varchar)"
+    message.prefix.exclude.list: heartbeat
+    tombstones.on.delete: false
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter.schemas.enable: false
+    header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+    transforms: outbox
+    transforms.outbox.type: io.debezium.transforms.outbox.EventRouter
+    transforms.outbox.route.by.field: aggregatetype
+    transforms.outbox.route.topic.replacement: "${routedByValue}"
+    transforms.outbox.table.field.event.id: id
+    transforms.outbox.table.field.event.key: aggregateid
+    transforms.outbox.table.field.event.payload: payload
+    transforms.outbox.table.expand.json.payload: true
+    transforms.outbox.table.fields.additional.placement: "type:header:type,traceparent:header:traceparent"
+---
+# heartbeat 토픽 (자동 생성을 껐으므로 만든다)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: debezium-heartbeat.{{ $connector }}
+  labels:
+    strimzi.io/cluster: {{ $.Release.Name }}
+spec:
+  topicName: __debezium-heartbeat.{{ $connector }}
+  partitions: 1
+  replicas: {{ $.Values.kafka.replicas }}
+{{- end }}
+{{- end }}
+{{- end }}

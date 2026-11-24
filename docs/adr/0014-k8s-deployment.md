@@ -52,3 +52,13 @@
 
 - 좋아진 것: 서비스 코드 변경 없이 같은 JAR·같은 커넥터 설정으로 k8s 에 올라간다. PR 마다 kind 에서 Saga·보상·소유권·멱등 주문과 Debezium 발행까지 확인된다
 - 감수한 것: Postgres·Redis 는 단일 인스턴스(운영 수준 아님). Kafka 브로커 버전이 compose(4.4.0)와 다르다(4.3.2). 커넥터 설정이 compose json 과 차트 두 곳에 있다(바꿀 때 같이 바꾼다). 클러스터 안 trace 없음
+
+## K-2 추가 결정: slot 준비 전 outbox 쓰기를 막는다 (ADR 0004 위험 4 해결)
+
+- 문제: Debezium 모드의 `OutboxWriter` 는 행을 넣고 바로 지운다. replication slot·publication 이 생기기 전에 커밋한 메시지는 WAL 에서 읽을 곳도, 테이블에도 없어 **영영 발행되지 않는다**. compose 는 배포 순서(서비스 → 커넥터 → 트래픽)로 피했지만, k8s 에서는 Pod 가 뜨자마자 Kafka 를 소비하고(진행 중인 Saga 의 응답·커맨드), 스케줄 작업(타임아웃 재전송·결제 보정)도 돈다. 스케줄러 relay 로 돌던 배포를 Debezium 으로 바꾸는 업그레이드에서 그대로 생긴다(Codex P0 지적)
+- 결정: `OutboxWriter` 가 Debezium 모드에서 쓰기 전에 **이 DB 에 logical slot 이 있고 outbox 가 publication 에 들어 있는지** 확인한다(`DebeziumRelayReadiness`). 없으면 `OutboxNotReadyException` 으로 트랜잭션을 롤백한다
+  - Kafka 리스너: 처리 기록(`processed_message`)까지 함께 롤백되고, 에러 핸들러가 일시 오류로 보고 재시도한다(DLT 로 보내지 않음). 커넥터가 slot 을 만들면 이어서 처리
+  - 스케줄 작업: 다음 주기에 다시. HTTP 쓰기(주문·가입): 실패 응답, 다시 보내면 된다(주문은 Idempotency-Key)
+  - 준비된 뒤에는 5초 동안 결과를 재사용하고, 준비 전에는 매번 조회한다. slot 을 지우면 5초 안에 다시 막힌다
+- 기본값: Debezium 모드 `OutboxWriter` 는 이 확인을 기본으로 한다(빠뜨려도 안전한 쪽). 스케줄러 모드는 행이 남으므로 확인하지 않는다
+- 감수한 것: slot 이 생길 때까지 그 서비스의 쓰기가 멈춘다(유실 대신 지연). 커넥터가 계속 안 뜨면 `DebeziumSlotCheck` 경고와 Kafka lag 경보(`ConsumerLagHigh`)로 보인다
