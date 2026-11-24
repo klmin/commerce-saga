@@ -15,9 +15,6 @@ storageClass: ""
 # 서비스 공통 환경변수
 common:
   env:
-    # 클러스터에 수집기(Alloy·Tempo·Loki)가 없어 trace·로그를 내보내지 않는다 (보내면 실패 로그만 쌓인다)
-    TRACING_SAMPLING_PROBABILITY: "0"
-    OTLP_LOGGING_EXPORT_ENABLED: "false"
     AUTH_JWT_ISSUER: commerce-saga-auth
 
 postgres:
@@ -124,3 +121,41 @@ edge:
     create: true
     name: commerce-edge
     controllerName: gateway.envoyproxy.io/gatewayclass-controller
+
+# 관측성 (ADR 0013): alloy(OTLP 수집기) → tempo·loki, prometheus(+ kafka-exporter, 경보 규칙), grafana.
+# 설정 파일은 files/observability (infra/ 의 사본, CI 가 같은지 확인). 끄면 서비스도 trace·로그를 내보내지 않는다.
+# 밖으로는 열지 않는다. 보려면 scripts/k8s-port-forward.sh (Grafana http://localhost:3030)
+observability:
+  enabled: true
+  # 서비스 trace 샘플링 (로컬·CI 는 전부)
+  tracingSampling: "1.0"
+  alloy:
+    image: grafana/alloy:v1.21.3
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 256Mi }
+  tempo:
+    image: grafana/tempo:2.10.10
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 512Mi }
+  loki:
+    image: grafana/loki:3.7.9
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 512Mi }
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 512Mi }
+  kafkaExporter:
+    image: danielqsj/kafka-exporter:v1.11.0
+    resources:
+      requests: { cpu: 20m, memory: 32Mi }
+      limits: { memory: 128Mi }
+  grafana:
+    image: grafana/grafana:13.2.6
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }

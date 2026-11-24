@@ -15,7 +15,7 @@
 ```bash
 kind create cluster --name commerce-saga
 scripts/k8s-deploy.sh            # 이미지 빌드 → kind 에 넣기 → Strimzi → 차트, 모두 준비될 때까지 기다림
-scripts/k8s-port-forward.sh      # compose 때와 같은 로컬 포트 (8081~8086, gateway 8000, 화면 3500)
+scripts/k8s-port-forward.sh      # compose 때와 같은 로컬 포트 (8081~8086, gateway 8000, 화면 3500, Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091)
 scripts/smoke-saga.sh            # 기존 스모크를 그대로
 scripts/k8s-port-forward.sh stop
 kind delete cluster --name commerce-saga
@@ -42,6 +42,10 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **heartbeat 토픽**(`__debezium-heartbeat.<커넥터>`)은 브로커 자동 생성을 껐으므로 `KafkaTopic` 으로 만든다
 - `debezium.enabled=false` 면 KafkaConnect 없이 서비스의 스케줄러 relay 로 돈다
 - CI 확인: 커넥터 5개 Ready, 스모크 뒤 outbox 5개가 비어 있음(넣고 바로 지움), 활성 replication slot 5개
+
+## 관측성 (Grafana·Tempo·Loki·Prometheus)
+
+차트가 alloy·tempo·loki·prometheus·kafka-exporter·grafana 를 같이 올린다(`observability.enabled`, 기본 true, ADR 0014 "관측성"). 밖으로는 열지 않으니 `scripts/k8s-port-forward.sh` 로 연결해서 Grafana http://localhost:3030 → Explore(Tempo, span 의 Related logs → Loki) 또는 대시보드 commerce-saga 를 본다. 설정 파일은 `files/observability` 에 있는 `infra/` 의 사본이라, 바꿀 때는 `infra/` 를 고치고 복사한다(CI 가 diff 로 확인)
 
 ## ArgoCD 로 올리기 (K-3, GitOps)
 

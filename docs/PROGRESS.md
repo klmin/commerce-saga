@@ -115,6 +115,7 @@ flowchart LR
 | #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
 | #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
 | #37 | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
+| (이번 PR, k8s) | 후속 1 보강 O-3 k8s: 차트 `templates/observability.yaml`(alloy·tempo·loki·prometheus·kafka-exporter·grafana, 설정은 `files/observability` = infra 사본, CI diff), 서비스 trace·로그 export 켬, port-forward 에 Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091, CI kind 에서 시나리오 11·Prometheus 대상 확인, ADR 0014 관측성 절 |
 | (이번 PR) | 후속 1 보강 O-3 로그·수집기: 서비스 trace·로그 → OTLP → Alloy → Tempo·Loki, Logback OpenTelemetry appender(서비스마다 `OpenTelemetryLoggingConfig`), Grafana span ↔ 로그 링크, order-service Saga 진행 로그, 시나리오 11c, ADR 0013 로그 절. k8s 는 로그 export 끔 |
 | #42 | 후속 3 K-3 (후속 3 마지막): ArgoCD app-of-apps(`deploy/argocd`, root 하나 → Strimzi·Envoy Gateway·commerce-saga, revision 하나로 같은 커밋), edge = Gateway API(`Gateway`·`HTTPRoute`, Envoy Gateway, 화면만 공개), `scripts/k8s-argocd.sh`, CI `k8s` 의 `argocd` 잡(PR 커밋 sync → Synced·Healthy, edge 로 화면, 시나리오 0·1), ADR 0014 K-3 |
 | #41 | 후속 3 K-2: Connect 이미지(`deploy/docker/connect.Dockerfile`, Strimzi Kafka + Debezium Postgres), 차트 `debezium.enabled`(KafkaConnect 하나 + 서비스별 KafkaConnector 5개, heartbeat 토픽, 서비스 스케줄러 relay 끔), CI 에서 커넥터 Ready·outbox 비어 있음·활성 slot 5개 확인 |
@@ -203,7 +204,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - Grafana: Tempo `tracesToLogsV2`(span → `{service_name="…"} | trace_id="…"`), Loki `derivedFields`(로그의 `trace_id` → Tempo). 로컬에서 span "Related logs" → Loki 창 확인
 - order-service 가 Saga 전이마다 `Saga 진행: <응답> -> <상태> (orderId=…)` INFO. 결제 거절은 payment-service 가 로그를 남기지 않아 11c 근거로 씀
 - 시나리오 11c: 결제 실패 trace id 로 Loki 에서 order·notification 로그. 로컬 Debezium 모드 PASS
-- 남은 것: k8s 에는 수집기·저장소가 없다(로그·trace export 끔). 필요해지면 Helm·ArgoCD 에 Alloy·Loki·Tempo·Grafana 를 붙인다
+- k8s: 다음 PR(관측성 k8s)에서 차트에 같은 구성을 붙였다
 
 **O-2 메트릭·경보 (PR #28) 에서 한 것 (결정·확인 사항)**
 - 서비스: `micrometer-registry-prometheus`(service-conventions) + actuator `prometheus` 노출. 서비스 메트릭은 이름 앞에 `commerce_`

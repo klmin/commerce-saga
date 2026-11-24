@@ -1,0 +1,364 @@
+# 관측성 (ADR 0013, 후속 3 이후 추가). compose(infra/)와 같은 구성을 클러스터 안에 둔다:
+#   서비스 ──OTLP(trace·로그)──▶ alloy ──▶ tempo (trace), loki (로그)
+#   prometheus ──pull──▶ 서비스 /actuator/prometheus, kafka-exporter (lag·DLT), 경보 규칙
+#   grafana: Tempo·Loki·Prometheus 데이터 소스(span ↔ 로그 링크)와 대시보드 commerce-saga
+# Service 이름이 compose 의 컨테이너 이름과 같아서 설정 파일(files/observability, infra/ 의 사본)을 그대로 쓴다.
+# 저장은 emptyDir 이다(Pod 가 바뀌면 사라짐). 로컬·CI 확인용이고 운영이면 오브젝트 스토리지·보존 기간을 정한다
+{{- if .Values.observability.enabled }}
+{{- $root := . }}
+{{- $o := .Values.observability }}
+{{- $files := "files/observability" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
+data:
+  config.alloy: |-
+{{ .Files.Get (printf "%s/config.alloy" $files) | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 8 }}
+      annotations:
+        checksum/config: {{ .Files.Get (printf "%s/config.alloy" $files) | sha256sum }}
+    spec:
+      containers:
+        - name: alloy
+          image: {{ $o.alloy.image }}
+          args: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+          ports:
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: http, containerPort: 12345 }
+          readinessProbe:
+            httpGet: { path: /-/ready, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: config, mountPath: /etc/alloy }
+            - { name: data, mountPath: /var/lib/alloy/data }
+          resources: {{- toYaml $o.alloy.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: { name: alloy-config }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+  labels: {{- include "commerce.labels" (dict "name" "alloy" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: alloy
+  ports:
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }
+    - { name: http, port: 12345, targetPort: http }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  labels: {{- include "commerce.labels" (dict "name" "tempo" "root" $root) | nindent 4 }}
+data:
+  tempo.yaml: |-
+{{ .Files.Get (printf "%s/tempo.yaml" $files) | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  labels: {{- include "commerce.labels" (dict "name" "tempo" "root" $root) | nindent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tempo
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "tempo" "root" $root) | nindent 8 }}
+      annotations:
+        checksum/config: {{ .Files.Get (printf "%s/tempo.yaml" $files) | sha256sum }}
+    spec:
+      containers:
+        - name: tempo
+          image: {{ $o.tempo.image }}
+          args: ["-config.file=/etc/tempo/tempo.yaml"]
+          ports:
+            - { name: http, containerPort: 3200 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: otlp-grpc, containerPort: 4317 }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: config, mountPath: /etc/tempo }
+            - { name: data, mountPath: /tmp/tempo }
+          resources: {{- toYaml $o.tempo.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: { name: tempo-config }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  labels: {{- include "commerce.labels" (dict "name" "tempo" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: tempo
+  ports:
+    - { name: http, port: 3200, targetPort: http }
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  labels: {{- include "commerce.labels" (dict "name" "loki" "root" $root) | nindent 4 }}
+data:
+  loki.yaml: |-
+{{ .Files.Get (printf "%s/loki.yaml" $files) | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  labels: {{- include "commerce.labels" (dict "name" "loki" "root" $root) | nindent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "loki" "root" $root) | nindent 8 }}
+      annotations:
+        checksum/config: {{ .Files.Get (printf "%s/loki.yaml" $files) | sha256sum }}
+    spec:
+      containers:
+        - name: loki
+          image: {{ $o.loki.image }}
+          args: ["-config.file=/etc/loki/loki.yaml"]
+          ports:
+            - { name: http, containerPort: 3100 }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: config, mountPath: /etc/loki }
+            - { name: data, mountPath: /tmp/loki }
+          resources: {{- toYaml $o.loki.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: { name: loki-config }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  labels: {{- include "commerce.labels" (dict "name" "loki" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: loki
+  ports:
+    - { name: http, port: 3100, targetPort: http }
+---
+# compose 의 prometheus.yml 과 같은 job·라벨(경보 규칙이 job="services" 를 본다). 대상만 클러스터 Service 이름
+{{- $promConfig := include "commerce.prometheusConfig" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels: {{- include "commerce.labels" (dict "name" "prometheus" "root" $root) | nindent 4 }}
+data:
+  prometheus.yml: |-
+{{ $promConfig | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  labels: {{- include "commerce.labels" (dict "name" "prometheus" "root" $root) | nindent 4 }}
+data:
+  commerce.yml: |-
+{{ .Files.Get (printf "%s/commerce.yml" $files) | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels: {{- include "commerce.labels" (dict "name" "prometheus" "root" $root) | nindent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "prometheus" "root" $root) | nindent 8 }}
+      annotations:
+        checksum/config: {{ printf "%s%s" $promConfig (.Files.Get (printf "%s/commerce.yml" $files)) | sha256sum }}
+    spec:
+      containers:
+        - name: prometheus
+          image: {{ $o.prometheus.image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=2d
+          ports:
+            - { name: http, containerPort: 9090 }
+          readinessProbe:
+            httpGet: { path: /-/ready, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus/prometheus.yml, subPath: prometheus.yml }
+            - { name: rules, mountPath: /etc/prometheus/rules }
+            - { name: data, mountPath: /prometheus }
+          resources: {{- toYaml $o.prometheus.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: { name: prometheus-config }
+        - name: rules
+          configMap: { name: prometheus-rules }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels: {{- include "commerce.labels" (dict "name" "prometheus" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: prometheus
+  ports:
+    - { name: http, port: 9090, targetPort: http }
+---
+# 컨슈머 그룹 lag·DLT 적재 (compose 와 같은 exporter). Kafka 가 뜨기 전에는 재시작하다가 붙는다
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-exporter
+  labels: {{- include "commerce.labels" (dict "name" "kafka-exporter" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka-exporter
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "kafka-exporter" "root" $root) | nindent 8 }}
+    spec:
+      containers:
+        - name: kafka-exporter
+          image: {{ $o.kafkaExporter.image }}
+          args: ["--kafka.server={{ include "commerce.kafkaBootstrap" . }}"]
+          ports:
+            - { name: http, containerPort: 9308 }
+          resources: {{- toYaml $o.kafkaExporter.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter
+  labels: {{- include "commerce.labels" (dict "name" "kafka-exporter" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: kafka-exporter
+  ports:
+    - { name: http, port: 9308, targetPort: http }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  labels: {{- include "commerce.labels" (dict "name" "grafana" "root" $root) | nindent 4 }}
+data:
+  datasources.yaml: |-
+{{ .Files.Get (printf "%s/datasources.yaml" $files) | indent 4 }}
+  dashboards.yaml: |-
+{{ .Files.Get (printf "%s/dashboards.yaml" $files) | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  labels: {{- include "commerce.labels" (dict "name" "grafana" "root" $root) | nindent 4 }}
+data:
+  commerce-saga.json: |-
+{{ .Files.Get (printf "%s/commerce-saga.json" $files) | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels: {{- include "commerce.labels" (dict "name" "grafana" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "grafana" "root" $root) | nindent 8 }}
+      annotations:
+        checksum/config: {{ printf "%s%s%s" (.Files.Get (printf "%s/datasources.yaml" $files)) (.Files.Get (printf "%s/dashboards.yaml" $files)) (.Files.Get (printf "%s/commerce-saga.json" $files)) | sha256sum }}
+    spec:
+      containers:
+        - name: grafana
+          image: {{ $o.grafana.image }}
+          env:
+            # 로컬 개발용 익명 관리자 (compose 와 같음). 밖으로는 열지 않는다(edge 는 화면만, port-forward 로 본다)
+            - { name: GF_AUTH_ANONYMOUS_ENABLED, value: "true" }
+            - { name: GF_AUTH_ANONYMOUS_ORG_ROLE, value: Admin }
+            - { name: GF_AUTH_DISABLE_LOGIN_FORM, value: "true" }
+          ports:
+            - { name: http, containerPort: 3000 }
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/grafana }
+            - { name: provisioning, mountPath: /etc/grafana/provisioning/datasources/datasources.yaml, subPath: datasources.yaml }
+            - { name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml, subPath: dashboards.yaml }
+            - { name: dashboards, mountPath: /var/lib/grafana/dashboards }
+          resources: {{- toYaml $o.grafana.resources | nindent 12 }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: provisioning
+          configMap: { name: grafana-provisioning }
+        - name: dashboards
+          configMap: { name: grafana-dashboards }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels: {{- include "commerce.labels" (dict "name" "grafana" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: grafana
+  ports:
+    - { name: http, port: 3000, targetPort: http }
+{{- end }}

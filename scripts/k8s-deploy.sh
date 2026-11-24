@@ -71,5 +71,11 @@ if kubectl -n "$NAMESPACE" get kafkaconnect "$RELEASE" > /dev/null 2>&1; then
   kubectl -n "$NAMESPACE" wait kafkaconnect/"$RELEASE" --for=condition=Ready --timeout=8m
   kubectl -n "$NAMESPACE" wait kafkaconnector --all --for=condition=Ready --timeout=5m
 fi
+# 관측성 (observability.enabled)
+if kubectl -n "$NAMESPACE" get deployment alloy > /dev/null 2>&1; then
+  for d in alloy tempo loki prometheus kafka-exporter grafana; do
+    kubectl -n "$NAMESPACE" rollout status deployment/"$d" --timeout=5m
+  done
+fi
 kubectl -n "$NAMESPACE" get pods
 echo "OK: 배포 완료. scripts/k8s-port-forward.sh 로 로컬 포트에 연결한다"
