@@ -40,6 +40,13 @@ select 'create database auth_db owner auth_svc'
 where not exists (select from pg_database where datname = 'auth_db')\gexec
 revoke all on database auth_db from public;
 
+-- 상품·가격 (후속 4-1, ADR 0016). 메시지를 주고받지 않아 outbox·replication 권한이 없다
+select 'create role product_svc with login password ''product_svc'''
+where not exists (select from pg_roles where rolname = 'product_svc')\gexec
+select 'create database product_db owner product_svc'
+where not exists (select from pg_database where datname = 'product_db')\gexec
+revoke all on database product_db from public;
+
 -- Debezium outbox 커넥터(infra/connect)가 서비스 계정으로 자기 DB 의 WAL 을 읽는다 (logical replication).
 -- 접속 DB 가 자기 DB 로만 허용되므로 다른 서비스 DB 의 변경은 읽을 수 없다. outbox 테이블 소유자라 publication 도 만들 수 있다.
 -- 알림 서비스는 outbox 가 없어 주지 않는다. 이미 있는 볼륨에도 up 할 때마다 다시 적용된다(멱등)

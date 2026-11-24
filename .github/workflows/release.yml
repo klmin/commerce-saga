@@ -25,7 +25,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}/commerce-saga
   TAG: ${{ github.sha }}
-  SERVICES: auth-service order-service inventory-service point-service payment-service notification-service gateway
+  SERVICES: auth-service product-service order-service inventory-service point-service payment-service notification-service gateway
 
 jobs:
   images:
