@@ -42,9 +42,9 @@ revoke all on database auth_db from public;
 
 -- 상품·가격 (후속 4-1, ADR 0016). 메시지를 주고받지 않아 outbox·replication 권한이 없다
 select 'create role product_svc with login password ''product_svc'''
-where not exists (select from pg_roles where rolname = 'product_svc')gexec
+where not exists (select from pg_roles where rolname = 'product_svc')\gexec
 select 'create database product_db owner product_svc'
-where not exists (select from pg_database where datname = 'product_db')gexec
+where not exists (select from pg_database where datname = 'product_db')\gexec
 revoke all on database product_db from public;
 
 -- Debezium outbox 커넥터(infra/connect)가 서비스 계정으로 자기 DB 의 WAL 을 읽는다 (logical replication).
