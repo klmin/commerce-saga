@@ -112,7 +112,7 @@ jobs:
             [ "$s" = 8 ] && [ "$k" = 1 ] && break
             sleep 2
           done
-          echo "services up=$s/7, kafka-exporter up=$k/1"
+          echo "services up=$s/8, kafka-exporter up=$k/1"
           [ "$s" = 8 ] && [ "$k" = 1 ]
           rules=$(curl -sf http://localhost:9091/api/v1/rules | grep -o '"type":"alerting"' | wc -l)
           echo "경보 규칙 $rules 개"
