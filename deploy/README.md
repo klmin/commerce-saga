@@ -96,7 +96,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 9개, `release/eks` 브랜치가 생긴다
 2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 9개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
 3. 클러스터 준비 확인
-   - 노드가 **amd64**(x86). Graviton(arm64)이면 release 워크플로를 멀티 아키텍처로 바꿔야 한다
+   - 노드는 amd64(x86)·arm64(Graviton) 둘 다 된다. 이미지가 멀티 아키텍처라 노드가 자기 CPU 에 맞는 쪽을 받는다
    - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
    - 노드 여유: 요청 합계 CPU 약 1.5 코어, 메모리 약 5Gi (서비스 7개 JVM + Kafka + Connect + Postgres)
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`

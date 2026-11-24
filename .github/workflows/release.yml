@@ -5,6 +5,10 @@ name: release
 # EKS 의 ArgoCD 는 release/eks 를 보고(deploy/argocd/eks/root.yaml), 그 커밋 해시를 이미지 태그로 쓴다.
 # → 이미지가 아직 없는 커밋은 배포되지 않는다. 클러스터 권한은 CI 에 없다(ArgoCD 가 클러스터 안에서 가져간다)
 #
+# 이미지는 linux/amd64 + linux/arm64 (Graviton 노드·Apple Silicon 에서도 같은 이름으로 받는다).
+# 아키텍처마다 그 아키텍처 러너에서 네이티브로 빌드하고(QEMU 에뮬레이션보다 빠르고, npm 네이티브 의존성도 맞다),
+# 마지막에 <이름>:<커밋> 하나로 묶는다(멀티 아키텍처 매니페스트). 노드는 자기 CPU 에 맞는 쪽을 받는다.
+#
 # 롤백: 이미지가 남아 있는 옛 커밋으로 브랜치를 되돌린다
 #   git push origin <옛 커밋>:refs/heads/release/eks --force
 on:
@@ -28,8 +32,17 @@ env:
   SERVICES: auth-service order-service inventory-service point-service payment-service notification-service gateway
 
 jobs:
+  # 아키텍처별 이미지: <이름>:<커밋>-amd64, <이름>:<커밋>-arm64
   images:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -41,30 +54,55 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
-      # 테스트는 PR 의 CI(backend·e2e·k8s)가 이미 돌렸다. 여기서는 bootJar 만
+      # 테스트는 PR 의 CI(backend·e2e·k8s)가 이미 돌렸다. 여기서는 bootJar 만 (jar 는 아키텍처와 무관하지만
+      # 잡을 나눠 아티팩트로 넘기는 것보다 각자 빌드하는 편이 단순하다)
       - name: bootJar
         run: ./gradlew $(for s in $SERVICES; do printf ':services:%s:bootJar ' "$s"; done)
 
       - name: GHCR 로그인
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      # 러너가 linux/amd64 라 이미지도 amd64 다. EKS 노드가 Graviton(arm64)이면 buildx 멀티 아키텍처로 바꿔야 한다
       # source 라벨: GHCR 패키지가 이 저장소에 연결된다
-      - name: 이미지 빌드·push
+      - name: 이미지 빌드·push (${{ matrix.arch }})
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           label="org.opencontainers.image.source=https://github.com/${{ github.repository }}"
           REGISTRY=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
+          [ "$(docker version --format '{{.Server.Arch}}')" = "$ARCH" ] || { echo "러너 아키텍처가 $ARCH 가 아님"; exit 1; }
           for s in $SERVICES; do
             docker build -f deploy/docker/service.Dockerfile --label "$label" \
-              --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "$REGISTRY/$s:$TAG" .
+              --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "$REGISTRY/$s:$TAG-$ARCH" .
           done
-          docker build --label "$label" -t "$REGISTRY/frontend:$TAG" frontend
-          docker build -f deploy/docker/connect.Dockerfile --label "$label" -t "$REGISTRY/connect:$TAG" deploy/docker
+          docker build --label "$label" -t "$REGISTRY/frontend:$TAG-$ARCH" frontend
+          docker build -f deploy/docker/connect.Dockerfile --label "$label" -t "$REGISTRY/connect:$TAG-$ARCH" deploy/docker
           for s in $SERVICES frontend connect; do
-            docker push "$REGISTRY/$s:$TAG"
+            docker push "$REGISTRY/$s:$TAG-$ARCH"
           done
 
-      # 이미지가 다 올라간 뒤에만 배포 브랜치를 옮긴다. GITHUB_TOKEN 의 push 는 다른 워크플로를 띄우지 않는다
+  # 두 아키텍처를 <이름>:<커밋> 하나로 묶고, 다 묶인 뒤에만 배포 브랜치를 옮긴다
+  manifest:
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: GHCR 로그인
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: 멀티 아키텍처 매니페스트
+        run: |
+          set -euo pipefail
+          REGISTRY=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
+          for s in $SERVICES frontend connect; do
+            docker buildx imagetools create -t "$REGISTRY/$s:$TAG" "$REGISTRY/$s:$TAG-amd64" "$REGISTRY/$s:$TAG-arm64"
+            platforms=$(docker buildx imagetools inspect "$REGISTRY/$s:$TAG" | grep -oE 'Platform: +linux/(amd64|arm64)' | awk '{print $2}' | sort -u | tr '\n' ' ')
+            echo "$s: $platforms"
+            [ "$platforms" = "linux/amd64 linux/arm64 " ] || { echo "$s 매니페스트에 두 아키텍처가 없음"; exit 1; }
+          done
+
+      # GITHUB_TOKEN 의 push 는 다른 워크플로를 띄우지 않는다
       - name: release/eks 를 이 커밋으로
         run: git push --force origin "$TAG:refs/heads/release/eks"

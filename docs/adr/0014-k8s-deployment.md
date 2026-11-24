@@ -76,7 +76,7 @@
 - **레지스트리는 GHCR(public)**: `GITHUB_TOKEN` 으로 push, AWS 쪽 설정(ECR·IAM OIDC) 없음, 노드는 인증 없이 pull
 - **개발용 시드 사용자를 넣지 않는다**: 인터넷에 열리므로 EKS 값에서 `AUTH_FLYWAY_LOCATIONS` 를 `classpath:db/migration` 만으로 둔다(저장소에 공개된 admin 비밀번호로 결제 장애 주입이 가능해지는 것을 막음). 가입자 id 를 1000 부터 시작하는 구문은 시드에만 있었으므로 auth-service `V3__user_id_starts_at_1000` 으로 옮겨, 시드 없이도 가입자가 point-service 의 시연용 계정(1~4)을 물려받지 않게 한다
 - **이미지 태그 = 커밋 해시 = ArgoCD 가 sync 하는 revision**: EKS root(`deploy/argocd/eks/root.yaml`)가 `$ARGOCD_APP_REVISION` 을 자식의 `revision`·`imageTag` 로 넘긴다. main 은 ruleset 으로 PR 만 받아 태그를 Git 에 커밋하는 봇이 어렵고, ArgoCD Image Updater 는 root 의 selfHeal 과 부딪친다. 브랜치를 이미지 push 뒤에만 옮기므로 이미지 없는 커밋이 배포되지 않는다
-- 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만
+- 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만(→ 아래 "멀티 아키텍처"에서 arm64 추가)
 
 ## 관측성 추가 결정 (2026-11-24, ADR 0013 로그·수집기 다음)
 
@@ -86,3 +86,11 @@
 - kafka-exporter 는 compose 와 같은 이미지를 Deployment 로 둔다. Strimzi 의 `kafkaExporter` 는 Service 를 만들지 않아 Prometheus 가 정적 대상으로 긁을 수 없다(Pod 디스커버리는 RBAC 가 더 든다)
 - 저장은 emptyDir(Pod 가 바뀌면 사라짐). 밖으로는 열지 않는다(edge 는 화면만). `scripts/k8s-port-forward.sh` 가 Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091 을 compose 와 같은 포트로 연결한다
 - CI `kind` 잡이 시나리오 11(11a·11b·11c: trace 하나에 다섯 서비스, 주문 id 검색, 같은 trace_id 로그가 Loki 에)과 Prometheus 대상(서비스 7 + kafka-exporter up, 경보 규칙 적재)을 확인한다
+
+## 멀티 아키텍처 이미지 (2026-11-24, K-4 다음)
+
+- 이미지 9개를 linux/amd64 + linux/arm64 로 낸다. EKS 노드가 Graviton(arm64, 같은 성능에 더 싸다)이어도, 개발자가 Apple Silicon 에서 받아도 같은 `<이름>:<커밋>` 을 쓴다
+- **아키텍처별 네이티브 러너**(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 각각 `<커밋>-amd64`·`<커밋>-arm64` 로 빌드·push 하고, `manifest` 잡이 `docker buildx imagetools create` 로 `<커밋>` 하나에 묶는다. 두 아키텍처가 다 들어갔는지 확인한 뒤에만 `release/eks` 를 옮긴다
+- QEMU 에뮬레이션(buildx `--platform` 하나로)은 설정이 짧지만 arm64 쪽 `npm ci`·`next build` 가 몇 배 느리다. 네이티브 러너는 공개 저장소면 무료
+- Dockerfile 은 그대로다. jar 는 아키텍처와 무관하고, 베이스(`eclipse-temurin:25-jre`, `node:26-alpine`, Strimzi Kafka)와 EKS 가 받는 공개 이미지(Postgres·Redis·Strimzi·관측성·Envoy Gateway)가 모두 arm64 를 제공한다(2026-11-24 `imagetools inspect` 로 확인)
+- 감수한 것: 아키텍처별 태그(`-amd64`, `-arm64`)가 GHCR 에 같이 남는다. bootJar 를 러너마다 한 번씩 빌드한다. CI 의 kind 검증은 amd64 러너에서만 돈다(arm64 이미지는 빌드까지만 확인)
