@@ -25,6 +25,15 @@ export async function SiteHeaderSession() {
       <Button variant="ghost" size="sm" asChild>
         <Link href="/orders">내 주문</Link>
       </Button>
+      <Button variant="ghost" size="sm" asChild>
+        <Link href="/points">포인트</Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild>
+        <Link href="/payments">결제</Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild>
+        <Link href="/notifications">알림</Link>
+      </Button>
       <span className="text-sm text-muted-foreground">사용자 #{userId}</span>
       <form action={logoutAction}>
         <Button type="submit" variant="outline" size="sm">

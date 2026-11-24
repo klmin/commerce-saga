@@ -18,7 +18,7 @@ npm run dev -- --port 3001   # 3000 은 Grafana 가 쓴다
 
 개발용 계정은 루트 README 의 시드 사용자(`user1`~`user4`). 새로 가입하면 몇 초 안에 가입 축하 1,000P 가 생긴다(시나리오 13).
 
-주문 화면은 주문 Saga 전체가 필요하다: order(8081)·inventory(8082)·payment(8084)도 띄운다. 결제 실패·지연은 관리자 `admin` 토큰으로 `PUT /api/admin/payment-faults`(루트 README).
+주문 화면은 주문 Saga 전체가 필요하다: order(8081)·inventory(8082)·payment(8084)도 띄운다. 알림 화면은 notification(8085). 결제 실패·지연은 관리자 `admin` 토큰으로 `PUT /api/admin/payment-faults`(루트 README).
 
 ## 화면
 
@@ -28,6 +28,9 @@ npm run dev -- --port 3001   # 3000 은 Grafana 가 쓴다
 | `/orders/new`       | 주문. 폼을 열 때 정한 `Idempotency-Key` 로 보내 여러 번 눌러도 주문 한 건                            |
 | `/orders`           | 내 주문 (최신순, `?before=` 커서)                                                                    |
 | `/orders/[orderId]` | 주문 내용 + Saga 단계(재고·포인트·결제, 실패하면 무엇을 되돌렸는지) + 기록. 진행 중이면 1초마다 갱신 |
+| `/points`           | 잔액 + 포인트 내역(주문 사용·가입 축하 지급, 최신순 커서). 주문 사용은 누르면 주문 상세              |
+| `/payments`         | 결제 내역 (최신순 커서, 상태: 결제 완료·거절·확인 중·결제 전 취소·환불됨)                            |
+| `/notifications`    | 알림 (order.events 를 받은 notification-service, 최신순 커서)                                        |
 | `/login`, `/signup` | 로그인, 회원가입(바로 로그인)                                                                        |
 
 상품 가격은 서버가 정하지 않고 Next 의 고정 목록 값을 보낸다(상품 서비스가 없다, PROGRESS 준비 메모 #5).
@@ -56,6 +59,7 @@ src/proxy.ts              화면 요청 전 세션 확인·refresh (Next 16 의 
 src/lib/auth/             세션 쿠키, auth-service 호출(login·refresh·logout·signup), refresh 묶기, 입력 검증
 src/lib/api/              API 클라이언트(Problem Details → ApiError), authedRequest(Bearer), 화면별 API + zod 스키마
 src/lib/orders/           주문 입력 검증, Saga 단계·문구 (순수 함수)
+src/lib/history/          포인트·결제·알림 목록 문구, ?before= 커서 검사 (순수 함수)
 src/app/                  라우트. Server Action 은 *-actions.ts, 화면 컴포넌트는 라우트 옆에
 src/components/ui/        shadcn/ui
 ```

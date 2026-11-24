@@ -2,6 +2,8 @@ package com.klmin.commerce.pointservice.point.application.service;
 
 import com.klmin.commerce.pointservice.common.error.DomainValidationException;
 import com.klmin.commerce.pointservice.point.application.port.in.OpenPointAccountCommand;
+import com.klmin.commerce.pointservice.point.domain.PointGrant;
+import com.klmin.commerce.pointservice.point.domain.PointGrantType;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -17,8 +19,9 @@ class PointAccountServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-23T00:00:00Z");
 
     private final PointServiceTest.InMemoryAccounts accounts = new PointServiceTest.InMemoryAccounts();
+    private final InMemoryPointGrants grants = new InMemoryPointGrants();
     private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
-    private final PointAccountService service = new PointAccountService(accounts, processed,
+    private final PointAccountService service = new PointAccountService(accounts, grants, processed,
             new PointAccountProperties(1_000L), Clock.fixed(NOW, ZoneOffset.UTC));
 
     private static OpenPointAccountCommand registered(long userId) {
@@ -26,10 +29,17 @@ class PointAccountServiceTest {
     }
 
     @Test
-    void newUser_getsAccountWithSignupBonus() {
+    void newUser_getsAccountWithSignupBonus_andGrantRecord() {
         service.open(UUID.randomUUID(), registered(1000L));
 
         assertThat(accounts.balance(1000L)).isEqualTo(1_000L);
+        assertThat(grants.grants).singleElement().satisfies(g -> {
+            assertThat(g.userId()).isEqualTo(1000L);
+            assertThat(g.amount()).isEqualTo(1_000L);
+            assertThat(g.type()).isEqualTo(PointGrantType.SIGNUP_BONUS);
+            assertThat(g.createdAt()).isEqualTo(NOW);
+            assertThat(g.id().version()).isEqualTo(7);
+        });
     }
 
     @Test
@@ -42,6 +52,7 @@ class PointAccountServiceTest {
 
         assertThat(accounts.balance(1000L)).isEqualTo(300L);
         assertThat(processed.ids).containsExactly(messageId);
+        assertThat(grants.grants).hasSize(1);
     }
 
     @Test
@@ -52,27 +63,36 @@ class PointAccountServiceTest {
         service.open(UUID.randomUUID(), registered(1000L));
 
         assertThat(accounts.balance(1000L)).isEqualTo(300L);
+        assertThat(grants.grants).hasSize(1);
     }
 
     @Test
-    void existingSeedAccount_isLeftAsIs() {
+    void existingSeedAccount_isLeftAsIs_withoutGrantRecord() {
         accounts.put(1L, 10_000L);
 
         service.open(UUID.randomUUID(), registered(1L));
 
         assertThat(accounts.balance(1L)).isEqualTo(10_000L);
+        assertThat(grants.grants).isEmpty();
     }
 
     @Test
     void bonusIsConfigurable_andMustNotBeNegative() {
-        PointAccountService noBonus = new PointAccountService(accounts, processed, new PointAccountProperties(0L),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+        PointAccountService noBonus = new PointAccountService(accounts, grants, processed,
+                new PointAccountProperties(0L), Clock.fixed(NOW, ZoneOffset.UTC));
         noBonus.open(UUID.randomUUID(), registered(2000L));
 
         assertThat(accounts.balance(2000L)).isZero();
+        assertThat(grants.grants).isEmpty(); // 0P 지급은 내역에 남기지 않는다
         assertThat(new PointAccountProperties(null).signupBonus()).isEqualTo(1_000L);
         assertThatThrownBy(() -> new PointAccountProperties(-1L)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.open(UUID.randomUUID(), registered(0L)))
                 .isInstanceOf(DomainValidationException.class);
+    }
+
+    @Test
+    void grantRecord_mustBePositive() {
+        assertThatThrownBy(() -> PointGrant.signupBonus(UUID.randomUUID(), 1L, 0L, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

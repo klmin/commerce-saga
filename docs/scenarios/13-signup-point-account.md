@@ -40,6 +40,7 @@ CI `e2e`가 두 relay 모드에서 시나리오 10 다음에 돈다. 시나리�
 | 13a | 새로 가입한 사용자 `GET /api/points/me` → 몇 초 안에 404에서 200, 잔액 1,000P |
 | 13b | 그 사용자가 300P를 써서 주문 → `COMPLETED`, 잔액 700P |
 | 13c | `point_accounts`에 그 사용자 행 1개, 시드 계정 1~4 그대로 |
+| 13d (F-2a) | `GET /api/points/me/history` → 최신순으로 주문 사용(−300P, `USED`), 가입 축하 지급(+1,000P, `SIGNUP_BONUS`). `point_grants`에 그 사용자 행 1개 |
 
 테스트로도 확인한다: `AuthServiceTest`(가입 성공 때만 이벤트 1번), `AuthIntegrationTest`(가입하면 outbox에 `auth.events`/`UserRegistered` 1행, 중복 가입은 409이고 행 없음), `PointAccountServiceTest`(재전달·중복·시드 계정·잔액 보존), `AuthEventsListenerTest`(타입 분기, DLT 대상), `PointIntegrationTest`(Kafka로 같은 이벤트 재전달·중복 → 계정 1개·1,000P, 포인트를 쓴 뒤 늦게 온 같은 이벤트가 잔액을 되돌리지 않음).
 
@@ -63,7 +64,15 @@ PASS: 시나리오 13 (가입 → 포인트 계정)
 
 Next 화면으로도 확인했다(F-1, 로컬): 회원가입 → 바로 로그인 → "포인트 계정을 만드는 중" → 새로고침하면 1,000P (`frontend/e2e/auth.spec.ts`).
 
+13d는 F-2a에서 더했다. 로컬(Debezium 모드, 서비스 7개 + 커넥터 5개):
+
+```
+== 13d. 포인트 내역 = 주문 사용 + 가입 축하 지급 한 번 (F-2a)
+  ok  내역: 주문 −300P(USED) → 가입 축하 +1000P, 지급 기록 1개
+PASS: 시나리오 13 (가입 → 포인트 계정)
+```
+
 ## 한계
 
-- 가입 축하 포인트 지급은 사용 기록(`point_usages`)에 남지 않는다. 포인트 내역 화면(F-2)에서 보여 주려면 지급 기록을 따로 둔다
+- ~~가입 축하 포인트 지급은 사용 기록(`point_usages`)에 남지 않는다~~ → F-2a에서 계정을 만드는 트랜잭션에 지급 기록(`point_grants`)을 함께 남긴다. F-2a 전에 가입해 이미 계정이 있는 사용자는 지급 기록이 없다(로컬·CI 데이터만 해당)
 - 회원 탈퇴·정지 이벤트는 아직 없다

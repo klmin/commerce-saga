@@ -9,6 +9,7 @@
 #   13a. 새로 가입한 사용자에게 포인트 계정이 생기고 잔액 = 가입 축하 포인트(기본 1,000P)
 #   13b. 그 사용자가 포인트를 써서 주문 → COMPLETED, 잔액이 쓴 만큼 줄어든다 (전에는 계정이 없어 보상으로 끝났다)
 #   13c. 계정은 사용자 하나에 하나 (point_db 의 그 사용자 행 1개), 다른 사용자 계정은 그대로
+#   13d. 포인트 내역(GET /api/points/me/history) = 최신순으로 주문 사용, 가입 축하 지급. 지급 기록(point_grants)은 1개
 set -euo pipefail
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
@@ -90,5 +91,21 @@ ok "point_accounts 사용자 $user_id 행 1개"
 seed=$(psql_point "select count(*) from point_accounts where user_id between 1 and 4")
 [ "$seed" = 4 ] || fail "시드 계정 수가 $seed"
 ok "시드 계정(1~4) 그대로"
+
+echo "== 13d. 포인트 내역 = 주문 사용 + 가입 축하 지급 한 번 (F-2a)"
+res=$(call GET "/api/points/me/history?size=20" "${auth[@]}")
+[ "$(status_of <<< "$res")" = 200 ] || fail "포인트 내역 → $(status_of <<< "$res")"
+history=$(body_of <<< "$res")
+first=$(sed -E 's/\},\{/}\n{/g' <<< "$history" | head -1)
+second=$(sed -E 's/\},\{/}\n{/g' <<< "$history" | sed -n 2p)
+[ "$(grep -o '"entryId"' <<< "$history" | wc -l)" = 2 ] || fail "내역 항목 수가 2 가 아님: $history"
+[ "$(field kind <<< "$first")" = ORDER ] && [ "$(field orderId <<< "$first")" = "$order_id" ] \
+  && [ "$(field amount <<< "$first")" = "$USE_POINT" ] && [ "$(field status <<< "$first")" = USED ] \
+  || fail "최신 항목이 주문 사용이 아님: $first"
+[ "$(field kind <<< "$second")" = SIGNUP_BONUS ] && [ "$(field amount <<< "$second")" = "$SIGNUP_BONUS" ] \
+  || fail "두 번째 항목이 가입 축하 지급이 아님: $second"
+grants=$(psql_point "select count(*) from point_grants where user_id = $user_id")
+[ "$grants" = 1 ] || fail "point_grants 에 사용자 $user_id 행이 $grants 개"
+ok "내역: 주문 −${USE_POINT}P(USED) → 가입 축하 +${SIGNUP_BONUS}P, 지급 기록 1개"
 
 echo "PASS: 시나리오 13 (가입 → 포인트 계정)"
