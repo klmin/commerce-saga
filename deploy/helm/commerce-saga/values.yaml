@@ -75,6 +75,10 @@ services:
     replicas: 1
     # 옛 Pod 와 새 Pod 가 서로 다른 임시 키로 함께 응답하지 않게, 옛 Pod 를 먼저 내린다 (RollingUpdate 면 방금 받은 토큰이 다른 Pod 의 JWKS 로 401)
     strategy: Recreate
+  # 상품·가격 (ADR 0016). 메시지·outbox 없음
+  product-service:
+    port: 8087
+    db: product
   order-service:
     port: 8081
     db: order
@@ -174,4 +178,4 @@ observability:
     image: grafana/grafana:13.2.6
     resources:
       requests: { cpu: 50m, memory: 128Mi }
-      limits: { memory: 384Mi }
+      limits: { memory: 512Mi }

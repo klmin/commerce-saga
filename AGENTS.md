@@ -34,6 +34,8 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | point-service | 포인트 차감 / 환불 |
 | payment-service | 가짜 PG (지연·실패·타임아웃 주입) |
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
+| product-service | 상품·가격의 주인, 가격 변경 이력. 공개 조회 API(order 가 주문 때 동기 조회, ADR 0016). 메시지를 주고받지 않음 |
+| product-service | 상품·가격의 주인, 가격 변경 이력. 공개 조회 API(order 가 주문 때 동기 조회, ADR 0016). 메시지를 주고받지 않음 |
 | auth-service | 회원가입·로그인, access token(JWT RS256) 발급·JWKS, refresh token 회전(Redis). 메시지를 주고받지 않음 (ADR 0008) |
 | gateway | Spring Cloud Gateway(WebFlux). `/auth/**` → auth-service, `/api/<자원>/**` → 서비스, JWT 1차 검증·역할·사용자별 rate limit (ADR 0008) |
 
