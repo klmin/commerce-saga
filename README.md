@@ -129,6 +129,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0011 프론트엔드: Next.js + Tailwind + shadcn/ui, Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다(BFF), refresh 는 proxy.ts](docs/adr/0011-frontend-nextjs-bff-session.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
+- [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
 
 ## 구성
 
@@ -139,6 +140,7 @@ frontend/      Next.js 화면 (로그인·회원가입, 상품·주문·내 주�
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)
+deploy/        k8s 배포 (서비스 이미지, Helm 차트, 후속 3). deploy/README.md
 scripts/       스모크 테스트, 오프셋 되감기, DLT 조회·재처리, 커넥터 등록·중단 시나리오, 서비스 다운·결제 타임아웃 시나리오, relay 측정
 docs/          ADR, 시나리오
 ```
