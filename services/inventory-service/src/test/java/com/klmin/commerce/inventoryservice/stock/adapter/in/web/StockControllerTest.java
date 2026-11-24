@@ -2,6 +2,7 @@ package com.klmin.commerce.inventoryservice.stock.adapter.in.web;
 
 import com.klmin.commerce.inventoryservice.stock.application.StockNotFoundException;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.domain.ProductId;
 import com.klmin.commerce.inventoryservice.stock.domain.Stock;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Import;
@@ -29,7 +30,7 @@ class StockControllerTest {
 
     @Test
     void getStock() throws Exception {
-        given(getStockUseCase.getStock(1L)).willReturn(Stock.restore(1L, 7, 3, Instant.now()));
+        given(getStockUseCase.getStock(1L)).willReturn(Stock.restore(ProductId.of(1L), 7, 3, Instant.now()));
 
         mvc.perform(get("/stocks/1"))
                 .andExpect(status().isOk())

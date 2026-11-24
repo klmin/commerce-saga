@@ -22,7 +22,7 @@ class StockController {
     @GetMapping("/{productId}")
     StockResponse getStock(@PathVariable @Positive long productId) {
         Stock stock = getStockUseCase.getStock(productId);
-        return new StockResponse(stock.productId(), stock.available(), stock.reserved());
+        return new StockResponse(stock.productId().value(), stock.available(), stock.reserved());
     }
 
     record StockResponse(long productId, int available, int reserved) {

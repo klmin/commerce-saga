@@ -5,6 +5,7 @@ import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStoc
 import com.klmin.commerce.inventoryservice.stock.application.port.out.SendStockReplyPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockReservationPort;
+import com.klmin.commerce.inventoryservice.stock.domain.ProductId;
 import com.klmin.commerce.inventoryservice.stock.domain.ReservationStatus;
 import com.klmin.commerce.inventoryservice.stock.domain.Stock;
 import com.klmin.commerce.inventoryservice.stock.domain.StockReservation;
@@ -95,10 +96,11 @@ class StockServiceTest {
         service.reserve(UUID.randomUUID(), command(a));
         service.reserve(UUID.randomUUID(), command(b, line(1L, 0)));
         service.reserve(UUID.randomUUID(), command(c, line(1L, 1), line(1L, 1)));
+        service.reserve(UUID.randomUUID(), command(UUID.randomUUID(), line(0L, 1)));
 
         assertThat(stocks.available(1L)).isEqualTo(10);
         assertThat(stocks.lockCalls).isZero();
-        assertThat(replies.log).hasSize(3).allMatch(s -> s.startsWith("failed:") && s.contains("invalid command"));
+        assertThat(replies.log).hasSize(4).allMatch(s -> s.startsWith("failed:") && s.contains("invalid command"));
     }
 
     @Test
@@ -268,28 +270,28 @@ class StockServiceTest {
 
     static class InMemoryStocks implements StockPort {
 
-        final Map<Long, Stock> store = new TreeMap<>();
+        final Map<ProductId, Stock> store = new TreeMap<>();
         int lockCalls;
 
         void put(long productId, int available) {
-            store.put(productId, Stock.restore(productId, available, 0, NOW));
+            store.put(ProductId.of(productId), Stock.restore(ProductId.of(productId), available, 0, NOW));
         }
 
         int available(long productId) {
-            return store.get(productId).available();
+            return store.get(ProductId.of(productId)).available();
         }
 
         int reserved(long productId) {
-            return store.get(productId).reserved();
+            return store.get(ProductId.of(productId)).reserved();
         }
 
         @Override
-        public Optional<Stock> findById(long productId) {
+        public Optional<Stock> findById(ProductId productId) {
             return Optional.ofNullable(store.get(productId)).map(InMemoryStocks::copy);
         }
 
         @Override
-        public List<Stock> findAllForUpdate(Collection<Long> productIds) {
+        public List<Stock> findAllForUpdate(Collection<ProductId> productIds) {
             lockCalls++;
             return productIds.stream().sorted().filter(store::containsKey).map(id -> copy(store.get(id))).toList();
         }

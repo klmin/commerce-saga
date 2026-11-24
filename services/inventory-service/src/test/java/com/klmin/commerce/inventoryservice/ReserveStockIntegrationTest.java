@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.ConsumerFactory;
@@ -81,6 +82,9 @@ class ReserveStockIntegrationTest {
 
     @Autowired
     JsonMapper json;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     private Consumer<String, String> replyConsumer;
 
@@ -157,6 +161,23 @@ class ReserveStockIntegrationTest {
     }
 
     // 시나리오 3: relay 재전송·오프셋 되감기로 같은 메시지(같은 id 헤더)가 다시 오면 재고도 응답도 바뀌지 않는다
+    // 값 객체 도입 전에는 잘못된 커맨드(수량 0)를 거절하며 그 줄도 저장했다. 그런 기록을 읽어도 보상·중복 커맨드가 막히지 않는다
+    @Test
+    void legacyRejectedReservation_withInvalidLine_isStillReadable() {
+        UUID orderId = UUID.randomUUID();
+        jdbc.update("insert into stock_reservations (order_id, status, reason, created_at, updated_at, version) "
+                + "values (?, 'REJECTED', 'invalid command', now(), now(), 0)", orderId);
+        jdbc.update("insert into stock_reservation_lines (order_id, line_no, product_id, quantity) values (?, 0, 1, 0)",
+                orderId);
+        int before = getStockUseCase.getStock(1L).available();
+
+        releaseStockUseCase.release(UUID.randomUUID(), orderId);
+        reserveStockUseCase.reserve(UUID.randomUUID(),
+                new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(1L, 1))));
+
+        assertThat(getStockUseCase.getStock(1L).available()).isEqualTo(before);
+    }
+
     @Test
     void redeliveredMessage_isSkipped_withoutSecondReply() {
         int before = getStockUseCase.getStock(1L).available();
