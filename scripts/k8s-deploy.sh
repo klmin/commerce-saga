@@ -14,9 +14,17 @@ set -euo pipefail
 KIND_CLUSTER=${KIND_CLUSTER:-commerce-saga}
 NAMESPACE=${NAMESPACE:-commerce}
 RELEASE=${RELEASE:-commerce}
-TAG=${TAG:-dev}
-STRIMZI_VERSION=${STRIMZI_VERSION:-1.3.1}
 SKIP_BUILD=${SKIP_BUILD:-false}
+# 빌드할 때마다 새 태그다. 태그가 같으면 Pod 템플릿이 안 바뀌어 다시 배포해도 옛 이미지로 남는다
+# (빌드 없이 다시 올릴 때는 TAG 로 이미 넣은 태그를 준다)
+if [ -z "${TAG:-}" ]; then
+  if [ "$SKIP_BUILD" = true ]; then
+    echo "SKIP_BUILD=true 면 TAG 로 kind 에 넣어 둔 이미지 태그를 준다" >&2
+    exit 1
+  fi
+  TAG="dev-$(date +%Y%m%d%H%M%S)"
+fi
+STRIMZI_VERSION=${STRIMZI_VERSION:-1.3.1}
 SERVICES="auth-service order-service inventory-service point-service payment-service notification-service gateway"
 
 cd "$(dirname "$0")/.."
