@@ -96,6 +96,7 @@ common/error, common/web, common/config
 - `HexagonalArchitectureTest`(ArchUnit)가 의존 방향을 검사한다: `adapter -> application -> domain`, 컨트롤러·리스너는 `port.in`만, adapter.in과 adapter.out은 서로 참조 금지
 - 애그리거트 = 일관성 경계. 리포지토리는 애그리거트 루트마다 하나. 다른 애그리거트는 ID로만 참조
 - 쓰기(명령)만 애그리거트를 거친다. 조회·목록·통계는 DTO 직접 조회 허용
+- 값 객체(`Money`·`Points`·`Quantity`·`UserId` 등)는 도메인 안에서만 쓰고 서비스마다 따로 둔다(`libs/` 로 공유 금지). DB 컬럼·메시지 계약·port.in Command·조회 DTO 는 원시 타입, 메시지 값은 값 객체로 바꾸기 전에 검사해 실패 응답·DLT. 컨텍스트 관계·용어·쓰지 않는 패턴(도메인 이벤트 객체, 이벤트 소싱, JPA Auditing)은 ADR 0015
 - 영속성은 도메인 모델과 JPA 엔티티를 분리하고 어댑터에서 매핑한다 (ADR 0002). 엔티티를 어댑터 밖으로 내보내지 않는다
 - 도메인 규칙 위반은 `DomainValidationException`(400), 없는 리소스는 `NotFoundException` 상속(404). 오류 응답은 Problem Details
 - 스키마 변경은 Flyway `V{n}__설명.sql`로만. 머지된 마이그레이션은 고치지 않는다
