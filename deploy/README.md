@@ -47,6 +47,8 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 
 차트가 alloy·tempo·loki·prometheus·kafka-exporter·grafana 를 같이 올린다(`observability.enabled`, 기본 true, ADR 0014 "관측성"). 밖으로는 열지 않으니 `scripts/k8s-port-forward.sh` 로 연결해서 Grafana http://localhost:3030 → Explore(Tempo, span 의 Related logs → Loki) 또는 대시보드 commerce-saga 를 본다. 설정 파일은 `files/observability` 에 있는 `infra/` 의 사본이라, 바꿀 때는 `infra/` 를 고치고 복사한다(CI 가 diff 로 확인)
 
+서비스의 trace·로그에는 `service.name`(= `spring.application.name`) 말고도 OTel 표준 resource 속성이 붙는다: `service.namespace`, `service.version`(이미지 태그), `deployment.environment.name`(`observability.environment`, 기본 `local`, EKS 는 `eks`), `service.instance.id`·`k8s.pod.name`·`k8s.node.name`·`k8s.namespace.name`. 파드 값은 Downward API 로 넣은 `OTEL_RESOURCE_ATTRIBUTES` 를 Spring Boot 가 읽는다(`templates/services.yaml`). replica 가 여럿이어도 어느 파드·노드의 trace·로그인지 보인다
+
 ## ArgoCD 로 올리기 (K-3, GitOps)
 
 `deploy/argocd/root.yaml`(app-of-apps) 하나만 apply 하면 ArgoCD 가 Git 에서 나머지를 가져와 맞춘다.

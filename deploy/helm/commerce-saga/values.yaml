@@ -129,6 +129,8 @@ observability:
   enabled: true
   # 서비스 trace 샘플링 (로컬·CI 는 전부)
   tracingSampling: "1.0"
+  # trace·로그의 deployment.environment.name. 같은 Loki·Tempo 에 여러 환경이 섞여도 나눠 볼 수 있게 한다
+  environment: local
   alloy:
     image: grafana/alloy:v1.21.3
     resources:
