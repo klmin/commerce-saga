@@ -5,6 +5,7 @@ import {
   clearedCookies,
   REFRESH_COOKIE,
   refreshTokenFrom,
+  rolesFromAccessToken,
   sessionCookies,
   userIdFromAccessToken,
 } from "./session";
@@ -77,5 +78,24 @@ describe("userIdFromAccessToken", () => {
     expect(userIdFromAccessToken("garbage")).toBeUndefined();
     expect(userIdFromAccessToken(token({ sub: "abc" }))).toBeUndefined();
     expect(userIdFromAccessToken("h.!!!.s")).toBeUndefined();
+    expect(
+      userIdFromAccessToken(`h.${Buffer.from("null").toString("base64url")}.s`),
+    ).toBeUndefined();
+  });
+});
+
+describe("rolesFromAccessToken", () => {
+  const token = (payload: object) =>
+    `h.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.s`;
+
+  it("roles 클레임의 문자열만", () => {
+    expect(rolesFromAccessToken(token({ roles: ["ADMIN", "USER"] }))).toEqual(["ADMIN", "USER"]);
+    expect(rolesFromAccessToken(token({ roles: ["USER", 1, null] }))).toEqual(["USER"]);
+  });
+
+  it("없거나 이상하면 빈 목록", () => {
+    expect(rolesFromAccessToken(undefined)).toEqual([]);
+    expect(rolesFromAccessToken(token({ roles: "ADMIN" }))).toEqual([]);
+    expect(rolesFromAccessToken("garbage")).toEqual([]);
   });
 });
