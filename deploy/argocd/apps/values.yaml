@@ -1,0 +1,16 @@
+# 자식 Application 이 볼 저장소·커밋. root.yaml 의 helm parameter 로 덮는다
+repoURL: https://github.com/klmin/commerce-saga.git
+revision: main
+
+# commerce-saga 가 들어갈 namespace (Strimzi 오퍼레이터도 같은 namespace 의 CR 만 본다)
+namespace: commerce
+
+strimzi:
+  version: 1.3.1
+envoyGateway:
+  version: v1.10.0
+
+# commerce-saga 차트에 넘길 값 (deploy/helm/commerce-saga/values.yaml 위에 덮는다)
+commerceValues:
+  edge:
+    enabled: true

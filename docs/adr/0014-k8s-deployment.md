@@ -1,6 +1,6 @@
-# ADR 0014. k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, 검증은 CI 의 kind
+# ADR 0014. k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, GitOps 는 ArgoCD, edge 는 Gateway API, 검증은 CI 의 kind
 
-- 상태: 채택 (후속 3 K-1. relay 절은 K-2 에서 구현)
+- 상태: 채택 (후속 3 K-1·K-2·K-3)
 - 날짜: 2026-11-24
 
 ## 배경
@@ -52,3 +52,10 @@
 
 - 좋아진 것: 서비스 코드 변경 없이 같은 JAR·같은 커넥터 설정으로 k8s 에 올라간다. PR 마다 kind 에서 Saga·보상·소유권·멱등 주문과 Debezium 발행까지 확인된다
 - 감수한 것: Postgres·Redis 는 단일 인스턴스(운영 수준 아님). Kafka 브로커 버전이 compose(4.4.0)와 다르다(4.3.2). 커넥터 설정이 compose json 과 차트 두 곳에 있다(바꿀 때 같이 바꾼다). 클러스터 안 trace 없음
+
+## K-3 추가 결정 (ArgoCD, edge)
+
+- **ArgoCD app-of-apps**: `deploy/argocd/root.yaml` 하나만 apply 한다. 자식 Application(Strimzi, Envoy Gateway, commerce-saga)은 `deploy/argocd/apps` 의 작은 Helm 차트라 `revision` 값 하나로 모두 같은 커밋을 본다. 플랫폼이 먼저(sync-wave -2), CRD 가 아직 없을 때는 dry-run 을 건너뛰고 재시도한다. CI 는 PR 커밋으로 sync 해 Synced·Healthy 를 확인한다
+- **edge 는 Gateway API(`Gateway`·`HTTPRoute`) + Envoy Gateway**. ingress-nginx 가 2026년에 은퇴해 Ingress 대신 표준의 다음 API 를 쓴다. **화면(Next)만 밖으로 연다**. 브라우저는 Next 만 보고 Next 서버만 Spring Gateway 를 부르므로(ADR 0011) Spring Gateway·서비스·DB·Kafka·Redis 는 내부망에 둔다(AGENTS "외부 공개는 edge 만")
+- Envoy 의 Service 타입은 값으로 둔다. kind 는 LoadBalancer 가 없어 ClusterIP(LoadBalancer 면 주소를 못 받아 Gateway 가 Programmed 가 되지 않는다)
+- 감수한 것: 이미지는 레지스트리 없이 `kind load` 라 ArgoCD 만으로 끝나지 않는다(CI·로컬 스크립트가 먼저 넣는다). ArgoCD 는 공개 GitHub 저장소를 읽는다
