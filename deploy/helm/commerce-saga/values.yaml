@@ -1,0 +1,95 @@
+# commerce-saga 차트 기본값 (후속 3 K-1). 로컬 kind·CI 기준이다. 비밀번호는 모두 로컬 개발용 값.
+#
+# 먼저 Strimzi 오퍼레이터가 있어야 한다(Kafka·KafkaNodePool·KafkaTopic CRD). deploy/README.md 참고.
+
+image:
+  # kind load docker-image 로 넣은 이미지를 쓴다. 레지스트리에 올리면 registry 를 채운다 (예: ghcr.io/klmin)
+  registry: ""
+  repositoryPrefix: commerce-saga
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# 서비스 공통 환경변수
+common:
+  env:
+    # 배포 기준 relay 는 Debezium 이다(ADR 0004). K-1 은 스케줄러 relay, K-2 에서 KafkaConnector 와 함께 false 로 바꾼다
+    OUTBOX_RELAY_ENABLED: "true"
+    # 클러스터에 Tempo 가 없어 trace 를 내보내지 않는다 (보내면 실패 로그만 쌓인다)
+    TRACING_SAMPLING_PROBABILITY: "0"
+    AUTH_JWT_ISSUER: commerce-saga-auth
+
+postgres:
+  image: postgres:18-alpine
+  # 슈퍼유저. 서비스는 각자 계정으로 자기 DB 에만 붙는다(files/01-create-service-databases.sql)
+  superuserPassword: postgres
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+redis:
+  image: redis:8.4-alpine
+  resources:
+    requests: { cpu: 50m, memory: 32Mi }
+    limits: { memory: 128Mi }
+
+kafka:
+  # Strimzi 1.3.1 이 지원하는 마지막 버전. 서비스의 클라이언트(4.4.0)와 호환된다. compose 는 4.4.0
+  version: 4.3.2
+  replicas: 1
+  partitions: 3
+  storage: 2Gi
+  topics:
+    - inventory.command
+    - inventory.reply
+    - point.command
+    - point.reply
+    - payment.command
+    - payment.reply
+    - order.events
+    - auth.events
+
+# 백엔드 서비스. 이름 = 이미지 이름 = k8s Service 이름
+services:
+  auth-service:
+    port: 8086
+    db: auth
+    env:
+      AUTH_COOKIE_SECURE: "true"
+      # 개발용 시드 사용자(user1~4, admin)를 넣는다. 운영이면 classpath:db/migration 만
+      AUTH_FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/dev-seed
+    # 서명 키를 주지 않으면 띄울 때마다 새 임시 키다(ADR 0008). 인스턴스 여럿이면 키를 Secret 으로 넣어야 한다
+    replicas: 1
+  order-service:
+    port: 8081
+    db: order
+  inventory-service:
+    port: 8082
+    db: inventory
+  point-service:
+    port: 8083
+    db: point
+  payment-service:
+    port: 8084
+    db: payment
+  notification-service:
+    port: 8085
+    db: notification
+  gateway:
+    port: 8000
+    env:
+      # Next(BFF) 가 넘기는 X-Forwarded-For 를 믿을 주소. 클러스터 Pod 대역 (ADR 0011)
+      GATEWAY_TRUSTED_PROXIES: 10.0.0.0/8,127.0.0.1,::1
+
+serviceResources:
+  requests: { cpu: 100m, memory: 384Mi }
+  limits: { memory: 768Mi }
+
+frontend:
+  enabled: true
+  port: 3000
+  env:
+    COOKIE_SECURE: "true"
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 384Mi }

@@ -1,0 +1,115 @@
+# 백엔드 서비스 7개. 이미지 = deploy/docker/service.Dockerfile, 설정은 application.yml 의 환경변수를 채운다.
+# 서비스마다 자기 DB·계정만 받는다 (다른 서비스 DB 비밀번호를 갖지 않는다)
+{{- $root := . }}
+{{- $kafka := include "commerce.kafkaBootstrap" . }}
+{{- range $name, $svc := .Values.services }}
+{{- $labels := include "commerce.labels" (dict "name" $name "root" $root) }}
+{{- if $svc.db }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-db
+  labels: {{- $labels | nindent 4 }}
+type: Opaque
+stringData:
+  # 로컬 개발용 값 (files/01-create-service-databases.sql 의 계정)
+  username: {{ printf "%s_svc" $svc.db | quote }}
+  password: {{ printf "%s_svc" $svc.db | quote }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      {{- if $svc.db }}
+      # Flyway 가 DB 를 못 찾아 재시작을 거듭하지 않게 Postgres 가 받을 때까지 기다린다
+      initContainers:
+        - name: wait-postgres
+          image: {{ $root.Values.postgres.image }}
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432; do sleep 2; done"]
+      {{- end }}
+      containers:
+        - name: app
+          image: {{ include "commerce.image" (dict "name" $name "root" $root) }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          env:
+            {{- range $k, $v := $root.Values.common.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- if ne $name "gateway" }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ $kafka | quote }}
+            {{- end }}
+            {{- if ne $name "auth-service" }}
+            - name: AUTH_JWKS_URI
+              value: "http://auth-service:{{ (index $root.Values.services "auth-service").port }}/.well-known/jwks.json"
+            {{- end }}
+            {{- if or (eq $name "auth-service") (eq $name "gateway") }}
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            {{- end }}
+            {{- if eq $name "gateway" }}
+            {{- range $target, $t := $root.Values.services }}
+            {{- if ne $target "gateway" }}
+            - name: {{ $target | replace "-" "_" | upper }}_URL
+              value: "http://{{ $target }}:{{ $t.port }}"
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if $svc.db }}
+            {{- $prefix := upper $svc.db }}
+            - name: {{ $prefix }}_DB_URL
+              value: "jdbc:postgresql://postgres:5432/{{ $svc.db }}_db"
+            - name: {{ $prefix }}_DB_USERNAME
+              valueFrom:
+                secretKeyRef: { name: {{ $name }}-db, key: username }
+            - name: {{ $prefix }}_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ $name }}-db, key: password }
+            {{- end }}
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 3
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+          resources: {{- toYaml $root.Values.serviceResources | nindent 12 }}
+{{- end }}

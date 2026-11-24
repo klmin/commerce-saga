@@ -1,0 +1,81 @@
+name: k8s
+
+# 후속 3 K-1: kind 클러스터에 Helm 차트(deploy/helm/commerce-saga)로 전체를 올리고 Saga 스모크를 돈다.
+# 클러스터를 상시 띄우지 않고 PR 마다 여기서 검증한다 (브리프 5절). Kafka 는 Strimzi, Postgres·Redis 는 차트 안 StatefulSet·Deployment
+on:
+  push:
+    branches: [main]
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'scripts/k8s-*.sh', '.github/workflows/k8s.yml']
+  pull_request:
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'scripts/k8s-*.sh', '.github/workflows/k8s.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # 차트의 Postgres 초기화 SQL 은 infra/postgres/init 의 사본이다 (Helm 은 차트 밖 파일을 못 읽는다)
+      - name: 초기화 SQL 사본 확인
+        run: diff infra/postgres/init/01-create-service-databases.sql deploy/helm/commerce-saga/files/01-create-service-databases.sql
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - uses: azure/setup-helm@v5.1.0
+        with:
+          version: v4.3.2
+
+      - name: 차트 lint
+        run: helm lint deploy/helm/commerce-saga
+
+      - uses: helm/kind-action@v1.15.2
+        with:
+          version: v0.33.0
+          cluster_name: commerce-saga
+
+      # 스모크 시나리오 9i 가 429 를 볼 수 있게 사용자별 rate limit 을 낮춘다 (e2e 워크플로와 같은 값)
+      - name: 배포 (이미지 빌드 → kind → Strimzi → 차트)
+        run: |
+          bash scripts/k8s-deploy.sh \
+            --set services.gateway.env.GATEWAY_USER_RATE=5 \
+            --set services.gateway.env.GATEWAY_USER_BURST=10
+
+      - name: port-forward
+        run: bash scripts/k8s-port-forward.sh
+
+      - name: 주문 Saga·보상 (시나리오 0·1)
+        run: bash scripts/smoke-saga.sh
+
+      - name: Gateway·소유권 (시나리오 9)
+        run: bash scripts/smoke-gateway.sh
+
+      - name: 주문 Idempotency-Key (시나리오 10)
+        run: bash scripts/smoke-idempotency.sh
+
+      - name: 화면이 Gateway 를 거쳐 뜨는지
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3500/login)
+          [ "$code" = 200 ] || { echo "frontend /login → $code"; exit 1; }
+
+      - name: 상태·로그
+        if: always()
+        run: |
+          kubectl -n commerce get pods,kafka,kafkatopic -o wide || true
+          kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
+          for d in auth-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+            echo "===== $d"
+            kubectl -n commerce logs deployment/$d --tail=80 || true
+          done
