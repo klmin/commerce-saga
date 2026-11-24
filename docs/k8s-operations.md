@@ -84,8 +84,8 @@
 운영:
 - **워커 2 개 이상.** 커넥터(서비스별 하나)는 워커에 나눠 배정되고, 워커가 죽으면 남은 워커가 넘겨받는다. 단 Postgres 커넥터는 태스크가 1 개라 동시에 두 워커가 한 커넥터를 처리하지는 않는다 → 이중화이지 처리량 확장은 아니다.
 - **힙은 limit 의 50% 안팎으로 고정**하고 힙 밖 몫(약 300Mi)을 남긴다. limit 을 바꾸면 `jvmOptions` 도 같이.
-- **커넥터 상태 감시.** 워커가 살아 있어도 커넥터·태스크가 FAILED 일 수 있다. `KafkaConnector` 의 status 또는 Connect REST `/connectors/*/status` 에 경보. FAILED 면 outbox 가 쌓이기만 한다.
-- outbox 테이블 행 수(쌓이는지)에 경보. relay 가 멈춘 가장 확실한 신호다.
+- **커넥터 상태 감시.** 워커가 살아 있어도 커넥터·태스크가 FAILED 일 수 있다. `KafkaConnector` 의 status 또는 Connect REST `/connectors/*/status` 에 경보. FAILED 면 메시지가 나가지 않고 WAL 만 쌓인다.
+- **발행 정지는 slot 적체로 본다.** Debezium 모드는 outbox 에 "넣고 지운다"(같은 트랜잭션에서 INSERT 직후 DELETE)라 커넥터가 멈춰도 outbox 행 수는 늘 0 이다. 대신 slot 이 읽지 못한 WAL(`commerce_outbox_replication_slot_lag_bytes`, 경보 `ReplicationSlotLag`)이 늘어난다. outbox 적체 경보(`OutboxBacklog`)는 스케줄러 relay 모드에서만 의미가 있다.
 
 ## 9. 관측성 (Alloy · Tempo · Loki · Prometheus · Grafana)
 
@@ -127,6 +127,6 @@
 
 1. Postgres → 관리형(RDS) + 백업, Kafka → 브로커 3 + `min.insync.replicas: 2` (데이터 유실 방지)
 2. 무상태 서비스 replicas 2 + 분산 배치 + PDB, auth-service 서명 키 Secret
-3. 경보를 사람에게(Alertmanager), Connect 커넥터·outbox 적체·replication slot 감시
+3. 경보를 사람에게(Alertmanager), Connect 커넥터 상태·replication slot 적체 감시
 4. 관측성 저장소 S3, Alloy 역할 분리
 5. HPA·노드 자동 확장
