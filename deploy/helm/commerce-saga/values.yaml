@@ -55,6 +55,11 @@ debezium:
   resources:
     requests: { cpu: 100m, memory: 512Mi }
     limits: { memory: 1Gi }
+  # 비우면 Strimzi 가 힙을 limit 의 75%(-Xms=-Xmx 약 742Mi)로 잡는다. 힙 밖(메타스페이스·스레드 120여 개·코드 캐시·GC)이
+  # 약 300Mi 라 합이 1Gi 를 넘어 OOMKilled 가 반복됐다. 실제 힙 사용은 약 200Mi → 512Mi 로 두고 힙 밖 여유를 남긴다
+  jvmOptions:
+    "-Xms": 256m
+    "-Xmx": 512m
 
 # 백엔드 서비스. 이름 = 이미지 이름 = k8s Service 이름. outbox: 이 서비스 DB 의 outbox 를 Debezium 이 읽는다
 services:
