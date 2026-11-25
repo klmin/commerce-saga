@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (다음 작업 순서 확정: 후속 4-1 가격 스냅샷 → 멱등 기록 정리 → 결제 서킷 브레이커 → 후속 4 나머지, 4-4절. AGENTS.md 동기 호출 규칙 범위 정리)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1 가격 스냅샷(설계 메모부터)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-25 (release 가 바뀐 이미지만 배포. 다음 PR: release 가 main CI 를 기다림)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 아직 정하지 않음(후보는 4-4절 "정하고 미룬 것")**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)까지 끝났다. 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 값 객체(PR #56~#59)·ADR 0015(PR #61)까지 끝났다. 이후 순서도 사용자가 정했다(2026-11-25): ① 후속 4-1 가격 스냅샷(서버가 가격을 정함) → ② 멱등 기록 정리 작업 → ③ 결제 서킷 브레이커 → ④ 후속 4 나머지(검색·CDC·ES). 주문 취소 API 는 그 뒤에 정한다. 항목별 내용은 4-4절 "다음 작업 메모". 후속 4(4-1 포함)는 시작 전에 설계 메모(PR 나누기, 가격 스냅샷, CDC·ES 구성)를 이 문서에 적고 사용자 확인을 받는다. JPA Auditing·등록자/수정자 컬럼은 쓰지 않고, 관리자가 상품·가격을 고치는 기능이 생기는 후속 4 에서 도메인 이력으로 다시 본다(사용자 결정 2026-11-25, ADR 0015).** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 는 [ADR 0015](adr/0015-context-map-and-glossary.md)(컨텍스트 맵·용어집·쓰지 않기로 한 패턴)를 먼저 읽는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)·후속 4 상품 검색·관리 이력(태그 `v0.6-search-audit`)까지 끝났다. 후속 4 다음 작업은 아직 정하지 않았다(후보는 4-4절 "정하고 미룬 것"). 아래는 후속 4 까지의 결정 기록이다: 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 값 객체(PR #56~#59)·ADR 0015(PR #61)까지 끝났다. 이후 순서도 사용자가 정했다(2026-11-25): ① 후속 4-1 가격 스냅샷(서버가 가격을 정함) → ② 멱등 기록 정리 작업 → ③ 결제 서킷 브레이커 → ④ 후속 4 나머지(검색·CDC·ES). 주문 취소 API 는 그 뒤에 정한다. 항목별 내용은 4-4절 "다음 작업 메모". 후속 4(4-1 포함)는 시작 전에 설계 메모(PR 나누기, 가격 스냅샷, CDC·ES 구성)를 이 문서에 적고 사용자 확인을 받는다. 4-1 설계는 사용자가 확인했다(2026-11-25, 4-5절·ADR 0016: 가격은 동기 조회 + 409, 장바구니 추가). 4-1 뒤 ②·③ 은 4-4절 메모대로 진행하고 머지 조건(Codex 지적 없음 + CI 통과)을 지키면 이어서 진행해도 된다(사용자 위임 2026-11-25). JPA Auditing·등록자/수정자 컬럼은 쓰지 않고, 관리자가 상품·가격을 고치는 기능이 생기는 후속 4 에서 도메인 이력으로 다시 본다(사용자 결정 2026-11-25, ADR 0015).** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 는 [ADR 0015](adr/0015-context-map-and-glossary.md)(컨텍스트 맵·용어집·쓰지 않기로 한 패턴)를 먼저 읽는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -48,8 +48,8 @@
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 완료 (K-1 PR #40, K-2 PR #41, K-3 PR #42, 태그 `v0.5-k8s`) |
 | DDD 보강 | 값 객체(서비스마다), 컨텍스트 맵·용어집. 설계는 ADR 0015 | 완료 (값 객체 PR #56~#59, ADR 0015 PR #61) |
-| 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 다음. **4-1 가격 스냅샷을 먼저** 떼어 하고, 검색·ES 는 아래 운영 보강 뒤 (2026-11-25 사용자 결정, 시작 전 설계 메모, 4-4절) |
-| 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 4-1 다음, 후속 4 나머지 전 (2026-11-25 사용자 결정, 4-4절) |
+| 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 완료, 태그 `v0.6-search-audit` (4-1 PR #65·#68·#72, 4-2 PR #82·#89·#90, 4-3 PR #91·#94, 설계 4-5·4-6절, ADR 0010·0016) |
+| 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 완료 (PR #74·#76, 4-4절) |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
 
@@ -76,7 +76,7 @@ flowchart LR
     dlt -. "scripts/dlt.sh replay" .-> kafka
 ```
 
-- 서비스 5개, 서비스마다 자기 DB·계정 (Postgres 하나에 DB 분리). 서비스끼리 HTTP 호출 없음, Kafka 메시지만
+- 서비스마다 자기 DB·계정 (Postgres 하나에 DB 분리). 서비스 간 상태 변경은 Kafka 메시지만. 동기 HTTP 는 주문 생성 때 order → product 가격 조회 하나(ADR 0016, Saga 와 무관)
 - Saga: `RESERVING_STOCK → USING_POINT → PAYING → COMPLETED`, 실패 시 `REFUNDING_POINT → RELEASING_STOCK → CANCELLED` (ADR 0003). 응답이 없으면 단계 타임아웃으로 재전송하다 포기 후 역순 보상, 결제는 `CANCELLING_PAYMENT`(`CancelPayment`)부터 (ADR 0007)
 - 모든 발행은 outbox (비즈니스 변경 + outbox = 한 트랜잭션). relay는 두 모드: **스케줄러**(`libs/outbox`, `FOR UPDATE SKIP LOCKED`, 기본) 또는 **Debezium**(Kafka Connect + Outbox Event Router, `OUTBOX_RELAY_ENABLED=false`). **운영 기준은 Debezium, 코드 기본값은 스케줄러**(Connect 없이 잘못 띄워도 메시지를 잃지 않게) (ADR 0004)
 - 메시지: key = orderId, value = payload JSON, 헤더 `id`(= outbox id) · `type` (ADR 0005)
@@ -89,8 +89,23 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | 문서: 다음 작업 순서(후속 4-1 가격 스냅샷 → 멱등 기록 정리 → 결제 서킷 브레이커 → 후속 4 나머지)와 결정 메모(4-4절), AGENTS.md 서비스 간 동기 호출 규칙을 "상태 변경은 메시지, 조회는 읽기 모델 우선, 외부 PG 는 동기 + 결과 모름"으로 범위 정리, 머지된 PR 번호 반영 |
-| #44, #47, #48, #50~#55, #60, #62 | 배포·관측성 보강: GHCR push·EKS ArgoCD GitOps(#44), Debezium 플러그인 다운로드 재시도(#47), trace·로그 resource 속성(#48), K-1 trace 문서(#50), relay 모드 롤링 전환 문서(#51), Alloy tail sampling(#52), docs 만 바뀐 커밋 CodeQL 건너뛰기(#53), [CI/CD 문서](ci-cd.md)(#54), Tempo 메모리 한도(#55), Kafka Connect 힙 512Mi(#60), 메트릭 수집 Alloy 로 통합·컨테이너 메모리 경보(#62) |
+| (이번 PR) | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". 다음 PR 은 release 가 main CI 결과를 기다리게(main CI 취소 안 함) |
+| #95 | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
+| #93 | 문서: 배포 환경 가이드 `docs/deployment-environments.md`(로컬·compose·k8s·ArgoCD·EKS, Helm·values·Application 매핑) |
+| #94 | 후속 4-3b 관리자 상품 화면: `/admin/products`(판매 중지 포함 목록·페이지, 상품 등록) → `/admin/products/{id}`(이름·설명·가격·판매 상태 변경, 관리 이력 최근부터: 변경 종류·시각·관리자 id·바뀐 값만 전 → 후, 옮겨 온 옛 가격 이력은 가격만). 서버 액션이 저장 뒤 `refresh()` 로 다시 그림, 입력은 값이 바뀌면 key 로 다시 마운트. 관리자가 아니면 404. 입력 검사·이력 표시 `lib/admin/product-input.ts`(Vitest), Playwright `e2e/admin-products.spec.ts`(등록 → 가격·설명·판매 중지 → 이력 4건 순서·전후 값, 같은 가격 요청은 이력 없음, 일반 사용자 404) |
+| #91 | 후속 4-3a 상품 관리 이력(ADR 0010 결정 12): `product_audit_log`(V3, 바꾼 전·후 값을 열로, JSON 없음) 에 등록·정보 수정·가격·판매 상태를 바꾼 관리자(JWT `sub`)·시각과 함께 상품 변경과 같은 트랜잭션으로 남김. 같은 값 요청은 남기지 않음(정보 수정도 값이 같으면 `updated_at` 을 바꾸지 않아 CDC 이벤트도 없음). 기존 가격 이력은 가격만 옮김. 조회 `GET /admin/products/{id}/audit-log`(ADMIN, 최근부터, 페이지). 등록·정보 수정·판매 상태 커맨드에도 관리자 id. 가격 이력 API 는 그대로 |
+| #90 | 후속 4-2c 검색 화면: 홈 상품 목록 위에 검색 폼(검색어·최소/최대 가격·정렬, 자바스크립트 없는 GET 폼이라 조건이 URL 에 남음). 조건이 있으면 search-service(`/api/search/products`, 판매 중만), 없으면 지금처럼 product-service 목록. 검색 저장소 503 이면 전체 목록으로 대신 보여 주고 안내, 400 이면 메시지. "검색 결과 N개", 결과에서 바로 담기·주문(가격은 주문 때 다시 확인). URL 값은 `lib/search.ts` 가 걸러냄(Vitest). Playwright `e2e/search.spec.ts`(부분 검색·URL·전체 보기, 가격 범위·정렬), 브라우저 e2e 에 product-cdc 커넥터 등록 |
+| #89 | 후속 4-2b search-service(:8089, ADR 0010): `product.cdc.products` 소비 → Elasticsearch 9.5.3 색인. 문서 id = 상품 id, **외부 버전 = 헤더 `__lsn`**(`version_type=external`) → 같은 변경 재전달·늦게 온 옛 변경은 ES 가 409 → 건너뜀(processed_message 없음). tombstone 은 삭제. 본문·키·헤더가 계약과 다르면·문서 거절(400)이면 DLT, ES 장애면 제자리 재시도. 색인 = 별칭 `products` → `products-v1`(없으면 처음에 만듦), ngram(1~2) 분석기로 한글 부분 검색, 매핑 strict. 공개 검색 API `GET /search/products`(q·minPrice·maxPrice·onSaleOnly·sort relevance/price-asc/price-desc/newest·page·size ≤100, 앞 10,000건), ES 장애면 503(상품 목록·주문은 영향 없음). REST 직접 호출(RestClient, 공식 클라이언트 안 씀 → OpenSearch 로 바꿀 여지). 지표 `search_indexing_lag_seconds`·`search_indexed_total{result}`. Gateway `/api/search/**`(GET, 공개). compose·Helm(StatefulSet + PVC, `node.store.allow_mmap=false`, ECK 안 씀)·CI(e2e·browser-e2e·k8s·release 이미지 11개)에 ES·search-service. 시나리오 17(`smoke-search.sh`: 부분 검색, 가격 변경 반영 시간, 판매 중지, 옛 변경 무시, ES 중단 중 503 → 재개 후 따라잡음(compose)). 테스트: 도메인·리스너·컨트롤러 단위, 실제 ES(버전·한글·필터·정렬), Kafka → ES 통합 |
+| #82 | 후속 4-2a 상품 테이블 CDC: Debezium `product-cdc` 커넥터(compose `infra/connect/product-cdc.json`, Helm `KafkaConnector`, `values.services.product-service.cdc`)가 `products` 의 열 6개만(`column.include.list`) 변경 후 행(`ExtractNewRecordState`)으로 `product.cdc.products`(키 = 상품 id `ExtractField$Key`, 헤더 `__lsn`·`__source_ts_ms`, RegexRouter)에 보낸다. `product_svc` replication 권한(초기화 SQL 두 사본), 토픽·DLT·heartbeat 토픽(compose kafka-init, Helm topics). relay 가 스케줄러 모드여도 등록(e2e scheduler 모드에 등록 단계). 토픽 계약 문서(열은 추가만), AGENTS.md 토픽·키 규칙에 CDC 추가. 시나리오 16(`smoke-product-cdc.sh`, CI e2e 두 모드·k8s kind, k8s 활성 slot 6). ES 는 search-service 와 함께 4-2b 로 옮김(쓰는 쪽과 같이 들어가야 확인할 수 있음) |
+| #81 | 문서: 후속 4 나머지 설계 메모(4-6절, 사용자 확인)·[ADR 0010](adr/0010-product-search-cqrs-table-cdc.md) 상품 검색 CQRS(테이블 CDC → search-service → ES). README ADR 목록 중복 줄 정리 |
+| #76 | 4-4절 ③ 결제 서킷 브레이커: payment-service `CircuitBreakingPaymentGateway`(`@Primary`, Resilience4j 코어 2.3.0) 가 PG 승인만 감싼다. 최근 20건 중 10건 이상·실패(타임아웃·오류) 50% 이상이면 열림 → PG 를 부르지 않고 `PaymentGatewayUnavailableException` → 결제 서비스가 확정 실패(DECLINED, "PG unavailable (circuit open)")로 바로 응답 → Saga 즉시 보상. 30초 뒤 반열림 시험 3건(타임아웃이면 지금처럼 UNKNOWN + 보정). 처리마다 PG 를 부르기 전 `pg_approve_attempts`(V7)에 호출을 예약(calls + 1, 커밋)한다. 회로가 이번 호출을 막았을 때 예약이 이 처리 하나뿐이면 봉인(이후 어떤 처리도 PG 를 부르지 않음)하고 거절 확정, 아니면(재전달·Saga 재전송·다른 인스턴스 동시 처리) 거절 대신 UNKNOWN → 조회로 확정. 예약과 봉인은 같은 행의 조건부 갱신이라 겹치지 않음. 거절은 실패로 세지 않음. 조회·환불은 회로 밖(보정이 계속 돌아야 돈이 맞음). 지표 `payment_pg_circuit_state`. 라이브러리: Resilience4j 는 Spring Cloud CircuitBreaker 기본 구현이고 상태 머신(카운트 창·반열림 시험 수)이 검증돼 있어 직접 만들지 않음, Spring 통합 없이 코어만(설정은 우리 properties). 시나리오 15(`smoke-pg-circuit.sh`, CI e2e 마지막) |
+| #74 | 4-4절 ② 멱등 기록 정리: order·inventory·point·payment 에 `IdempotencyCleanupScheduler`(1시간마다, `idempotency.cleanup.*`) → `IdempotencyCleanupService` 가 보존 기간(processed_message 30일 = 토픽 보존 7일 + DLT 재처리 여유, order Idempotency-Key 7일)이 지난 행을 오래된 것부터 1,000건씩(한 번에 최대 100배치) 지운다. `for update skip locked` 라 여러 인스턴스가 겹쳐도 서로 기다리지 않고 결과가 같다. 비즈니스 기록은 지우지 않음. order V8 `order_idempotency_keys(created_at)` 인덱스. 서비스마다 단위·Postgres 통합 테스트. 함께: 머지된 PR 번호(#49·#66·#67·#70·#71)·4-5절 완료 표시·5절 경보 전달 한계 반영(닫은 #69 내용) |
+| #72 | 후속 4-1c 장바구니: order-service `cart_items`(V7, (user_id, product_id) PK, 담을 때 가격), `Cart` 애그리거트(담을 때 가격 유지, 50줄), `GET/PUT/DELETE /cart(/items/{id})`(Gateway `/api/cart/**`), 담을 때 지금 가격을 받아 남김(없는·판매 중지 422, 장애 503), 조회는 지금 가격과 비교해 `priceChanged`·장애면 담을 때 가격. 장바구니 주문 `POST /orders` + `fromCart` 는 주문 트랜잭션 안에서 주문한 줄 삭제. 화면 `/cart`(수량 변경·빼기·가격 변경 표시, 주문 폼 재사용), 상품 목록 "담기", 헤더 링크, Playwright 1개, 시나리오 14e |
+| #68 | 후속 4-1b 서버 가격: order-service `PlaceOrderService`(트랜잭션 없음)가 같은 키 재요청이면 처음 주문 → 줄 검사 → `ProductCatalogPort`(RestClient, 연결·응답 2초, 재시도 없음)로 지금 가격 → 없는·판매 중지 422, 화면 가격과 다르면 409 + `currentPrices`, 같으면 `OrderService.placeOrder`(한 트랜잭션). product 장애 503(원인은 로그만). 409·422·503 에는 Idempotency-Key 를 남기지 않음. 프론트: 상품 목록·주문 폼을 `/api/products` 로, 보인 가격을 hidden 필드로 보내고 409 면 `옛 가격 → 새 가격` 안내 후 다시 누르면 새 가격. 주문 목록·상세의 상품 이름은 `?ids=` 로. 스모크 스크립트 가격을 시드 가격으로, 시나리오 14(`smoke-price-change.sh`, CI e2e). Helm order-service `PRODUCT_SERVICE_URL` |
+| #65 | 후속 4-1a product-service(:8087, `product_db`): 상품 등록·수정·가격 변경·판매 중지(ADMIN, `/admin/products/**`), 가격 변경 이력 `product_price_history`(이전·새 가격, 바꾼 관리자, 시각. 가격 변경과 한 트랜잭션, 행 잠금으로 동시 변경에도 이력이 이어짐), 공개 조회(목록·상세·`?ids=` 여러 건). Flyway 시드 = 프론트 고정 상품 1~5, 새 상품은 1000 부터. Gateway `/api/products/**`(GET, 토큰 없이)·`/api/admin/products/**`, DB 계정, compose 메트릭 대상, Helm, CI(e2e·browser-e2e·k8s·release) 에 추가. 주문·화면은 아직 그대로(4-1b) |
+| #64 | 문서: 후속 4-1 설계(4-5절), [ADR 0016](adr/0016-order-price-sync-query.md) 주문 가격 동기 조회 예외·409·장바구니 위치. 4-4절의 "4-1 은 동기 조회하지 않는다" 문장을 바로잡음 |
+| #63 | 문서: 다음 작업 순서(후속 4-1 가격 스냅샷 → 멱등 기록 정리 → 결제 서킷 브레이커 → 후속 4 나머지)와 결정 메모(4-4절), AGENTS.md 서비스 간 동기 호출 규칙을 "상태 변경은 메시지, 조회는 읽기 모델 우선, 외부 PG 는 동기 + 결과 모름"으로 범위 정리 |
+| #44, #47, #48, #50~#55, #60, #62, #66, #67, #70, #71 | 배포·관측성 보강: GHCR push·EKS ArgoCD GitOps(#44), Debezium 플러그인 다운로드 재시도(#47), trace·로그 resource 속성(#48), K-1 trace 문서(#50), relay 모드 롤링 전환 문서(#51), Alloy tail sampling(#52), docs 만 바뀐 커밋 CodeQL 건너뛰기(#53), [CI/CD 문서](ci-cd.md)(#54), Tempo 메모리 한도(#55), Kafka Connect 힙 512Mi(#60), 메트릭 수집 Alloy 로 통합·컨테이너 메모리 경보(#62) |
 | #61 | DDD 후보 2: [ADR 0015](adr/0015-context-map-and-glossary.md) 컨텍스트 맵(OHS·Published Language·Conformist·ACL, 스키마만 공유) + 용어집(포인트 환불/결제 환불, 주문 취소/결제 취소 구분) + 쓰지 않기로 한 것(도메인 이벤트 객체, 이벤트 소싱, JPA Auditing·등록자/수정자 컬럼, 값 객체 공유) |
 | #57~#59 | DDD 후보 1 값 객체 ②~④: inventory `ProductId`·`Quantity`, point `Points`·`UserId`, payment `Money`(PG 포트 `approve(orderId, userId, Money)`). 커맨드 값은 값 객체로 바꾸기 전에 원시 값으로 검사해 실패 응답(바로 바꾸면 예외로 무한 재시도), 값 객체 도입 전에 저장된 잘못된 거절 기록은 복원 때 건너뜀(보상 무한 재시도 방지, 회귀 테스트). payment 의 userId 는 규칙이 없어 감싸지 않음 |
 | #56 | DDD 후보 1 값 객체 ① order-service: `Money`·`Points`·`Quantity`·`UserId`·`ProductId`(record, 생성 때 검증). `Order`·`OrderLine`·`OrderSaga`·`SagaAction`·`SagaCommandPort` 가 사용. 1P = 1원 환산은 `Points.toMoney()` 한 곳. DB 컬럼·메시지 계약·port.in Command·조회 DTO 는 원시 타입 그대로, 어댑터·서비스 입구에서 변환 |
@@ -122,6 +137,7 @@ flowchart LR
 | #35 | 후속 2 F-1a: 템플릿 `frontend/` 가져오기(items 예시·OpenAPI 생성 제거), 로그인·회원가입·로그아웃(Server Action), Next 서버가 토큰을 httpOnly 쿠키(`cs_access`·`cs_refresh`)로, `src/proxy.ts` 가 refresh(single-flight), 내 포인트 홈, CI `frontend`, Playwright 로컬 e2e, ADR 0011, 시나리오 13 CI 결과(PR #34). Codex 반영: Gateway 가 믿는 프록시(BFF)의 `X-Forwarded-For` 로 `/auth` rate limit(`ClientIpResolver`), 로그인 뒤 이동 경로 open redirect 강화 |
 | #36 | 후속 2 F-1b: 홈 상품 1~5(고정 가격, 재고 조회), 주문하기(폼을 열 때 정한 `Idempotency-Key`), 내 주문(커서), 주문 상세(Saga 단계·기록, 진행 중 1초 갱신), Playwright 주문 시나리오 5개(`workers: 1`) |
 | #37 | 문서: F-1b 완료, F-2 시작 메모(화면별 API 유무·PR 나누기·로컬 실행), DDD 점검과 후속 후보 |
+| #49 | release 멀티 아키텍처: 이미지 10개(서비스 8 + 화면 + Connect)를 amd64·arm64 네이티브 러너에서 빌드해 `<커밋>` 하나로 묶음(`manifest` 잡), 두 아키텍처 확인 뒤 `release/eks` 이동, ADR 0014 멀티 아키텍처 절 |
 | #46 | 후속 1 보강 O-3 k8s: 차트 `templates/observability.yaml`(alloy·tempo·loki·prometheus·kafka-exporter·grafana, 설정은 `files/observability` = infra 사본, CI diff), 서비스 trace·로그 export 켬, port-forward 에 Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091, CI kind 에서 시나리오 11·Prometheus 대상 확인, ADR 0014 관측성 절 |
 | #45 | 후속 1 보강 O-3 로그·수집기: 서비스 trace·로그 → OTLP → Alloy → Tempo·Loki, Logback OpenTelemetry appender(서비스마다 `OpenTelemetryLoggingConfig`), Grafana span ↔ 로그 링크, order-service Saga 진행 로그, 시나리오 11c, ADR 0013 로그 절. k8s 는 로그 export 끔 |
 | #42 | 후속 3 K-3 (후속 3 마지막): ArgoCD app-of-apps(`deploy/argocd`, root 하나 → Strimzi·Envoy Gateway·commerce-saga, revision 하나로 같은 커밋), edge = Gateway API(`Gateway`·`HTTPRoute`, Envoy Gateway, 화면만 공개), `scripts/k8s-argocd.sh`, CI `k8s` 의 `argocd` 잡(PR 커밋 sync → Synced·Healthy, edge 로 화면, 시나리오 0·1), ADR 0014 K-3 |
@@ -269,7 +285,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - `PlaceOrderUseCase.placeOrder`가 `PlaceOrderResult(order, created)`를 돌려준다(컨트롤러가 201/200 구분)
 - 시나리오 10 `scripts/smoke-idempotency.sh`(CI 두 모드, smoke-gateway 다음, 사용자 3): 같은 키 두 번, 동시 5번, 다른 본문 422, 두 주문 COMPLETED·포인트 2건분만 차감, 목록 커서·다른 사용자에게 안 보임
 - 테스트: `OrderServiceTest`(키 6개), `OrderQueryAndIdempotencyIntegrationTest`(Postgres, 같은 키 8개 동시 → 주문·Saga·키 각 1행, 목록 커서), `PaymentSummaryPersistenceAdapterTest`, 컨트롤러 테스트, `GatewayRoutingTest`(목록 경로)
-- 한계: 키 보존 기간 정리 작업 없음. 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
+- 한계: 키는 7일 보존 뒤 정리 스케줄러가 지운다(4-4절 ②, 지난 키로 다시 보내면 새 주문). 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
 
 **A-3-2 가입 → 포인트 계정 (PR #34) 에서 한 것 (결정·확인 사항)**
 - 메시지 계약(추가만): `UserRegistered(userId, registeredAt)`, 토픽 `Topics.AUTH_EVENTS = "auth.events"`(auth-service 소유). 키는 `userId`(주문과 상관없는 사용자 단위 사실이라 orderId 규칙의 예외, AGENTS.md 에 적음). 개인정보·비밀값은 싣지 않는다
@@ -469,10 +485,10 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 
 | 순서 | 작업 | 내용 | 메모 |
 |---|---|---|---|
-| ① | 후속 4-1 가격 스냅샷 | 서버가 상품 가격을 정하고, 주문에 주문 시점 가격을 남긴다. 클라이언트가 보내는 `unitPrice`(5절 한계)를 믿지 않는다 | 시작 전 설계 메모 + 사용자 확인. 정할 것: 가격을 가진 서비스(product-service 신설 vs inventory), order-service 가 주문 시점 가격을 얻는 방법(서비스 간 동기 조회 대신 이벤트로 받은 읽기 모델, AGENTS.md), 요청 DTO·메시지 스키마 호환(필드 추가만, ADR 0005), 프론트 고정 목록(`src/lib/products.ts`) 정리 |
-| ② | 멱등 기록 정리 | `processed_message`(메시지를 받는 서비스 전부)·`order_idempotency_keys` 의 보존 기간이 지난 행을 나눠서(예: 1,000건씩) 지우는 스케줄러. 기존 `SagaTimeoutScheduler`·`PaymentReconcileScheduler` 와 같은 모양 | 보존 기간: `processed_message` 는 Kafka 토픽 보존 + DLT 재처리 기간보다 길게(ADR 0006), `Idempotency-Key` 는 24시간~7일 중 PR 에서 정한다. 만료 뒤 같은 키는 새 주문이 되는 것을 문서에 남긴다. 비즈니스 기록(주문·Saga 기록·예약·사용·결제)은 지우지 않는다. 삭제는 여러 인스턴스에서 겹쳐도 결과가 같다 |
-| ③ | 결제 서킷 브레이커 | payment-service 의 PG 승인 호출에 서킷 브레이커. 타임아웃이 이어지면 회로를 열고, 열려 있는 동안은 **PG 를 부르지 않았으므로 확정 실패**(`PaymentFailed`)로 바로 응답 → Saga 가 곧바로 보상 | 반열림 상태의 시험 호출은 지금처럼 타임아웃이면 `UNKNOWN` + 보정(ADR 0007 그대로). 조회(`inquire`)·환불은 회로와 따로 둘지 PR 에서 정한다. 라이브러리(Resilience4j 등)는 PR 에서 고르고 이유를 적는다. 가짜 PG 장애 주입으로 시나리오 추가(PG 장애 중 주문 → 즉시 실패·보상 → 복구 후 정상) |
-| ④ | 후속 4 나머지 | 상품 검색(테이블 CDC + Elasticsearch), 상품·가격 관리 이력 | 1절 표 후속 4 |
+| ① | 후속 4-1 가격 스냅샷 | 서버가 상품 가격을 정하고, 주문에 주문 시점 가격을 남긴다. 클라이언트가 보내는 `unitPrice`(5절 한계)를 믿지 않는다 | 시작 전 설계 메모 + 사용자 확인. 설계 확정(2026-11-25): 4-5절·ADR 0016. product-service 신설, 주문 때 동기 조회 + 화면 가격과 다르면 409, 장바구니 추가 |
+| ② | 멱등 기록 정리 (완료, PR #74) | `processed_message`(메시지를 받는 서비스 전부)·`order_idempotency_keys` 의 보존 기간이 지난 행을 나눠서(예: 1,000건씩) 지우는 스케줄러. 기존 `SagaTimeoutScheduler`·`PaymentReconcileScheduler` 와 같은 모양 | 보존 기간: `processed_message` 는 Kafka 토픽 보존 + DLT 재처리 기간보다 길게(ADR 0006), `Idempotency-Key` 는 24시간~7일 중 PR 에서 정한다. 만료 뒤 같은 키는 새 주문이 되는 것을 문서에 남긴다. 비즈니스 기록(주문·Saga 기록·예약·사용·결제)은 지우지 않는다. 삭제는 여러 인스턴스에서 겹쳐도 결과가 같다 |
+| ③ | 결제 서킷 브레이커 (완료, PR #76) | payment-service 의 PG 승인 호출에 서킷 브레이커. 타임아웃이 이어지면 회로를 열고, 열려 있는 동안은 **PG 를 부르지 않았으므로 확정 실패**(`PaymentFailed`)로 바로 응답 → Saga 가 곧바로 보상 | 반열림 상태의 시험 호출은 지금처럼 타임아웃이면 `UNKNOWN` + 보정(ADR 0007 그대로). 조회(`inquire`)·환불은 회로와 따로 둘지 PR 에서 정한다. 라이브러리(Resilience4j 등)는 PR 에서 고르고 이유를 적는다. 가짜 PG 장애 주입으로 시나리오 추가(PG 장애 중 주문 → 즉시 실패·보상 → 복구 후 정상) |
+| ④ | 후속 4 나머지 (완료, PR #82~#94) | 상품 검색(테이블 CDC + Elasticsearch), 상품·가격 관리 이력 | 설계 확정(2026-11-25): 4-6절·ADR 0010 |
 
 **정하고 미룬 것 (지금은 하지 않음)**
 - 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 인기 상품 한 행에 주문이 몰리는 경우만 문제라, 처리량 측정(k6 등) 뒤에 조건부 UPDATE·재고 버킷·Redis 선점을 검토한다
@@ -480,17 +496,70 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 - PG 장애 대처 중 PG 이중화(다른 PG 로 우회)·결제 컨슈머 일시정지는 설명만 한다(가짜 PG 하나로는 보여 주기 어렵고, 결제는 빨리 실패시키는 쪽이 흔하다)
 - 주문 진행 표시는 폴링(1초) 유지. SSE·웹소켓은 연결 관리 비용에 비해 이득이 작다
 
-**AGENTS.md 서비스 간 동기 호출 규칙 (이번 PR)**
-- 금지 범위를 "서비스 간 모든 동기 HTTP"에서 "상태 변경"으로 좁히고, 조회는 이벤트로 받은 읽기 모델을 먼저 쓰며 동기 조회는 ADR 로 이유를 남긴 예외로, 외부 시스템 호출은 그 서비스 안에서 동기·트랜잭션 밖으로, 그중 상태나 돈을 바꾸는 호출(PG 결제·환불 등)은 타임아웃이면 "결과 모름"(ADR 0007)으로 적었다(알림 발송·외부 조회까지 조회 확정을 강제하지 않으려고 범위를 좁힘). 이 규칙 때문에 4-1 에서 order-service 는 가격을 동기 조회하지 않고, 이벤트로 받은 가격 읽기 모델이나 Saga 단계 응답으로 얻는다(설계 메모에서 고른다). 실무에서 동기 호출이 흔하다는 것과 이 저장소가 장애 격리 때문에 상태 변경을 메시지로만 하는 것(ADR 0000)을 구분하려는 것. 지금 코드는 바뀌지 않는다. 머지된 ADR 0000 은 고치지 않는다
+**AGENTS.md 서비스 간 동기 호출 규칙 (PR #63)**
+- 금지 범위를 "서비스 간 모든 동기 HTTP"에서 "상태 변경"으로 좁히고, 조회는 이벤트로 받은 읽기 모델을 먼저 쓰며 동기 조회는 ADR 로 이유를 남긴 예외로, 외부 시스템 호출은 그 서비스 안에서 동기·트랜잭션 밖으로, 그중 상태나 돈을 바꾸는 호출(PG 결제·환불 등)은 타임아웃이면 "결과 모름"(ADR 0007)으로 적었다(알림 발송·외부 조회까지 조회 확정을 강제하지 않으려고 범위를 좁힘). ~~이 규칙 때문에 4-1 에서 order-service 는 가격을 동기 조회하지 않는다~~ → 다시 검토해(2026-11-25) 4-1 은 이 규칙의 "실시간 값이 꼭 필요할 때" 예외로 **동기 조회**한다. 이유는 ADR 0016(가격은 주문 순간 한 번, 실시간 값이 필요, 상태를 바꾸지 않음, Saga 와 무관). 실무에서 동기 호출이 흔하다는 것과 이 저장소가 장애 격리 때문에 상태 변경을 메시지로만 하는 것(ADR 0000)을 구분하려는 것. 지금 코드는 바뀌지 않는다. 머지된 ADR 0000 은 고치지 않는다
 
-## 5. 알려진 한계·나중 일
+## 4-5. 후속 4-1 설계 메모 (2026-11-25 사용자 확인)
+
+결정과 이유는 [ADR 0016](adr/0016-order-price-sync-query.md). 흔한 커머스 흐름(목록 가격은 안내용 → 주문 직전 서버가 다시 계산 → 다르면 알리고 재확인 → 주문에 스냅샷)을 따른다.
+
+| PR | 범위 |
+|---|---|
+| 4-1a product-service (완료, PR #65) | 새 서비스(헥사고날, 자기 DB `product_db`). 상품 등록·수정·가격 변경(ADMIN), 가격 변경 이력 `product_price_history`(이전·새 가격, 바꾼 사람 = JWT `sub`, 시각. 가격 변경과 같은 트랜잭션), 판매 중지. 공개 조회: 목록(페이지)·상세·여러 건(`GET /products?ids=`). Flyway 시드 = 지금 프론트 고정 상품 1~5(재고 시드와 같은 id). Gateway `/api/products/**`, compose·Helm·CI 에 서비스 추가. 메시지는 주고받지 않는다(Kafka·outbox 없음) |
+| 4-1b 서버 가격 (완료, PR #68) | order-service `ProductPricePort`(adapter.out, RestClient, 타임아웃 2초, 재시도 없음, 트랜잭션 밖). 화면 가격(`unitPrice`)과 다르면 409 + 줄별 현재 가격, 같으면 서버 가격 스냅샷. 없는·판매 중지 상품 422, product 장애 503. 이때는 `Idempotency-Key` 를 기록하지 않음. 프론트 상품 목록을 API 로, 409 확인 창. 시나리오 문서(가격 변경 뒤 주문) |
+| 4-1c 장바구니 (완료, PR #72) | order-service `cart_items`(user_id, product_id 유니크, 수량, 담을 때 가격). 담기·수량 변경·빼기·조회(현재 가격과 비교해 바뀐 줄 표시, product 장애면 표시 없이 담을 때 가격)·장바구니 주문(주문 생성 + 주문한 줄 삭제 = 한 트랜잭션, 409 는 4-1b 와 같음). 내 장바구니만(JWT `sub`), 최대 50줄. 프론트 장바구니 화면 |
+
+정해서 진행한 것: 타임아웃 2초, 가격이 오르든 내리든 409, 장바구니 50줄, 상품 조회는 로그인 없이 공개(order 는 Gateway 를 거치지 않고 클러스터 안에서 호출, 토큰 전달 없음), 메시지 계약은 바꾸지 않음, `product.events` 는 만들지 않음(소비자가 생기면 추가).
+k8s: product-service 를 Helm 차트에 추가하고 기존 kind CI 로 같이 확인한다. Elasticsearch 는 ④에서 따로.
+
+## 4-6. 후속 4 나머지 설계 메모: 상품 검색(테이블 CDC + Elasticsearch)·상품 관리 이력 (2026-11-25 사용자 확인: 추천안대로)
+
+브리프 "상품 검색" 절의 구성(쓰기 Postgres, 검색 ES = CQRS)을 따르고, Debezium 을 outbox 릴레이가 아닌 **테이블 CDC(데이터 복제)** 로도 써서 두 쓰임새를 보여 준다. 결정은 ADR 0010(브리프에서 번호를 비워 둠)으로 남긴다.
+
+```
+product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ product.cdc.products ─▶ search-service ─▶ Elasticsearch
+                                                                                         ▲
+                                         화면 검색창 ─▶ Gateway /api/search/** ──────────┘
+```
+
+**정할 것과 추천**
+
+| # | 정할 것 | 추천 | 이유·대안 |
+|---|---|---|---|
+| 1 | 검색 서비스 모양 | `search-service` 하나가 ES 를 소유: CDC 소비(색인) + 검색 API | 서비스가 자기 저장소를 가진다는 규칙과 맞다. 브리프의 `search-indexer`(색인만) + 검색 API 분리는 서비스가 하나 더 늘고 ES 를 둘이 같이 쓰게 된다 |
+| 2 | CDC 를 쓸지, `product.events`(outbox)로 할지 | **테이블 CDC** (브리프 의도). 대신 테이블이 다른 서비스에 새는 것을 줄인다: 커넥터 `column.include.list` 로 검색에 필요한 열만, `ExtractNewRecordState` 로 변경 후 행만 보내고, 이 토픽 모양을 product-service 의 계약으로 문서화(열은 추가만) | 테이블 CDC 는 내부 스키마가 곧 계약이 되는 약점이 있다(ADR 에 적음). outbox 이벤트가 더 깔끔하지만 이미 3단계에서 보였고, "Debezium 의 두 쓰임새"가 이 단계의 목적 |
+| 3 | 토픽·키 | `product.cdc.products`, 키 = 상품 id | AGENTS.md 키 규칙(orderId, auth 는 userId)에 상품 id 를 예외로 추가. 상품 단위 순서만 필요 |
+| 4 | 중복·순서 | ES 문서 id = 상품 id, **외부 버전 = 원본 LSN**(`version_type=external`) → 같은 변경 재전달은 무시, 늦게 온 옛 변경은 ES 가 거절 | at-least-once(ADR 0006)를 ES 쪽에서 멱등으로. `processed_message` 같은 표가 필요 없다 |
+| 5 | 삭제 | 상품은 지우지 않고 판매 중지(`on_sale`) → 문서에 남기고 검색에서 거른다. tombstone 이 오면 문서 삭제 | 4-1a 가 삭제 API 를 두지 않았다 |
+| 6 | 처음 적재·다시 색인 | 커넥터 `snapshot.mode=initial` 로 기존 행(시드 포함) 적재. 색인 구조를 바꿀 때는 별칭(`products` → `products-v1`) + 새 색인 + Debezium 증분 스냅샷(signal 표)으로 다시 채운 뒤 별칭 전환 | 다시 색인 절차는 문서·스크립트로, 자동화는 하지 않음 |
+| 7 | 한글 검색 | **ngram 분석기**(플러그인 없음, 공식 이미지 그대로) | nori(형태소)는 플러그인 설치 이미지를 따로 빌드해야 한다(release 이미지 11개째). 상품명 부분 일치에는 ngram 으로 충분, nori 는 한계에 적음 |
+| 8 | 검색 기능 | 검색어(이름·설명), 가격 범위, 판매 중인 것만, 정렬(관련도·가격·최신), 페이지(최대 100). 로그인 없이 공개(상품 조회와 같음) | 자동완성·오타 교정·집계(facet)는 하지 않음 |
+| 9 | ES 장애 | 검색만 503. 상품 목록(product-service)·주문은 그대로. 색인 소비자는 ES 가 돌아올 때까지 제자리 재시도(ADR 0012), 돌아오면 따라잡음 | 검색 결과 가격은 조금 늦을 수 있다 → 주문 때 4-1b 가 다시 확인(409)하므로 돈은 맞다 |
+| 10 | 엔진·배포 | Elasticsearch 공식 이미지(단일 노드, 로컬은 보안 끔, 힙 512MB). Helm 차트에 StatefulSet 으로(ECK 오퍼레이터는 쓰지 않음). 라이선스가 걸리면 OpenSearch 로 바꿀 수 있게 클라이언트는 REST 수준만 | ECK 는 kind CI 에 무겁고 노드 하나면 이득이 작다 |
+| 11 | 관측성 | 색인 지연(지금 − 원본 커밋 시각) 지표·경보, 소비자 lag 는 기존 경보 그대로 | 시나리오에서 "가격 변경 → 몇 초 안에 검색 반영"을 이 지표로 보인다 |
+| 12 | 상품 관리 이력(audit) | product-service 안에서 **같은 트랜잭션**으로 `product_audit_log`(누가·언제·무엇: 등록·정보 수정·가격·판매 상태, 바뀐 값 전후)를 남김. 가격 이력(4-1a)은 그대로 두고 관리자 화면에서 함께 보여 줌 | CDC 로 만들 수도 있지만 "누가 바꿨는지"(JWT `sub`)가 테이블에 없어 열을 더 늘려야 한다. 가격 이력과 같은 방식이 단순 |
+
+**PR 나누기 (추천)**
+
+| PR | 범위 |
+|---|---|
+| 4-2a 기반 (완료, PR #82) | product_db 테이블 CDC 커넥터(compose 등록 스크립트·Strimzi `KafkaConnector`), 토픽 `product.cdc.products`, product_svc 에 replication 권한. AGENTS.md 키 규칙에 상품 id. ADR 0010 은 설계 PR(#81)에서. ES 는 4-2b 로(쓰는 search-service 와 같이 들어가야 확인할 수 있음) |
+| 4-2b search-service (완료, PR #89) | ES 를 compose·Helm·CI 에 추가. 새 서비스(헥사고날, DB 없음, ES 가 저장소): CDC 소비 → 외부 버전으로 색인, 검색 API, Gateway `/api/search/**`, 색인 지연 지표. 시나리오 16(가격 변경·판매 중지가 몇 초 안에 검색에 반영, ES 중단 중 검색 503·상품 목록·주문 정상, 복구 뒤 따라잡음, 같은 변경 재전달 무시) |
+| 4-2c 화면 (완료, PR #90) | 상품 목록에 검색창·필터·정렬, 결과에서 바로 담기·주문(가격은 주문 때 다시 확인) |
+| 4-3a 관리 이력 (완료, PR #91) | product-service `product_audit_log`(등록·정보 수정·가격·판매 상태, 바꾼 사람 = JWT `sub`, 시각, 전·후 값을 열로). 상품 변경과 같은 트랜잭션, 값이 그대로인 요청은 남기지 않음. 기존 가격 이력은 V3 에서 가격만 옮김. 조회 `GET /admin/products/{id}/audit-log`(ADMIN, 최근부터, 페이지) |
+| 4-3b 관리자 상품 화면 (완료, PR #94) | 관리자 상품 목록·수정(정보·가격·판매 상태)·상품별 관리 이력, Playwright |
+
+**부담·한계로 적을 것**: ES 메모리(로컬 compose 전체가 약 1GB 늘어남, CI 러너는 여유 있음), 검색 결과는 최종 일관성(수 초 늦을 수 있음), ngram 이라 형태소 검색 아님, 단일 노드라 ES 고가용성 없음.
+
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
 - 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그와 경보(`SagaCompensationStuck`)
-- `processed_message`·주문 `Idempotency-Key` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게) → 4-4절 ②에서 한다
-- 주문 가격을 클라이언트가 보낸다(`unitPrice`, F-1b 결정 (a)) → 4-4절 ① 후속 4-1 가격 스냅샷에서 고친다
-- PG 장애가 길어지면 결제마다 클라이언트 타임아웃(3초)을 기다렸다 `UNKNOWN` 이 되고, 주문은 결제 대기 한도(약 5.5분) 뒤 취소된다. 정합성은 맞지만 빨리 실패하지 못한다 → 4-4절 ③ 서킷 브레이커
+- 멱등 기록 보존: processed_message 30일, Idempotency-Key 7일 뒤 지운다(②). 30일 넘게 지난 메시지를 DLT 에서 재처리하면 중복으로 걸러지지 않고 다시 처리된다(주문별 기록이 한 번 더 막는다, ADR 0006). 7일 지난 키로 다시 보내면 새 주문
+- ~~주문 가격을 클라이언트가 보낸다~~ → 4-1b 에서 서버가 product-service 가격과 비교(다르면 409)하고 서버 가격을 스냅샷한다 (ADR 0016, 시나리오 14). 확인과 주문 트랜잭션 사이에 가격이 또 바뀌면 주문은 확인한 가격으로 들어간다(시나리오 14 설계 표)
+- product-service 가 멈추면 새 주문이 503 (진행 중인 Saga 는 영향 없음, ADR 0016)
+- PG 장애 동안 회로가 열리기 전(최소 10건)의 결제는 지금처럼 타임아웃 → UNKNOWN → 보정. 회로 상태는 인스턴스마다 따로(③, 시나리오 15)
 - 주문 취소 API 없음 (Saga 가 끝나야 결과가 난다) → 4-4절 "정하고 미룬 것"
+- 관리자가 새로 등록한 상품(id 1000~)은 inventory 에 재고 행이 없어 주문하면 재고 예약 실패 → 주문 취소. 재고 등록 API 는 아직 없다(재고는 inventory 소유, 상품 등록 이벤트로 만들지·관리자 API 로 넣을지는 ④ 에서 정한다)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 `ReplicationSlotLag`. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
 - 결제 장애 주입 API 는 ADMIN 역할만 (Gateway `/api/admin/payment-faults` + payment-service `/admin/**`, A-2)
@@ -498,7 +567,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). `ConsumerLagHigh` 경보로 잡는다
 - trace: 단계 타임아웃 재전송·결제 보정 후 응답은 원래 trace 에 잇지 못하고 새 trace 로 시작한다(주문 id 검색으로 모임). 이으려면 Saga 행에 처음 traceparent 를 저장 (ADR 0013)
 - 수집기 Alloy 는 한 개(SPOF): 멈추면 메트릭·trace·로그가 같이 빈다. `MetricsPipelineDown` 경보로 알리는 데까지. 여러 개로 늘리려면 clustering(scrape 분산) + trace id 로 나누는 앞단(tail sampling) (ADR 0013 "메트릭도 Alloy 로")
-- 경보 문턱값은 시연용(짧음), 경보 전달(Alertmanager)은 없음. 운영 값은 ADR 0013 표
+- 경보 문턱값은 시연용(짧음). 경보 전달은 Alertmanager → Discord 웹훅 하나(PR #70). 웹훅 URL 을 넣지 않으면 receiver 가 `null` 이라 전달되지 않는다. 운영 값은 ADR 0013 표
 
 ## 6. 작업 방식 (매 PR 동일)
 

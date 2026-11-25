@@ -1,6 +1,6 @@
 # ADR 0013. 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보
 
-- 상태: 채택 (트레이싱: PR #27, 메트릭·경보: 후속 1 O-2)
+- 상태: 채택 (트레이싱: PR #27, 메트릭·경보: 후속 1 O-2, 경보 전달: Alertmanager → Discord)
 - 날짜: 2026-11-23
 
 ## 배경
@@ -80,7 +80,7 @@ trace는 "이 주문이 어떻게 지나갔나"를 답하지만, "지금 어딘�
 
 - 저장·경보: Prometheus 3.15(compose, 호스트 포트 9091, 다른 Prometheus와 겹치지 않게). 수집은 처음엔 Prometheus 가 직접 했고, 지금은 Alloy 가 긁어 보낸다(아래 "메트릭도 Alloy 로"). 서비스는 호스트에서 뜨므로 `host.docker.internal`(리눅스 CI는 `host-gateway`)로 긁는다
 - lag·DLT는 서비스 메트릭(Kafka 클라이언트 `records-lag`) 대신 kafka-exporter를 쓴다. 서비스가 죽으면 서비스 메트릭도 같이 사라지는데, 그때가 lag를 봐야 할 때라서다. kafka-exporter 1.11은 Kafka Connect 그룹의 할당 정보를 해석하지 못해 오류 로그를 남기지만, 서비스 컨슈머 그룹 lag는 정상으로 나온다
-- 경보 전달(Alertmanager → 메일·메신저)은 두지 않았다. Prometheus·Grafana에서 firing을 확인하는 데까지가 범위다. 운영이면 Alertmanager로 심각도별 라우팅을 둔다
+- ~~경보 전달(Alertmanager → 메일·메신저)은 두지 않았다.~~ → 2026-11-25 에 Alertmanager → Discord 를 붙였다(아래 "경보 전달")
 - Grafana 대시보드 `commerce-saga`(프로비저닝): firing 경보 표, 단계별 진행 중 Saga·가장 오래된 나이, 재전송·포기, 결제 `UNKNOWN`·환불 대기, 그룹별 lag, DLT, outbox·slot 적체
 - 시나리오 12가 장애를 넣고 경보가 실제로 firing 되는지 CI에서 확인한다
 
@@ -116,7 +116,7 @@ trace  : 서비스 ──OTLP push──▶ Alloy ──▶ Tempo
 - Prometheus 는 직접 긁지 않으므로 `/targets` 는 비어 있다. 수집 상태는 `up{job="…"}` 이나 Alloy UI(compose http://localhost:12346)로 본다
 - 새 경보(그룹 `observability`)
   - `MetricsPipelineDown`: `up{job="alloy"}` 가 1분 동안 없음. **수집기가 하나라 Alloy 가 멈추면 메트릭이 통째로 끊기고 `ServiceDown` 도 울리지 않는다**(판단할 `up` 이 없음). 그래서 "사라짐"을 본다. 관측성 스택 자기 지표는 15초 간격으로 긁는다(기본 60초면 1분 창에서 틈이 생겨 잘못 울릴 수 있다)
-  - `ObservabilityTargetDown`: tempo·loki `up=0` 1분
+  - `ObservabilityTargetDown`: tempo·loki·alertmanager `up=0` 1분
   - `ContainerMemoryNearLimit`: 컨테이너 working set 이 limit 의 90% 를 2분 (k8s 만 값이 있다). OOMKilled 직전 신호
 - 확인: 로컬 클러스터의 임시 namespace 에 차트의 관측성 부분만 올려 job 7종(services 7·kafka·tempo·loki·prometheus·alloy·cadvisor)이 들어오고 `service` 라벨이 그대로인 것, Alloy 를 0개로 줄이면 약 40초 뒤 `MetricsPipelineDown` 이 firing 되는 것을 봤다. CI `kind` 잡은 기존처럼 `up{job="services"}`=7·`up{job="kafka"}`=1 을 확인한다
 - Alloy 메모리 limit 256Mi → 512Mi (트래픽 없이 ~170Mi, tail sampling 이 trace 를 10초 들고 있다)
@@ -131,6 +131,24 @@ replicas 만 늘리면 해결되지 않는다.
 - 로그: 상태가 없어 Service 뒤에 여러 개를 둬도 된다
 
 운영(EKS)에서 수집 공백이 문제가 되면 위 순서로 HA 를 붙인다(clustering 으로 scrape 분산 → 2단 trace 수집). 노드마다 하나씩 도는 DaemonSet(파일 로그·kubelet 수집)과 중앙 Deployment(OTLP 수신·tail sampling)로 나누는 구성이 흔하다
+
+### 경보 전달: Prometheus → Alertmanager → Discord (2026-11-25 추가)
+
+경보 규칙은 있었지만 받을 곳이 없어 Prometheus `/alerts`·Grafana 를 열어 봐야만 보였다. 로컬 클러스터에서 컨테이너가 몇 시간 `OOMKilled` 를 반복해도 아무도 모른 것과 같은 문제다. 경보를 사람에게 보낸다.
+
+```
+Prometheus (규칙 평가) ──firing/resolved──▶ Alertmanager (묶기·심각도별 라우팅·반복) ──▶ Discord 웹훅 (휴대폰 푸시)
+```
+
+- **채널: Discord 웹훅.** 개인 프로젝트라 무료로 휴대폰 푸시까지 받을 수 있고, Alertmanager 0.25+ 에 `discord_configs` 가 기본으로 있어 중계 서버가 필요 없다. 회사라면 보통 Slack(`slack_configs`, 팀 채널·스레드)과 PagerDuty(`pagerduty_configs`, 당번 호출·에스컬레이션)를 같이 쓴다: critical 은 PagerDuty 로 사람을 깨우고, warning 은 Slack 채널에 남긴다. 그때는 receiver 만 늘리고 라우팅(아래)은 그대로 둔다
+- **라우팅** (`infra/alertmanager/alertmanager.yml`). `alertname`·`severity` 로 묶는다(토픽·서비스별 경보가 한꺼번에 울려도 메시지 하나). `send_resolved: true` 로 풀릴 때도 알린다
+  - critical(서비스 다운, 보상 멈춤, 환불 대기, slot 적체, 수집기 멈춤): `group_wait 0s`(바로), `group_interval 1m`, `repeat_interval 30m`
+  - warning(나머지): `group_wait 2m`(잠깐 튀었다 풀리는 것은 보내지 않음), `group_interval 5m`, `repeat_interval 12h`
+- **웹훅 URL 은 비밀값이라 저장소에 넣지 않는다.** compose 는 환경 변수 `DISCORD_WEBHOOK_URL`(셸 또는 gitignore 된 `infra/.env`), k8s 는 Secret `alertmanager-discord`(키 `webhook-url`, optional 마운트)로 받는다. Alertmanager 설정은 환경 변수를 펼치지 않으므로, 기동 스크립트(`infra/alertmanager/entrypoint.sh`)가 URL 을 데이터 폴더의 파일로 옮기고 설정은 `webhook_url_file` 로 읽는다
+- **URL 이 없으면 null receiver 로 뜬다.** 기동 스크립트가 설정의 `receiver: discord` 를 `"null"` 로 바꿔 띄운다. CI·처음 받은 사람의 로컬에서도 그대로 기동하고, 경보는 Alertmanager UI(compose http://localhost:9095)·API 에서 보인다. URL 만 넣고 파일을 비워 두면 보낼 때마다 실패를 반복하므로 기동 때 고른다
+- compose 와 k8s 가 같은 설정·스크립트를 쓴다(차트 `files/observability` 사본, CI 가 `diff`). 한 개만 띄우고 gossip 클러스터는 끈다. 여러 개면 `--cluster.peer` 로 묶어야 같은 경보를 두 번 보내지 않는다
+- Alertmanager 자신도 Alloy 가 긁어(`job="alertmanager"`), 죽으면 `ObservabilityTargetDown` 이 뜬다. 다만 그 경보는 전달 경로가 끊긴 상태라 Prometheus `/alerts`·Grafana 에서만 보인다. 전달 경로까지 감시하려면 외부 heartbeat(항상 firing 인 Watchdog 경보를 dead man's switch 서비스로 보내고, 끊기면 그쪽이 알림)를 둔다. 지금은 두지 않았다
+- 확인: compose 로 띄워 (1) URL 없이 기동하면 receiver 가 `null`, (2) URL 을 가짜 웹훅 서버로 주고 `/api/v2/alerts` 에 critical 을 넣으면 곧바로 Discord 형식(embed)으로 POST, 풀리면 `[RESOLVED]` POST, (3) Alloy 없이 띄워 Prometheus 의 `MetricsPipelineDown` 이 그대로 전달되는 것을 봤다. k8s 는 임시 namespace 에서 Secret 없음 → null, Secret 생성 + 재시작 → discord 로 바뀌는 것을 봤다. 실제 Discord 채널에도 compose(firing·resolved)와 k8s(Secret `alertmanager-discord`) 양쪽에서 테스트 경보가 도착했다(`alertmanager_notifications_total{integration="discord"}` 증가, 실패 0). 시나리오 12c 가 CI 에서 firing 경보가 Alertmanager 에 도착하는지 확인한다(CI 에는 URL 이 없어 receiver `null`)
 
 ## 결과
 

@@ -31,7 +31,8 @@ class PaymentTimeoutTest {
     private final StubGateway gateway = new StubGateway();
     private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
     private final PaymentRecorder recorder = new PaymentRecorder(payments, replies, processed, clock);
-    private final PaymentService service = new PaymentService(recorder, gateway, gateway, payments, processed);
+    private final PaymentService service = new PaymentService(recorder, gateway, gateway, payments, processed,
+            new PaymentServiceTest.InMemoryAttempts());
     private final PaymentReconcileService reconciler = new PaymentReconcileService(payments, gateway, recorder,
             new PaymentReconcileProperties(NOT_FOUND_AFTER, 100), clock);
 

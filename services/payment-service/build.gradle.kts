@@ -12,6 +12,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
+    // PG 승인 서킷 브레이커 (PROGRESS 4-4절 ③). Spring 통합 없이 코어만 (설정은 우리 properties 로)
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.3.0")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 

@@ -28,7 +28,7 @@
 - **Postgres·Redis 는 오퍼레이터 없이** 차트 안의 StatefulSet·Deployment 로 둔다(compose 와 같은 단일 인스턴스). 새 오퍼레이터는 Strimzi 하나로 끝낸다. 운영이면 관리형 DB·오퍼레이터(CloudNativePG 등)로 바꿀 자리다
 - Postgres 초기화 SQL 은 `infra/postgres/init` 의 사본을 차트에 둔다(Helm 은 차트 밖 파일을 못 읽는다). CI 가 두 파일이 같은지 검사한다
 - 서비스 trace·로그는 차트 안 alloy 로 보낸다(아래 "관측성"). 관측성을 끄면 내보내지 않는다(`TRACING_SAMPLING_PROBABILITY=0`, `OTLP_LOGGING_EXPORT_ENABLED=false`)
-- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1 에 `Recreate` 전략이다. RollingUpdate 면 재배포 중 키가 다른 옛·새 Pod 가 함께 응답해, 방금 받은 토큰이 다른 Pod 의 JWKS 로 검증돼 401 이 될 수 있다. 여럿이면 키를 Secret 으로 넣는다
+- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1 에 `Recreate` 전략으로 시작했다. RollingUpdate 면 재배포 중 키가 다른 옛·새 Pod 가 함께 응답해, 방금 받은 토큰이 다른 Pod 의 JWKS 로 검증돼 401 이 될 수 있다 → 아래 "auth-service 서명 키" 에서 Secret 으로 고정하고 RollingUpdate 로 바꿨다
 
 ### Kafka: Strimzi `Kafka` + `KafkaNodePool`(KRaft) + `KafkaTopic`, 버전 4.3.2
 
@@ -76,7 +76,21 @@
 - **레지스트리는 GHCR(public)**: `GITHUB_TOKEN` 으로 push, AWS 쪽 설정(ECR·IAM OIDC) 없음, 노드는 인증 없이 pull
 - **개발용 시드 사용자를 넣지 않는다**: 인터넷에 열리므로 EKS 값에서 `AUTH_FLYWAY_LOCATIONS` 를 `classpath:db/migration` 만으로 둔다(저장소에 공개된 admin 비밀번호로 결제 장애 주입이 가능해지는 것을 막음). 가입자 id 를 1000 부터 시작하는 구문은 시드에만 있었으므로 auth-service `V3__user_id_starts_at_1000` 으로 옮겨, 시드 없이도 가입자가 point-service 의 시연용 계정(1~4)을 물려받지 않게 한다
 - **이미지 태그 = 커밋 해시 = ArgoCD 가 sync 하는 revision**: EKS root(`deploy/argocd/eks/root.yaml`)가 `$ARGOCD_APP_REVISION` 을 자식의 `revision`·`imageTag` 로 넘긴다. main 은 ruleset 으로 PR 만 받아 태그를 Git 에 커밋하는 봇이 어렵고, ArgoCD Image Updater 는 root 의 selfHeal 과 부딪친다. 브랜치를 이미지 push 뒤에만 옮기므로 이미지 없는 커밋이 배포되지 않는다
-- 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만
+- 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋. → 아래 "바뀐 서비스만 배포"에서 이미지별 태그로 바꿈). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만(→ 아래 "멀티 아키텍처"에서 arm64 추가)
+
+## 바뀐 서비스만 배포 (2026-11-25, K-4 다음)
+
+K-4 는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나라, 서비스 하나만 바뀌어도 이미지 11개를 다시 빌드하고 앱 Pod 10개를 모두 롤링했다. 컨슈머 전부가 재시작해 Kafka 리밸런스가 연달아 일어나고, 바꾸지 않은 서비스까지 재시작해 장애 범위가 넓어진다.
+
+- 결정: **이미지별 태그를 배포 브랜치에 커밋한다.** release 워크플로가 마지막 배포 이후 바뀐 이미지만 빌드하고(태그 = 이번 main 커밋 해시, 나머지는 이전 태그), `release/eks` 에 release 커밋(그 main 커밋의 파일 + `deploy/argocd/apps/release-tags.yaml`)을 얹는다. apps 차트(`templates/commerce-saga.yaml`)가 이 파일을 `.Files` 로 직접 읽어 앱 차트에 넘기고, 차트가 `image.tags.<이름>` 을 공통 `image.tag` 보다 먼저 쓴다. 태그가 그대로인 Deployment 는 ArgoCD 비교에서 차이가 없어 롤링되지 않는다. root 의 valueFiles 로 읽지 않은 이유: root 는 Git 에서 다시 읽히지 않아(처음 한 번 apply) 이미 등록된 클러스터는 root 를 다시 apply 해야 하고, 그 전에 새 형식 release 가 나가면 모든 이미지가 release 커밋 해시(이미지 없음)를 받는다
+- **비교 기준은 마지막 배포 커밋**(`release-tags.yaml` 의 `releasedCommit`)이다. 직전 커밋과 비교하면 release 의 `concurrency` 로 중간 실행이 건너뛰어지거나 실행이 실패했을 때 그 변경을 놓친다. 마지막 배포 커밋은 성공했을 때만 바뀌므로 다음 실행이 빠진 것을 모두 잡는다
+- **바뀐 것 판단은 경로로**(`scripts/release-plan.sh`): 서비스 폴더 → 그 서비스, 공유 모듈·빌드 설정·서비스 Dockerfile → 백엔드 전부, `frontend/` → frontend, Connect Dockerfile → connect. 서비스끼리 코드 의존이 없다는 규칙(AGENTS.md)이 있어 이 매핑이 성립한다
+- **release 커밋의 부모는 (이전 release 커밋, main 커밋)**: `release/eks` 가 force push 없이 앞으로만 가고 `git log --first-parent` 가 배포 이력이 된다. 롤백은 옛 release 커밋으로 브랜치를 되돌린다
+- 고르지 않은 것
+  - 내용 해시 태그(이미지 입력 파일의 tree 해시): 상태 없이 멱등이지만 태그로 어느 커밋인지 알기 어렵다. 우리는 마지막 배포 커밋이 이미 `release/eks` 에 있어 커밋 해시 태그 + 경로 비교로 같은 결과를 낸다
+  - ArgoCD Image Updater: 컴포넌트가 하나 늘고, root 의 selfHeal·app-of-apps 와 값 덮어쓰기가 얽힌다
+  - 서비스마다 Application(ApplicationSet): 서비스별 sync·롤백이 되지만 차트·values 를 서비스별로 나눠야 한다. 지금은 한 차트로 충분하다
+- 감수한 것: `release/eks` 의 최신 커밋이 main 커밋이 아니라 봇 커밋이다(어느 main 커밋인지는 메시지 `release: <커밋>` 과 `releasedCommit`). 로컬·CI 의 kind 검증은 `image.tags` 없이 공통 태그로 돌아 이미지별 태그 경로는 렌더링(`helm template`)으로만 확인한다
 
 ## 관측성 추가 결정 (2026-11-24, ADR 0013 로그·수집기 다음)
 
@@ -86,3 +100,25 @@
 - kafka-exporter 는 compose 와 같은 이미지를 Deployment 로 둔다. Strimzi 의 `kafkaExporter` 는 Service 를 만들지 않아 정적 대상으로 긁을 수 없다(Pod 디스커버리는 RBAC 가 더 든다)
 - 저장은 emptyDir(Pod 가 바뀌면 사라짐). 밖으로는 열지 않는다(edge 는 화면만). `scripts/k8s-port-forward.sh` 가 Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091 을 compose 와 같은 포트로 연결한다
 - CI `kind` 잡이 시나리오 11(11a·11b·11c: trace 하나에 다섯 서비스, 주문 id 검색, 같은 trace_id 로그가 Loki 에)과 메트릭 수집(alloy 가 보낸 서비스 7 + kafka-exporter up, 경보 규칙 적재)을 확인한다
+
+## 멀티 아키텍처 이미지 (2026-11-24, K-4 다음)
+
+- 이미지 11개(서비스 9 + 화면 + Connect)를 linux/amd64 + linux/arm64 로 낸다. EKS 노드가 Graviton(arm64, 같은 성능에 더 싸다)이어도, 개발자가 Apple Silicon 에서 받아도 같은 `<이름>:<커밋>` 을 쓴다
+- **아키텍처별 네이티브 러너**(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 각각 `<커밋>-amd64`·`<커밋>-arm64` 로 빌드·push 하고, `manifest` 잡이 `docker buildx imagetools create` 로 `<커밋>` 하나에 묶는다. 두 아키텍처가 다 들어갔는지 확인한 뒤에만 `release/eks` 를 옮긴다
+- QEMU 에뮬레이션(buildx `--platform` 하나로)은 설정이 짧지만 arm64 쪽 `npm ci`·`next build` 가 몇 배 느리다. 네이티브 러너는 공개 저장소면 무료
+- Dockerfile 은 그대로다. jar 는 아키텍처와 무관하고, 베이스(`eclipse-temurin:25-jre`, `node:26-alpine`, Strimzi Kafka)와 EKS 가 받는 공개 이미지(Postgres·Redis·Strimzi·관측성·Envoy Gateway)가 모두 arm64 를 제공한다(2026-11-24 `imagetools inspect` 로 확인)
+- 감수한 것: 아키텍처별 태그(`-amd64`, `-arm64`)가 GHCR 에 같이 남는다. bootJar 를 러너마다 한 번씩 빌드한다. CI 의 kind 검증은 amd64 러너에서만 돈다(arm64 이미지는 빌드까지만 확인)
+
+## auth-service 서명 키 (2026-11-25)
+
+임시 키 + `Recreate` 는 배포 때마다 auth-service 가 약 1분 비어(`ServiceDown` 경보) 이전 access token 이 모두 무효였다. 키를 Secret 하나로 고정한다.
+
+- **앱은 읽기만 한다.** Secret(`authJwtKey.secretName`, 기본 `auth-jwt-key`)의 `private.pem`(RSA 2048, PKCS#8 PEM)을 `/etc/auth-jwt` 에 읽기 전용으로 마운트하고 `AUTH_JWT_PRIVATE_KEY_LOCATION=file:/etc/auth-jwt/private.pem`, `kid` 는 `AUTH_JWT_KEY_ID` 로 받는다. 키를 만드는 일은 앱 밖이다
+- **로컬 k8s(kind·docker-desktop + Argo CD)는 hook Job 이 한 번 만든다**(`templates/auth-jwt-key.yaml`). Helm hook `pre-install,pre-upgrade` 이고 Argo CD 는 이를 PreSync 로 돌린다(Argo CD 문서 "Helm Hooks"). Secret 이 있으면 건드리지 않고, 없을 때만 만든다(동시 실행으로 AlreadyExists 면 성공). 권한은 그 namespace 의 secrets get·create 뿐
+- **Secret 은 차트 매니페스트에 넣지 않는다.** 차트에 두면 Argo CD 가 sync 마다 덮어쓰거나 prune 해 키가 바뀐다. Job 이 만든 Secret 에는 Argo CD 추적 표시가 없어 Argo CD 가 관리하지 않는다(일부러). Helm `lookup` + `randAlphaNum` 같은 방식은 Argo CD 가 `helm template` 으로 렌더해 lookup 이 늘 비므로 쓸 수 없다
+- **EKS 등은 외부 비밀 저장소가 같은 이름의 Secret 을 채운다**(External Secrets 등). 그때는 `authJwtKey.generate=false` 로 Job 을 끈다. 앱 쪽 설정은 같다
+- **Secret 을 지우면** 다음 sync 의 Job 이 새 키를 만들고, auth-service 가 다시 뜰 때(재배포·재시작) 새 키로 서명한다. 그 전 access token 은 검증되지 않아 401 → 화면은 refresh 로 새 토큰을 받는다. 키를 바꾸면서 옛 토큰을 살리려면 ADR 0008 의 `auth.jwt.retired-keys` 를 쓴다
+- auth-service 를 `RollingUpdate`(`maxUnavailable: 0`, `maxSurge: 1`)로 바꿨다. 옛·새 Pod 가 같은 키라 함께 응답해도 된다. replicas 도 늘릴 수 있다
+- Job 이미지: `alpine/openssl:3.5.8`(키 생성, initContainer) + `alpine/kubectl:1.36.1`(Secret 생성). 둘 다 sh 가 있는 alpine 기반, amd64·arm64. bitnami 이미지는 2025년 배포 정책 변경으로 쓰지 않는다. 비 root(65534)·읽기 전용 루트·capability 없음, 키는 메모리 emptyDir 에만 둔다
+- 감수한 것: PreSync hook 이라 sync 마다 Job 이 한 번 돈다(수 초). Job 이 실패하면(이미지 pull 실패 등) 그 sync 전체가 실패한다. 키 자동 교체는 없다
+

@@ -6,18 +6,46 @@ name: k8s
 on:
   push:
     branches: [main]
-    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'infra/alertmanager/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
   pull_request:
-    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'infra/alertmanager/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+  # argocd 잡은 PR 에서 배포 설정이 바뀔 때만 돈다 → main 에 들어간 결과는 매일 한 번 다시 본다
+  schedule:
+    - cron: '0 19 * * *' # 매일 04:00 KST
+  workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # PR 에서 배포 설정(차트·ArgoCD·배포 스크립트)이 바뀌었는지. 서비스 코드만 바뀐 PR 은 kind 잡이 같은 차트로 확인하므로
+  # argocd 잡(GitOps 경로: ArgoCD 가 저장소에서 가져와 sync)은 건너뛴다. main push·매일·수동 실행에서는 항상 돈다
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.diff.outputs.deploy }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
+          # 파이프 + grep -q 는 일치하면 바로 끝나 앞쪽이 SIGPIPE 로 실패하고 pipefail 에 걸린다 → here-string
+          if grep -qE '^(deploy/|scripts/k8s-|\.github/workflows/k8s\.yml$)' <<< "$files"; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
   kind:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -28,7 +56,7 @@ jobs:
       - name: 초기화 SQL 사본 확인
         run: diff infra/postgres/init/01-create-service-databases.sql deploy/helm/commerce-saga/files/01-create-service-databases.sql
 
-      # 관측성 설정(alloy·tempo·loki·경보 규칙·Grafana)도 infra/ 의 사본이다. 로컬과 클러스터가 같은 설정을 쓴다
+      # 관측성 설정(alloy·tempo·loki·경보 규칙·Alertmanager·Grafana)도 infra/ 의 사본이다. 로컬과 클러스터가 같은 설정을 쓴다
       - name: 관측성 설정 사본 확인
         run: |
           d=deploy/helm/commerce-saga/files/observability
@@ -37,6 +65,8 @@ jobs:
           diff infra/loki/loki.yaml $d/loki.yaml
           diff infra/prometheus/prometheus.yml $d/prometheus.yml
           diff infra/prometheus/rules/commerce.yml $d/commerce.yml
+          diff infra/alertmanager/alertmanager.yml $d/alertmanager.yml
+          diff infra/alertmanager/entrypoint.sh $d/alertmanager-entrypoint.sh
           diff infra/grafana/provisioning/datasources/datasources.yaml $d/datasources.yaml
           diff infra/grafana/provisioning/dashboards/dashboards.yaml $d/dashboards.yaml
           diff infra/grafana/dashboards/commerce-saga.json $d/commerce-saga.json
@@ -80,7 +110,7 @@ jobs:
         run: bash scripts/smoke-idempotency.sh
 
       # 스케줄러가 아니라 Debezium 이 발행했다는 증거 (e2e 워크플로의 debezium 모드 확인과 같음):
-      # 커넥터 5개 Ready, outbox 는 넣고 바로 지워져 비어 있고, 서비스 DB 마다 replication slot 이 살아 있다
+      # 커넥터 6개(outbox 5 + 상품 테이블 CDC 1) Ready, outbox 는 넣고 바로 지워져 비어 있고, slot 이 살아 있다
       - name: Debezium relay 확인 (커넥터 Ready, outbox 비어 있음, slot)
         run: |
           kubectl -n commerce get kafkaconnector
@@ -92,7 +122,21 @@ jobs:
           done
           kubectl -n commerce exec statefulset/postgres -- psql -U postgres -tAc "select slot_name, database, active from pg_replication_slots"
           active=$(kubectl -n commerce exec statefulset/postgres -- psql -U postgres -tAc "select count(*) from pg_replication_slots where active")
-          [ "$active" = "5" ] || { echo "활성 slot 이 $active 개 (기대 5)"; exit 1; }
+          [ "$active" = "6" ] || { echo "활성 slot 이 $active 개 (기대 6)"; exit 1; }
+
+      - name: 상품 테이블 CDC (시나리오 16)
+        env:
+          KAFKA_EXEC: kubectl -n commerce exec -i commerce-dual-role-0 --
+          KAFKA_BOOTSTRAP: localhost:9092
+        run: bash scripts/smoke-product-cdc.sh
+
+      # ES 중단(17e)은 compose(e2e)에서만
+      - name: 상품 검색 (시나리오 17)
+        env:
+          KAFKA_EXEC: kubectl -n commerce exec -i commerce-dual-role-0 --
+          KAFKA_BOOTSTRAP: localhost:9092
+          SKIP_OUTAGE: "true"
+        run: bash scripts/smoke-search.sh
 
       - name: 화면이 Gateway 를 거쳐 뜨는지
         run: |
@@ -103,17 +147,17 @@ jobs:
       - name: 분산 트레이싱·로그 (시나리오 11)
         run: bash scripts/smoke-tracing.sh
 
-      # alloy 가 서비스 7개와 kafka-exporter 를 긁어 Prometheus 로 보내고 있는지 (경보 규칙이 이 job 들을 본다)
+      # alloy 가 서비스 9개와 kafka-exporter 를 긁어 Prometheus 로 보내고 있는지 (경보 규칙이 이 job 들을 본다)
       - name: 메트릭 대상
         run: |
           up_count() { curl -sf -G http://localhost:9091/api/v1/query --data-urlencode "query=$1" | grep -oE '"value":\[[^]]*"1"\]' | wc -l; }
           for i in $(seq 1 30); do
             s=$(up_count 'up{job="services"}'); k=$(up_count 'up{job="kafka"}')
-            [ "$s" = 7 ] && [ "$k" = 1 ] && break
+            [ "$s" = 9 ] && [ "$k" = 1 ] && break
             sleep 2
           done
-          echo "services up=$s/7, kafka-exporter up=$k/1"
-          [ "$s" = 7 ] && [ "$k" = 1 ]
+          echo "services up=$s/9, kafka-exporter up=$k/1"
+          [ "$s" = 9 ] && [ "$k" = 1 ]
           rules=$(curl -sf http://localhost:9091/api/v1/rules | grep -o '"type":"alerting"' | wc -l)
           echo "경보 규칙 $rules 개"
           [ "$rules" -gt 0 ]
@@ -125,7 +169,7 @@ jobs:
           # Strimzi 는 Deployment 대신 StrimziPodSet 으로 Pod 를 띄운다
           kubectl -n commerce logs -l strimzi.io/kind=KafkaConnect --tail=80 || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
-          for d in auth-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+          for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
             echo "===== $d"
             kubectl -n commerce logs deployment/$d --tail=80 || true
           done
@@ -137,6 +181,8 @@ jobs:
   # 후속 3 K-3: 같은 구성을 ArgoCD(GitOps)로. root Application 하나만 apply 하면 ArgoCD 가 이 PR 의 커밋을 GitHub 에서 가져와
   # Strimzi·Envoy Gateway·commerce-saga 를 sync 한다. 외부 입구는 edge(Gateway API) 하나이고 화면만 연다
   argocd:
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -158,6 +204,14 @@ jobs:
           helm lint deploy/argocd/apps
           # EKS 값(K-4)도 렌더링되는지
           helm lint deploy/argocd/apps -f deploy/argocd/apps/values-eks.yaml
+          # EKS release 커밋처럼 apps 차트에 release-tags.yaml(이미지별 태그)이 있으면 앱 차트 값으로 넘어가고, 그 이미지만 태그가 바뀌는지
+          printf 'commerceValues:\n  image:\n    tags:\n      order-service: per-image-tag\n' > deploy/argocd/apps/release-tags.yaml
+          helm lint deploy/argocd/apps -f deploy/argocd/apps/values-eks.yaml
+          helm template root deploy/argocd/apps -f deploy/argocd/apps/values-eks.yaml | grep -q 'order-service: per-image-tag'
+          rm deploy/argocd/apps/release-tags.yaml
+          out=$(helm template commerce deploy/helm/commerce-saga --set image.tag=common --set image.tags.order-service=per-image-tag)
+          echo "$out" | grep -q 'image: commerce-saga/order-service:per-image-tag'
+          echo "$out" | grep -q 'image: commerce-saga/inventory-service:common'
 
       - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
@@ -191,6 +245,10 @@ jobs:
       - name: 상태·로그
         if: always()
         run: |
+          # ArgoCD 설치(helm --wait)에서 멈추면 commerce 에는 아무것도 없다 → argocd 네임스페이스부터
+          kubectl -n argocd get pods -o wide || true
+          kubectl -n argocd describe pods -l app.kubernetes.io/name=argocd-redis || true
+          kubectl -n argocd get events --sort-by=.lastTimestamp | tail -40 || true
           kubectl -n argocd get applications -o wide || true
           kubectl -n argocd get application commerce-saga -o jsonpath='{.status.conditions}{"\n"}{.status.operationState.message}{"\n"}' || true
           kubectl -n commerce get pods,kafka,kafkaconnector,gateway,httproute -o wide || true

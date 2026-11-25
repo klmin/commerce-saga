@@ -1,23 +1,38 @@
 name: release
 
-# 후속 3 K-4: main 에 머지되면 이미지 9개(서비스 7 + frontend + connect)를 GHCR 에 올리고,
-# 다 올라가면 release/eks 브랜치를 그 커밋으로 옮긴다.
-# EKS 의 ArgoCD 는 release/eks 를 보고(deploy/argocd/eks/root.yaml), 그 커밋 해시를 이미지 태그로 쓴다.
-# → 이미지가 아직 없는 커밋은 배포되지 않는다. 클러스터 권한은 CI 에 없다(ArgoCD 가 클러스터 안에서 가져간다)
+# 후속 3 K-4: main 에 머지되면 마지막 배포 이후 바뀐 이미지만 GHCR 에 올리고,
+# 다 올라가면 release/eks 브랜치에 release 커밋(그 main 커밋 + release-tags.yaml)을 얹는다.
+# EKS 의 ArgoCD 는 release/eks 를 보고(deploy/argocd/eks/root.yaml), release-tags.yaml 의 이미지별 태그를 쓴다.
+# → 바뀐 서비스만 태그가 바뀌어 그 Deployment 만 롤링된다. 이미지가 아직 없는 커밋은 배포되지 않는다.
+#   클러스터 권한은 CI 에 없다(ArgoCD 가 클러스터 안에서 가져간다)
 #
-# 롤백: 이미지가 남아 있는 옛 커밋으로 브랜치를 되돌린다
-#   git push origin <옛 커밋>:refs/heads/release/eks --force
+# 무엇이 바뀌었나: scripts/release-plan.sh 가 "마지막으로 배포된 main 커밋(release-tags.yaml 의 releasedCommit) → 이번 커밋"
+# 사이에 바뀐 경로로 고른다(직전 커밋과 비교하지 않으므로 건너뛴 실행·실패한 실행의 변경도 다음 실행이 잡는다).
+# 바뀐 이미지의 태그 = 이번 main 커밋 해시, 나머지는 이전 태그 그대로.
+#
+# 이미지는 linux/amd64 + linux/arm64 (Graviton 노드·Apple Silicon 에서도 같은 이름으로 받는다).
+# 아키텍처마다 그 아키텍처 러너에서 네이티브로 빌드하고(QEMU 에뮬레이션보다 빠르고, npm 네이티브 의존성도 맞다),
+# 마지막에 <이름>:<커밋> 하나로 묶는다(멀티 아키텍처 매니페스트). 노드는 자기 CPU 에 맞는 쪽을 받는다.
+#
+# 롤백: 옛 release 커밋으로 브랜치를 되돌린다 (release 커밋 목록: git log --first-parent origin/release/eks)
+#   git push origin <옛 release 커밋>:refs/heads/release/eks --force
 on:
   push:
     branches: [main]
     paths-ignore: ['docs/**', '**/*.md']
   workflow_dispatch:
+    inputs:
+      all:
+        description: 바뀌지 않은 이미지까지 모두 다시 빌드
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # release/eks 브랜치 push
   packages: write   # GHCR push
 
-# 머지가 몰려도 한 번에 하나씩, 순서대로 (중간 것은 GitHub 가 건너뛰고 마지막 커밋이 남는다)
+# 머지가 몰려도 한 번에 하나씩, 순서대로 (중간 것은 GitHub 가 건너뛰고 마지막 커밋이 남는다. 건너뛴 커밋의 변경도
+# 마지막 배포 커밋과 비교하므로 빠지지 않는다)
 concurrency:
   group: release
   cancel-in-progress: false
@@ -25,12 +40,53 @@ concurrency:
 env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}/commerce-saga
   TAG: ${{ github.sha }}
-  SERVICES: auth-service order-service inventory-service point-service payment-service notification-service gateway
+  SERVICES: auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway
 
 jobs:
-  images:
+  # 마지막 배포 이후 바뀐 이미지와 release-tags.yaml
+  plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      prev: ${{ steps.plan.outputs.prev }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # 마지막 배포 커밋과 비교한다
+
+      - name: 바뀐 이미지 고르기
+        id: plan
+        env:
+          FORCE_ALL: ${{ inputs.all && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          prev=$(git rev-parse -q --verify refs/remotes/origin/release/eks || true)
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          PREV_RELEASE="$prev" SHA="$TAG" OUT=release-tags.yaml bash scripts/release-plan.sh
+          cat release-tags.yaml
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-tags
+          path: release-tags.yaml
+
+  # 아키텍처별 이미지: <이름>:<커밋>-amd64, <이름>:<커밋>-arm64 (바뀐 것만)
+  images:
+    needs: plan
+    if: needs.plan.outputs.build != ''
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    env:
+      BUILD: ${{ needs.plan.outputs.build }}
     steps:
       - uses: actions/checkout@v7
 
@@ -41,30 +97,104 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
-      # 테스트는 PR 의 CI(backend·e2e·k8s)가 이미 돌렸다. 여기서는 bootJar 만
+      # 테스트는 PR 의 CI(backend·e2e·k8s)가 이미 돌렸다. 여기서는 bootJar 만 (jar 는 아키텍처와 무관하지만
+      # 잡을 나눠 아티팩트로 넘기는 것보다 각자 빌드하는 편이 단순하다)
       - name: bootJar
-        run: ./gradlew $(for s in $SERVICES; do printf ':services:%s:bootJar ' "$s"; done)
+        run: |
+          set -euo pipefail
+          tasks=""
+          for s in $BUILD; do
+            case " $SERVICES " in *" $s "*) tasks="$tasks :services:$s:bootJar" ;; esac
+          done
+          if [ -n "$tasks" ]; then ./gradlew $tasks; else echo "백엔드 변경 없음"; fi
 
       - name: GHCR 로그인
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      # 러너가 linux/amd64 라 이미지도 amd64 다. EKS 노드가 Graviton(arm64)이면 buildx 멀티 아키텍처로 바꿔야 한다
       # source 라벨: GHCR 패키지가 이 저장소에 연결된다
-      - name: 이미지 빌드·push
+      - name: 이미지 빌드·push (${{ matrix.arch }})
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           label="org.opencontainers.image.source=https://github.com/${{ github.repository }}"
           REGISTRY=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
-          for s in $SERVICES; do
-            docker build -f deploy/docker/service.Dockerfile --label "$label" \
-              --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "$REGISTRY/$s:$TAG" .
-          done
-          docker build --label "$label" -t "$REGISTRY/frontend:$TAG" frontend
-          docker build -f deploy/docker/connect.Dockerfile --label "$label" -t "$REGISTRY/connect:$TAG" deploy/docker
-          for s in $SERVICES frontend connect; do
-            docker push "$REGISTRY/$s:$TAG"
+          [ "$(docker version --format '{{.Server.Arch}}')" = "$ARCH" ] || { echo "러너 아키텍처가 $ARCH 가 아님"; exit 1; }
+          for s in $BUILD; do
+            case "$s" in
+              frontend) docker build --label "$label" -t "$REGISTRY/frontend:$TAG-$ARCH" frontend ;;
+              connect) docker build -f deploy/docker/connect.Dockerfile --label "$label" -t "$REGISTRY/connect:$TAG-$ARCH" deploy/docker ;;
+              *) docker build -f deploy/docker/service.Dockerfile --label "$label" \
+                   --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "$REGISTRY/$s:$TAG-$ARCH" . ;;
+            esac
+            docker push "$REGISTRY/$s:$TAG-$ARCH"
           done
 
-      # 이미지가 다 올라간 뒤에만 배포 브랜치를 옮긴다. GITHUB_TOKEN 의 push 는 다른 워크플로를 띄우지 않는다
-      - name: release/eks 를 이 커밋으로
-        run: git push --force origin "$TAG:refs/heads/release/eks"
+  # 두 아키텍처를 <이름>:<커밋> 하나로 묶고, 모든 이미지가 있는지 확인한 뒤에만 배포 브랜치를 옮긴다
+  # 바뀐 이미지가 없어도(차트만 바뀜) release 커밋은 만든다 → ArgoCD 가 새 차트를 sync
+  manifest:
+    needs: [plan, images]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.images.result == 'success' || needs.images.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BUILD: ${{ needs.plan.outputs.build }}
+      PREV: ${{ needs.plan.outputs.prev }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # release 커밋의 부모(이전 release 커밋)가 있어야 한다
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-tags
+          path: ${{ runner.temp }}/release
+
+      - name: GHCR 로그인
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: 멀티 아키텍처 매니페스트
+        run: |
+          set -euo pipefail
+          REGISTRY=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
+          for s in $BUILD; do
+            docker buildx imagetools create -t "$REGISTRY/$s:$TAG" "$REGISTRY/$s:$TAG-amd64" "$REGISTRY/$s:$TAG-arm64"
+          done
+
+      # 새로 만든 것뿐 아니라 이전 태그 그대로인 이미지도 GHCR 에 두 아키텍처로 있는지 본다 (없으면 그 Pod 가 ImagePullBackOff)
+      - name: release-tags.yaml 의 이미지 확인
+        run: |
+          set -euo pipefail
+          REGISTRY=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
+          sed -n 's/^      \([a-z0-9-]*\): *\([0-9a-f]*\)$/\1 \2/p' "$RUNNER_TEMP/release/release-tags.yaml" | while read -r s tag; do
+            # GHCR 는 push 직후 같은 태그를 잠깐 "not found" 로 돌려줄 수 있다(읽기 지연) → 몇 번 다시 본다
+            out=""
+            for i in $(seq 1 10); do
+              if out=$(docker buildx imagetools inspect "$REGISTRY/$s:$tag" 2>&1); then break; fi
+              echo "$s:$tag 아직 조회되지 않음 ($i/10)"; out=""; sleep 3
+            done
+            platforms=$(echo "$out" | grep -oE 'Platform: +linux/(amd64|arm64)' | awk '{print $2}' | sort -u | tr '\n' ' ' || true)
+            echo "$s:${tag:0:7} $platforms"
+            [ "$platforms" = "linux/amd64 linux/arm64 " ] || { echo "$s:$tag 에 두 아키텍처가 없음 (Actions 수동 실행 all 로 다시 빌드)"; exit 1; }
+          done
+
+      # release 커밋 = 이번 main 커밋의 파일 + release-tags.yaml. 부모는 (이전 release 커밋, 이번 main 커밋)
+      # → release/eks 는 force push 없이 앞으로만 간다. git log --first-parent 가 배포 이력이다
+      # GITHUB_TOKEN 의 push 는 다른 워크플로를 띄우지 않는다
+      - name: release/eks 에 release 커밋
+        run: |
+          set -euo pipefail
+          export GIT_INDEX_FILE="$RUNNER_TEMP/release-index"
+          git read-tree "$TAG"
+          blob=$(git hash-object -w "$RUNNER_TEMP/release/release-tags.yaml")
+          git update-index --add --cacheinfo "100644,$blob,deploy/argocd/apps/release-tags.yaml"
+          tree=$(git write-tree)
+          unset GIT_INDEX_FILE
+          parents="-p $TAG"
+          [ -z "$PREV" ] || parents="-p $PREV -p $TAG"
+          msg=$(printf 'release: %s %s\n\n새로 빌드: %s' "${TAG:0:7}" "$(git log -1 --format=%s "$TAG")" "${BUILD:-(없음, 차트만)}")
+          commit=$(GIT_AUTHOR_NAME="github-actions[bot]" GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com" \
+            GIT_COMMITTER_NAME="github-actions[bot]" GIT_COMMITTER_EMAIL="41898282+github-actions[bot]@users.noreply.github.com" \
+            git commit-tree "$tree" $parents -m "$msg")
+          git push origin "$commit:refs/heads/release/eks"
+          echo "release/eks → $commit (main ${TAG:0:7}, 새로 빌드: ${BUILD:-없음})"

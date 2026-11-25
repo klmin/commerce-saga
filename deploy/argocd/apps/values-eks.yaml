@@ -1,11 +1,16 @@
 # EKS 값 (후속 3 K-4). deploy/argocd/eks/root.yaml 이 values.yaml 위에 덮는다.
-# revision·imageTag 는 root 가 커밋 해시로 넣는다
+# revision 은 root 가 커밋 해시로, 이미지별 태그는 release/eks 의 release-tags.yaml 이 넣는다 (release 워크플로가 쓴다)
 
 commerceValues:
   image:
     # release 워크플로가 올리는 곳: ghcr.io/<owner>/commerce-saga/<이름>:<커밋 해시>
     # GHCR 패키지가 private 이면 노드가 못 받는다 → 패키지 9개를 public 으로 (deploy/README.md)
     registry: ghcr.io/klmin
+
+  # auth-service 서명 키 Secret(auth-jwt-key). 지금은 로컬과 같이 hook Job 이 한 번 만든다.
+  # 외부 비밀 저장소(External Secrets → AWS Secrets Manager 등)로 같은 이름의 Secret 을 채우면 아래를 켠다
+  # authJwtKey:
+  #   generate: false
 
   # trace·로그의 deployment.environment.name
   observability:

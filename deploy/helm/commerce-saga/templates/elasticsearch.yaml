@@ -1,0 +1,67 @@
+{{- if .Values.elasticsearch.enabled }}
+# 상품 검색 저장소 (후속 4-2b, ADR 0010). search-service 만 쓴다. 단일 노드, 클러스터 안이라 보안 끔(compose 와 같음).
+# 색인을 PVC 에 둔다: 비우면 CDC 소비 오프셋은 커밋돼 있어 다시 채워지지 않는다(그때는 다시 색인, ADR 0010 결정 6)
+# ECK 오퍼레이터는 쓰지 않는다 (노드 하나에 이득이 작고 kind CI 에 무겁다)
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  labels: {{- include "commerce.labels" (dict "name" "elasticsearch" "root" .) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: elasticsearch
+  ports:
+    - name: http
+      port: 9200
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  labels: {{- include "commerce.labels" (dict "name" "elasticsearch" "root" .) | nindent 4 }}
+spec:
+  serviceName: elasticsearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: elasticsearch
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "elasticsearch" "root" .) | nindent 8 }}
+    spec:
+      securityContext:
+        # 이미지가 uid 1000 으로 돈다. PVC 에 쓸 수 있게
+        fsGroup: 1000
+      containers:
+        - name: elasticsearch
+          image: {{ .Values.elasticsearch.image }}
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: xpack.security.enabled
+              value: "false"
+            # 노드의 vm.max_map_count 를 바꾸지 않아도 뜨게 (kind·관리형 노드)
+            - name: node.store.allow_mmap
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: {{ .Values.elasticsearch.javaOpts | quote }}
+          ports:
+            - name: http
+              containerPort: 9200
+          readinessProbe:
+            httpGet: { path: "/_cluster/health?wait_for_status=yellow&timeout=1s", port: http }
+            periodSeconds: 5
+            failureThreshold: 60
+          resources: {{- toYaml .Values.elasticsearch.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.elasticsearch.storage }}
+{{- end }}

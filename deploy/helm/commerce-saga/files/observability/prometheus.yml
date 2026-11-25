@@ -6,3 +6,9 @@ global:
 
 rule_files:
   - /etc/prometheus/rules/*.yml
+
+# firing 경보를 Alertmanager 로 보낸다. 묶기·심각도별 라우팅·Discord 전달은 그쪽(infra/alertmanager/alertmanager.yml)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]

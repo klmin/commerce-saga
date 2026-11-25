@@ -69,7 +69,7 @@ ok "포인트 계정 생성 $(( $(date +%s%3N) - started ))ms 안에 확인, 잔
 
 echo "== 13b. 그 포인트로 주문"
 res=$(call POST /api/orders "${auth[@]}" -H 'Content-Type: application/json' \
-  -d "{\"lines\":[{\"productId\":1,\"quantity\":1,\"unitPrice\":1000}],\"pointAmount\":$USE_POINT}")
+  -d "{\"lines\":[{\"productId\":1,\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":$USE_POINT}")
 [ "$(status_of <<< "$res")" = 201 ] || fail "주문 → $(status_of <<< "$res")"
 order_id=$(body_of <<< "$res" | field orderId)
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))

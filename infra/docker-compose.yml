@@ -98,14 +98,34 @@ services:
       - |
         # <토픽>.DLT: 재시도해도 처리할 수 없는 원본 메시지 보관 (리스너 에러 핸들러가 옮긴다)
         # auth.events: 키가 userId (가입 → 포인트 계정, 후속 2 A-3-2)
-        for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events auth.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT auth.events.DLT; do
+        # product.cdc.products: products 테이블 CDC(검색용, ADR 0010). 키가 상품 id
+        for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events auth.events product.cdc.products inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT auth.events.DLT product.cdc.products.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$t" --partitions 3 --replication-factor 1
         done
         # Debezium 커넥터 heartbeat (heartbeat.interval.ms). 트래픽이 없는 DB 의 slot 위치를 앞으로 옮긴다 (시나리오 5)
-        for c in order-outbox inventory-outbox point-outbox payment-outbox auth-outbox; do
+        for c in order-outbox inventory-outbox point-outbox payment-outbox auth-outbox product-cdc; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "__debezium-heartbeat.$$c" --partitions 1 --replication-factor 1
         done
     restart: "no"
+
+  # 상품 검색 저장소 (후속 4-2b, ADR 0010). search-service 만 쓴다(다른 서비스는 접근하지 않음). 단일 노드, 로컬은 보안 끔
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      # 힙 512MB (컨테이너 전체 약 1GB)
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    # 색인을 남긴다. 소비 오프셋(Kafka 볼륨)과 수명을 맞춰야 재기동 뒤 검색이 비지 않는다 (CDC 스냅샷은 처음 한 번뿐)
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
 
   # Debezium outbox relay. 브로커와 같은 apache/kafka 이미지 위에 Debezium Postgres 플러그인을 얹는다 (connect/Dockerfile)
   # 서비스마다 커넥터 하나(connect/<서비스>-outbox.json)가 자기 DB 의 outbox 를 읽어 aggregatetype 토픽으로 보낸다
@@ -124,6 +144,7 @@ services:
       POINT_DB_PASSWORD: point_svc
       PAYMENT_DB_PASSWORD: payment_svc
       AUTH_DB_PASSWORD: auth_svc
+      PRODUCT_DB_PASSWORD: product_svc
     ports:
       # 8083 은 point-service 가 쓰므로 호스트에는 8088 로 연다
       - "${CONNECT_PORT:-8088}:8083"
@@ -164,7 +185,7 @@ services:
     environment:
       # tail sampling: 오류·느린 trace 를 뺀 나머지 중 남길 비율(%). actuator trace 는 늘 버린다
       TRACE_SAMPLING_PERCENT: ${TRACE_SAMPLING_PERCENT:-100}
-      # 메트릭을 긁을 서비스 7개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
+      # 메트릭을 긁을 서비스 9개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
       METRICS_SERVICE_TARGETS: >-
         [{"__address__":"host.docker.internal:8081","service":"order-service"},
         {"__address__":"host.docker.internal:8082","service":"inventory-service"},
@@ -172,6 +193,8 @@ services:
         {"__address__":"host.docker.internal:8084","service":"payment-service"},
         {"__address__":"host.docker.internal:8085","service":"notification-service"},
         {"__address__":"host.docker.internal:8086","service":"auth-service"},
+        {"__address__":"host.docker.internal:8087","service":"product-service"},
+        {"__address__":"host.docker.internal:8089","service":"search-service"},
         {"__address__":"host.docker.internal:8000","service":"gateway"}]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -216,8 +239,28 @@ services:
       - ./prometheus:/etc/prometheus:ro
     ports:
       - "${PROMETHEUS_PORT:-9091}:9090"
+    depends_on:
+      - alertmanager
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/-/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  # 경보 전달 (ADR 0013 "경보 전달"). prometheus 가 firing 경보를 보내면 심각도별로 묶어 Discord 웹훅으로 보낸다
+  # 웹훅 URL 은 비밀값이라 저장소에 넣지 않는다: DISCORD_WEBHOOK_URL 을 셸에서 export 하거나 infra/.env(gitignore)에 둔다.
+  # 없으면 null receiver 로 뜬다(경보는 http://localhost:9095 UI·API 에서만). 호스트 포트는 표준 9093 에서 비킴
+  alertmanager:
+    image: prom/alertmanager:v0.29.0
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+    ports:
+      - "${ALERTMANAGER_PORT:-9095}:9093"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9093/-/ready"]
       interval: 3s
       timeout: 5s
       retries: 30
@@ -249,3 +292,4 @@ services:
 volumes:
   postgres-data:
   kafka-data:
+  elasticsearch-data:

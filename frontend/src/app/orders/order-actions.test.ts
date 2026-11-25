@@ -25,8 +25,20 @@ const { placeOrderAction } = await import("./order-actions");
 
 const KEY = "11111111-2222-4333-8444-555555555555";
 
+// 화면에 보인 상품 (hidden 필드)
+const SHOWN = {
+  productIds: "1,2",
+  "name-1": "무선 키보드",
+  "price-1": "39000",
+  "name-2": "무선 마우스",
+  "price-2": "25000",
+};
+
 function form(fields: Record<string, string>) {
   const data = new FormData();
+  for (const [k, v] of Object.entries(SHOWN)) {
+    data.set(k, v);
+  }
   for (const [k, v] of Object.entries(fields)) {
     data.set(k, v);
   }
@@ -39,7 +51,7 @@ beforeEach(() => {
 });
 
 describe("placeOrderAction", () => {
-  it("폼의 Idempotency-Key 와 고정 가격으로 주문하고 상세로 간다", async () => {
+  it("폼의 Idempotency-Key 와 화면에 보인 가격으로 주문하고 상세로 간다", async () => {
     placeOrderMock.mockResolvedValue({ orderId: "01a2-order" });
 
     await expect(
@@ -77,6 +89,70 @@ describe("placeOrderAction", () => {
     expect(state.idempotencyKey).not.toBe(KEY);
     expect(state.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
     expect(state.error).toMatch(/내용이 달라/);
+  });
+
+  it("가격이 바뀌었으면(409) 지금 가격을 돌려주고 키는 그대로. 다시 누르면 그 가격으로 보낸다", async () => {
+    placeOrderMock.mockRejectedValueOnce(
+      new ApiError(409, "price changed", {
+        status: 409,
+        currentPrices: [
+          { productId: 1, price: 42_000 },
+          { productId: 2, price: 25_000 },
+        ],
+      }),
+    );
+
+    const state = await placeOrderAction(
+      { idempotencyKey: KEY },
+      form({ idempotencyKey: KEY, "qty-1": "1" }),
+    );
+
+    expect(state).toMatchObject({
+      idempotencyKey: KEY,
+      error: expect.stringMatching(/가격이 바뀌었습니다/),
+      currentPrices: { 1: 42_000, 2: 25_000 },
+    });
+
+    // 폼은 바뀐 가격을 hidden 필드에 넣어 다시 보낸다
+    placeOrderMock.mockResolvedValue({ orderId: "01a2-order" });
+    await expect(
+      placeOrderAction(state, form({ idempotencyKey: KEY, "qty-1": "1", "price-1": "42000" })),
+    ).rejects.toThrow("NEXT_REDIRECT:/orders/01a2-order");
+    expect(placeOrderMock).toHaveBeenLastCalledWith(
+      { lines: [{ productId: 1, quantity: 1, unitPrice: 42_000 }], pointAmount: 0 },
+      KEY,
+    );
+  });
+
+  it("장바구니 주문이면 fromCart 를 함께 보낸다", async () => {
+    placeOrderMock.mockResolvedValue({ orderId: "01a2-order" });
+
+    await expect(
+      placeOrderAction(
+        { idempotencyKey: KEY },
+        form({ idempotencyKey: KEY, "qty-1": "1", fromCart: "true" }),
+      ),
+    ).rejects.toThrow("NEXT_REDIRECT:/orders/01a2-order");
+
+    expect(placeOrderMock).toHaveBeenCalledWith(
+      {
+        lines: [{ productId: 1, quantity: 1, unitPrice: 39_000 }],
+        pointAmount: 0,
+        fromCart: true,
+      },
+      KEY,
+    );
+  });
+
+  it("판매 중지 상품(422)은 메시지를 보여 주고 키는 그대로", async () => {
+    placeOrderMock.mockRejectedValue(new ApiError(422, "주문할 수 없는 상품입니다: [1]"));
+
+    const state = await placeOrderAction(
+      { idempotencyKey: KEY },
+      form({ idempotencyKey: KEY, "qty-1": "1" }),
+    );
+
+    expect(state).toEqual({ idempotencyKey: KEY, error: "주문할 수 없는 상품입니다: [1]" });
   });
 
   it("백엔드 검증 오류는 메시지를 보여 주고 키는 그대로", async () => {

@@ -31,7 +31,7 @@ jobs:
           docker compose -f infra/docker-compose.yml run --rm --no-deps kafka-init
           topics=$(docker compose -f infra/docker-compose.yml exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list)
           echo "$topics"
-          for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT; do echo "$topics" | grep -qx "$t"; done
+          for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events auth.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT auth.events.DLT; do echo "$topics" | grep -qx "$t"; done
 
       # connect 이미지(apache/kafka + Debezium 플러그인)가 뜨고 Postgres 커넥터를 로드했는지
       - name: Kafka Connect·Debezium 플러그인 확인
@@ -39,7 +39,8 @@ jobs:
           plugins=$(curl -sf http://localhost:8088/connector-plugins)
           echo "$plugins"
           echo "$plugins" | grep -q '"class":"io.debezium.connector.postgresql.PostgresConnector"'
-          for s in order inventory point payment; do
+          # Debezium 이 WAL 을 읽는 서비스 (outbox 5개 + 상품 테이블 CDC, ADR 0010)
+          for s in order inventory point payment auth product; do
             r=$(docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD=postgres postgres psql -U postgres -tAc "select rolreplication from pg_roles where rolname = '${s}_svc'")
             [ "$r" = "t" ] || { echo "${s}_svc 에 replication 권한 없음"; exit 1; }
           done
@@ -53,9 +54,12 @@ jobs:
           pg payment_svc payment_svc payment_db
           pg notification_svc notification_svc notification_db
           pg auth_svc auth_svc auth_db
+          pg product_svc product_svc product_db
           # 다른 서비스 DB 에는 접속할 수 없어야 한다
           if pg order_svc order_svc inventory_db; then echo "order_svc 가 inventory_db 에 접속됨"; exit 1; fi
           if pg auth_svc auth_svc order_db; then echo "auth_svc 가 order_db 에 접속됨"; exit 1; fi
+          if pg product_svc product_svc order_db; then echo "product_svc 가 order_db 에 접속됨"; exit 1; fi
+          if pg order_svc order_svc product_db; then echo "order_svc 가 product_db 에 접속됨"; exit 1; fi
 
       - name: Redis 확인 (auth-service)
         run: docker compose -f infra/docker-compose.yml exec -T redis redis-cli ping | grep -qx PONG

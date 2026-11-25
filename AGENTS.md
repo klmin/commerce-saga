@@ -34,6 +34,8 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | point-service | 포인트 차감 / 환불 |
 | payment-service | 가짜 PG (지연·실패·타임아웃 주입) |
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
+| product-service | 상품·가격의 주인, 가격 변경 이력. 공개 조회 API(order 가 주문 때 동기 조회, ADR 0016). 메시지를 발행하지 않음(products 테이블은 Debezium 이 검색용으로 복제, ADR 0010) |
+| search-service | 상품 검색. `product.cdc.products`(테이블 CDC)를 소비해 Elasticsearch 에 색인(외부 버전 = 원본 LSN), 공개 검색 API. ES 가 자기 저장소(DB 없음) (ADR 0010) |
 | auth-service | 회원가입·로그인, access token(JWT RS256) 발급·JWKS, refresh token 회전(Redis). 메시지를 주고받지 않음 (ADR 0008) |
 | gateway | Spring Cloud Gateway(WebFlux). `/auth/**` → auth-service, `/api/<자원>/**` → 서비스, JWT 1차 검증·역할·사용자별 rate limit (ADR 0008) |
 
@@ -52,13 +54,14 @@ docker compose -f infra/docker-compose.yml up -d
 - **다른 서비스의 DB·테이블에 접근하지 않는다.** 로컬은 Postgres 하나에 DB를 나눠 쓰지만, 서비스마다 DB와 계정이 따로다. 다른 서비스 데이터가 필요하면 메시지로 받는다
 - **서비스끼리 모듈을 공유하지 않는다.** `services/*` 간 의존 금지. 공유는 `libs/messaging-contract`(스키마)와 `libs/outbox`(인프라)까지. 도메인 클래스를 libs로 옮기지 않는다
 - 서비스 간 **상태 변경**(커맨드·Saga 단계·보상)은 Kafka 메시지로만 한다. 동기 HTTP 로 다른 서비스의 상태를 바꾸지 않는다 (ADR 0000: 장애 격리)
-- 다른 서비스의 **데이터 조회**가 필요하면 먼저 이벤트로 받아 자기 DB 에 읽기 모델을 둔다. 서비스 간 동기 조회는 읽기 모델이 과하거나 실시간 값이 꼭 필요할 때만, ADR 로 이유를 남기고 타임아웃·fallback 을 둔다. Saga 단계를 처리하는 리스너 안에서는 동기 조회도 하지 않는다
+- 다른 서비스의 **데이터 조회**가 필요하면 먼저 이벤트로 받아 자기 DB 에 읽기 모델을 둔다. 서비스 간 동기 조회는 읽기 모델이 과하거나 실시간 값이 꼭 필요할 때만, ADR 로 이유를 남기고 타임아웃·fallback 을 둔다(예: 주문 때 상품 가격, ADR 0016). Saga 단계를 처리하는 리스너 안에서는 동기 조회도 하지 않는다
 - 외부 시스템 호출은 그 서비스의 `adapter.out` 에서 동기로, 트랜잭션 밖에서 한다. 상태나 돈을 바꾸는 호출(PG 결제·환불 등)은 타임아웃이면 실패가 아니라 "결과 모름"으로 다뤄 조회로 확정한다 (ADR 0007)
 - 메시지 종류와 토픽
   - 커맨드(명령형, 수신자 하나, 응답 기대): `<수신 서비스>.command` — 수신 서비스 소유
   - 응답: `<응답 서비스>.reply` — 오케스트레이터만 구독
   - 이벤트(과거형 사실, 수신자 0~N): `<발행 서비스>.events` — 발행 서비스 소유
-- Kafka 메시지 키는 `orderId` (주문 단위 순서 보장). 주문과 상관없는 `auth.events` 는 `userId`
+  - 테이블 CDC(읽기 모델 복제용, 비즈니스 코드가 발행하지 않음): `<소유 서비스>.cdc.<테이블>` — 테이블 소유 서비스의 계약, 열은 추가만 (ADR 0010)
+- Kafka 메시지 키는 `orderId` (주문 단위 순서 보장). 주문과 상관없는 `auth.events` 는 `userId`, `product.cdc.products` 는 상품 id
 - 메시지에 JWT·비밀값을 싣지 않는다. 식별자(`userId`, `orderId`)만
 
 ## Saga / Outbox / 멱등성

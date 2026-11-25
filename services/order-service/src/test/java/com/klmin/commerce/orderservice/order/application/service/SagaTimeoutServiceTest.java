@@ -32,7 +32,7 @@ class SagaTimeoutServiceTest {
     private final Recording sent = new Recording();
     private final OrderService orderService =
             new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(),
-                    new InMemoryIdempotencyKeys(), clock);
+                    new InMemoryIdempotencyKeys(), new InMemoryCart(), clock);
     private final SagaTimeoutService timeouts = new SagaTimeoutService(orders, orders, sagas, sent, sent,
             new SagaTimeoutProperties(STEP, 1, 2, 100), clock);
 

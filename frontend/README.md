@@ -2,7 +2,7 @@
 
 Next.js 16 (App Router, Cache Components) / React 19 / TypeScript / Tailwind 4 / shadcn/ui. 설계는 [ADR 0011](../docs/adr/0011-frontend-nextjs-bff-session.md).
 
-브라우저는 Next 만 본다. Next 서버가 로그인 토큰을 httpOnly 쿠키(`cs_access`, `cs_refresh`)로 들고 Gateway(`BACKEND_URL`, 기본 http://localhost:8000)를 부른다. access token 이 만료되면 `src/proxy.ts` 가 화면 요청 전에 refresh 한다.
+브라우저는 Next 만 본다. Next 서버가 로그인 토큰을 httpOnly 쿠키(`cs_access`, `cs_refresh`)로 들고 Gateway(`BACKEND_URL`, 기본 http://localhost:8000)를 부른다. access token 이 만료되면 `src/proxy.ts` 가 화면 요청 전에 refresh 한다. access 쿠키가 있어도 백엔드가 401 이면(서명 키 교체 등) `/session/renew` 가 access 쿠키를 지워 refresh 를 한 번 시도하게 하고, 그 뒤에도 401 이면 로그인 화면으로 보낸다(`src/lib/auth/renew.ts`).
 
 ## 실행
 
@@ -22,18 +22,19 @@ npm run dev                  # http://localhost:3500 (package.json 에 고정. 3
 
 ## 화면
 
-| 경로                | 내용                                                                                                 |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `/`                 | 내 포인트, 상품 1~5(이름·가격은 `src/lib/products.ts` 고정, 재고는 inventory)                        |
-| `/orders/new`       | 주문. 폼을 열 때 정한 `Idempotency-Key` 로 보내 여러 번 눌러도 주문 한 건                            |
-| `/orders`           | 내 주문 (최신순, `?before=` 커서)                                                                    |
-| `/orders/[orderId]` | 주문 내용 + Saga 단계(재고·포인트·결제, 실패하면 무엇을 되돌렸는지) + 기록. 진행 중이면 1초마다 갱신 |
-| `/points`           | 잔액 + 포인트 내역(주문 사용·가입 축하 지급, 최신순 커서). 주문 사용은 누르면 주문 상세              |
-| `/payments`         | 결제 내역 (최신순 커서, 상태: 결제 완료·거절·확인 중·결제 전 취소·환불됨)                            |
-| `/notifications`    | 알림 (order.events 를 받은 notification-service, 최신순 커서)                                        |
-| `/sessions`         | 로그인 기기 (헤더의 사용자 번호). 다른 기기 로그아웃, 모든 기기에서 로그아웃                         |
-| `/admin`            | 관리자(ADMIN 만, 아니면 404): 결제 장애 주입(승인·거절·지연), DLT 는 Kafka UI·`scripts/dlt.sh` 안내  |
-| `/login`, `/signup` | 로그인, 회원가입(바로 로그인)                                                                        |
+| 경로                | 내용                                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `/cart`             | 장바구니: 수량 변경·빼기, 담은 뒤 가격이 바뀌면 `담을 때 → 지금`, 장바구니 주문(주문한 상품이 빠짐)                 |
+| `/`                 | 내 포인트, 판매 중 상품(product-service `/api/products`, 재고는 inventory). 가격은 안내용, 주문 때 서버가 다시 확인 |
+| `/orders/new`       | 주문. 폼을 열 때 정한 `Idempotency-Key` 로 보내 여러 번 눌러도 주문 한 건                                           |
+| `/orders`           | 내 주문 (최신순, `?before=` 커서)                                                                                   |
+| `/orders/[orderId]` | 주문 내용 + Saga 단계(재고·포인트·결제, 실패하면 무엇을 되돌렸는지) + 기록. 진행 중이면 1초마다 갱신                |
+| `/points`           | 잔액 + 포인트 내역(주문 사용·가입 축하 지급, 최신순 커서). 주문 사용은 누르면 주문 상세                             |
+| `/payments`         | 결제 내역 (최신순 커서, 상태: 결제 완료·거절·확인 중·결제 전 취소·환불됨)                                           |
+| `/notifications`    | 알림 (order.events 를 받은 notification-service, 최신순 커서)                                                       |
+| `/sessions`         | 로그인 기기 (헤더의 사용자 번호). 다른 기기 로그아웃, 모든 기기에서 로그아웃                                        |
+| `/admin`            | 관리자(ADMIN 만, 아니면 404): 결제 장애 주입(승인·거절·지연), DLT 는 Kafka UI·`scripts/dlt.sh` 안내                 |
+| `/login`, `/signup` | 로그인, 회원가입(바로 로그인)                                                                                       |
 
 상품 가격은 서버가 정하지 않고 Next 의 고정 목록 값을 보낸다(상품 서비스가 없다, PROGRESS 준비 메모 #5).
 

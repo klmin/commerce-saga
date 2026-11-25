@@ -89,3 +89,49 @@ spec:
         resources:
           requests:
             storage: {{ .Values.postgres.storage }}
+---
+# 서비스 DB·계정을 배포할 때마다 다시 적용한다. initdb.d 는 볼륨이 처음 만들어질 때만 돌아서, 기존 PVC 가 있는 클러스터에
+# 새 서비스(예: product-service)를 추가하면 그 DB·계정이 생기지 않는다. SQL 은 이미 있으면 건너뛰므로(멱등) 매번 돌려도 된다.
+# helm upgrade 는 revision 마다 새 Job(끝나면 1시간 뒤 삭제), ArgoCD 는 Sync hook(이전 것을 지우고 매 sync 실행)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-postgres-init-{{ .Release.Revision }}
+  labels: {{- include "commerce.labels" (dict "name" "postgres-init" "root" .) | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 10
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "postgres-init" "root" .) | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: {{ .Values.postgres.image }}
+          command:
+            - sh
+            - -c
+            - >-
+              until pg_isready -h postgres -p 5432 -U postgres; do sleep 2; done;
+              psql -v ON_ERROR_STOP=1 -h postgres -U postgres -d postgres -f /sql/01-create-service-databases.sql
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgres
+                  key: POSTGRES_PASSWORD
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+      volumes:
+        - name: sql
+          configMap:
+            name: {{ .Release.Name }}-postgres-init

@@ -15,7 +15,7 @@
 | 저장 | order-service `order_idempotency_keys (user_id, idempotency_key)` PK + `order_id` (`orders` FK, 커밋 때 검사) — Flyway V6 |
 | 동시 요청 | 주문 트랜잭션 첫 단계에서 `insert … on conflict do nothing`으로 키를 선점한다. 늦은 쪽은 앞 트랜잭션이 끝날 때까지 PK 인덱스에서 기다렸다가, 앞이 커밋하면 0건 → 그 주문을 읽어 돌려주고, 롤백하면 1건 → 이어받아 주문을 만든다. `processed_message`와 같은 선점 방식 |
 | 원자성 | 키 선점 + 주문 + Saga + 재고 예약 커맨드(outbox) = 한 트랜잭션. 주문이 롤백되면 키도 없다 (키만 남아 다음 재시도를 막는 일이 없음) |
-| 보존 기간 | 정리 작업 없음 (한계). 키는 주문과 함께 남는다 |
+| 보존 기간 | 7일(`IDEMPOTENCY_KEY_RETENTION`). 지난 키는 order-service 정리 스케줄러가 지운다(1시간마다, 1,000건씩). 지난 뒤 같은 키로 보내면 **새 주문**이 된다. 주문은 지우지 않는다 (PROGRESS 4-4절 ②) |
 
 내 주문·결제 목록은 알림 목록과 같은 커서 페이징이다: `GET /api/orders?before=<orderId>&size=`, `GET /api/payments?before=<paymentId>&size=` (`size` 1~50, 기본 20, 최신순). id가 UUIDv7이라 id 순서가 생성 순서와 같다. 경로에 사용자 id를 받지 않고 토큰의 `sub`로만 거른다(남의 목록을 볼 방법이 없음). 인덱스 `(user_id, id)` (order·payment V6).
 

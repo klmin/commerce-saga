@@ -22,6 +22,8 @@ POINT_URL=${POINT_URL:-http://localhost:8083}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 USER_ID=${USER_ID:-2}
 PRODUCT_ID=${PRODUCT_ID:-3}
+# 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
+UNIT_PRICE=${UNIT_PRICE:-$(case $PRODUCT_ID in 1) echo 39000;; 2) echo 25000;; 3) echo 18000;; 4) echo 12000;; *) echo 45000;; esac)}
 POINT_AMOUNT=${POINT_AMOUNT:-100}
 # order-service 의 saga.timeout 값과 맞춘다
 STEP_TIMEOUT_SECONDS=${STEP_TIMEOUT_SECONDS:-10}
@@ -83,7 +85,7 @@ cleanup() { point_up || start_point; }
 trap cleanup EXIT
 
 place_order() {
-  local body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":1000}],\"pointAmount\":$POINT_AMOUNT}"
+  local body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
   curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" \
     | field orderId
 }

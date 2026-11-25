@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
@@ -33,6 +34,20 @@ async function PaymentFaults() {
 export default function AdminPage() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
+      <Card>
+        <CardHeader>
+          <CardTitle>상품 관리</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 text-sm">
+          <p className="text-muted-foreground">
+            상품 등록·이름·설명·가격·판매 상태를 바꾸고, 상품마다 누가·언제·무엇을 바꿨는지 관리
+            이력을 본다.
+          </p>
+          <Link href="/admin/products" className="self-start underline underline-offset-4">
+            상품 관리로 가기
+          </Link>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>결제 장애 주입</CardTitle>

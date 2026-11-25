@@ -89,12 +89,12 @@ groups:
           description: "수집기가 멈췄거나 Prometheus 로 보내지 못한다. 그동안 다른 경보는 판단할 데이터가 없다. trace·로그도 같은 수집기를 지난다"
 
       - alert: ObservabilityTargetDown
-        expr: up{job=~"tempo|loki"} == 0
+        expr: up{job=~"tempo|loki|alertmanager"} == 0
         for: 1m
         labels: {severity: warning}
         annotations:
           summary: "{{ $labels.job }} 가 응답하지 않음"
-          description: "trace(tempo)·로그(loki) 저장소가 죽어 있으면 그동안 들어온 것은 버려진다"
+          description: "trace(tempo)·로그(loki) 저장소가 죽어 있으면 그동안 들어온 것은 버려진다. alertmanager 가 죽어 있으면 경보가 Discord 로 가지 않는다(Prometheus /alerts 에서만 보인다)"
 
       # k8s 에서만 값이 있다(노드 kubelet 의 컨테이너 지표, 차트의 kubernetes.alloy). limit 에 닿으면 커널이 죽인다(OOMKilled)
       - alert: ContainerMemoryNearLimit

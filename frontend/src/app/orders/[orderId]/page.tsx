@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError } from "@/lib/api/client";
 import { getOrder, getOrderSaga } from "@/lib/api/orders";
+import { productNames } from "@/lib/api/products";
 import { formatTime, orderTitle } from "@/lib/orders/format";
 import { isFinished, sagaStateLabel, sagaSteps } from "@/lib/orders/saga-view";
 import { productName, won } from "@/lib/products";
@@ -42,13 +43,14 @@ async function OrderDetail({ params }: Pick<PageProps<"/orders/[orderId]">, "par
   // 둘 다 끝난 상태일 때만 갱신을 멈춘다
   const finished = isFinished(saga.state) && order.status !== "PENDING";
   const steps = sagaSteps(saga, order);
+  const names = await productNames(order.lines.map((l) => l.productId));
 
   return (
     <>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <CardTitle>{orderTitle(order)}</CardTitle>
+            <CardTitle>{orderTitle(order, names)}</CardTitle>
             <span className="font-mono text-xs text-muted-foreground">{order.orderId}</span>
           </div>
           <OrderStatusBadge status={order.status} />
@@ -58,7 +60,7 @@ async function OrderDetail({ params }: Pick<PageProps<"/orders/[orderId]">, "par
             {order.lines.map((l) => (
               <li key={l.productId} className="flex justify-between">
                 <span>
-                  {productName(l.productId)} × {l.quantity}
+                  {productName(l.productId, names)} × {l.quantity}
                 </span>
                 <span>{won(l.unitPrice * l.quantity)}</span>
               </li>

@@ -1,6 +1,7 @@
 package com.klmin.commerce.paymentservice.payment.application.service;
 
 import com.klmin.commerce.paymentservice.payment.application.PaymentGatewayTimeoutException;
+import com.klmin.commerce.paymentservice.payment.application.PaymentGatewayUnavailableException;
 import com.klmin.commerce.paymentservice.payment.application.PaymentNotFoundException;
 import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentCommand;
 import com.klmin.commerce.paymentservice.payment.application.port.in.CancelPaymentUseCase;
@@ -14,6 +15,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGat
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort.GatewayResult;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
+import com.klmin.commerce.paymentservice.payment.application.port.out.PgApproveAttemptPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
@@ -22,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /**
@@ -37,19 +40,24 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
+    static final String CIRCUIT_OPEN_REASON = "PG unavailable (circuit open)";
+
     private final PaymentRecorder recorder;
     private final PaymentGatewayPort gateway;
     private final PaymentGatewayFaultPort faultPort;
     private final PaymentPort paymentPort;
     private final ProcessedMessagePort processedMessagePort;
+    private final PgApproveAttemptPort attemptPort;
 
     PaymentService(PaymentRecorder recorder, PaymentGatewayPort gateway, PaymentGatewayFaultPort faultPort,
-                   PaymentPort paymentPort, ProcessedMessagePort processedMessagePort) {
+                   PaymentPort paymentPort, ProcessedMessagePort processedMessagePort,
+                   PgApproveAttemptPort attemptPort) {
         this.recorder = recorder;
         this.gateway = gateway;
         this.faultPort = faultPort;
         this.paymentPort = paymentPort;
         this.processedMessagePort = processedMessagePort;
+        this.attemptPort = attemptPort;
     }
 
     @Override
@@ -67,12 +75,31 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
             recorder.replyInvalid(messageId, command.orderId(), "invalid command: amount must be positive");
             return;
         }
+        // PG 를 부르기 전에 이 주문의 호출을 예약한다(커밋). 봉인된 주문이면 PG 는 한 번도 불리지 않았고 앞으로도
+        // 불리지 않는다(앞선 처리가 회로 열림으로 거절을 확정했다) → 같은 거절을 기록한다(이미 있으면 재시도 때 재응답)
+        OptionalInt claim = attemptPort.claim(command.orderId());
+        if (claim.isEmpty()) {
+            recorder.record(messageId, command, GatewayResult.declined(CIRCUIT_OPEN_REASON));
+            return;
+        }
         GatewayResult result;
         try {
             result = gateway.approve(command.orderId(), command.userId(), Money.of(command.amount()));
         } catch (PaymentGatewayTimeoutException e) {
             recorder.recordUnknown(messageId, command);
             return;
+        } catch (PaymentGatewayUnavailableException e) {
+            // 이번 호출은 막혔다. 이 주문의 예약이 이 처리 하나뿐이면 봉인해 다른 처리가 PG 를 부르지 못하게 하고 거절 확정.
+            // 아니면 다른 처리(재전달·Saga 재전송·다른 인스턴스의 동시 처리)가 PG 에서 승인받았을 수 있다
+            // → 거절로 확정하지 않고 PG 조회로 확정한다 (ADR 0007)
+            if (claim.getAsInt() > 1 || !attemptPort.sealIfOnlyClaim(command.orderId())) {
+                log.warn("PG 회로 열림, 다른 승인 시도가 있어 결과 조회로 확정 (orderId={})", command.orderId());
+                recorder.recordUnknown(messageId, command);
+                return;
+            }
+            // 이 주문은 PG 에 한 번도 가지 않았고 앞으로도 가지 않는다 → 확정 실패. Saga 가 바로 보상한다 (4-4절 ③)
+            log.warn("PG 회로 열림, 결제 즉시 실패 (orderId={})", command.orderId());
+            result = GatewayResult.declined(CIRCUIT_OPEN_REASON);
         }
         recorder.record(messageId, command, result);
     }

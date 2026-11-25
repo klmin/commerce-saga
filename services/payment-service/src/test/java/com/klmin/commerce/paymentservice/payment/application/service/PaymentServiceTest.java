@@ -36,9 +36,33 @@ class PaymentServiceTest {
     private final RecordingReplies replies = new RecordingReplies();
     private final StubGateway gateway = new StubGateway();
     private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
+    private final InMemoryAttempts attempts = new InMemoryAttempts();
     private final PaymentService service = new PaymentService(
             new PaymentRecorder(payments, replies, processed, Clock.fixed(NOW, ZoneOffset.UTC)), gateway, gateway, payments,
-            processed);
+            processed, attempts);
+
+    /** PG 승인 호출 예약 (주문별 예약 수, 봉인) */
+    static class InMemoryAttempts implements com.klmin.commerce.paymentservice.payment.application.port.out.PgApproveAttemptPort {
+        final java.util.Map<UUID, Integer> calls = new java.util.HashMap<>();
+        final java.util.Set<UUID> sealed = new java.util.HashSet<>();
+
+        @Override
+        public java.util.OptionalInt claim(UUID orderId) {
+            if (sealed.contains(orderId)) {
+                return java.util.OptionalInt.empty();
+            }
+            return java.util.OptionalInt.of(calls.merge(orderId, 1, Integer::sum));
+        }
+
+        @Override
+        public boolean sealIfOnlyClaim(UUID orderId) {
+            if (calls.getOrDefault(orderId, 0) == 1 && !sealed.contains(orderId)) {
+                sealed.add(orderId);
+                return true;
+            }
+            return false;
+        }
+    }
 
     @Test
     void pay_approved_recordsAndRepliesApproved() {
@@ -50,6 +74,60 @@ class PaymentServiceTest {
         assertThat(payment.status()).isEqualTo(PaymentStatus.APPROVED);
         assertThat(payment.id().version()).isEqualTo(7);
         assertThat(replies.log).containsExactly("approved:" + orderId + ":" + payment.id());
+    }
+
+    @Test
+    void pay_circuitOpen_recordsDeclinedAndRepliesFailedAtOnce() {
+        gateway.circuitOpen = true;
+        UUID orderId = UUID.randomUUID();
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
+        assertThat(payments.store.get(orderId).reason()).isEqualTo(PaymentService.CIRCUIT_OPEN_REASON);
+        assertThat(replies.log).singleElement().satisfies(s -> assertThat(s).startsWith("failed:" + orderId));
+    }
+
+    @Test
+    void pay_circuitOpen_afterOtherClaim_recordsUnknownWithoutReply() {
+        // 다른 처리(재전달 전 시도, Saga 재전송, 다른 인스턴스의 동시 처리)가 PG 에 닿았을 수 있다
+        UUID orderId = UUID.randomUUID();
+        attempts.claim(orderId);
+        gateway.circuitOpen = true;
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(attempts.sealed).doesNotContain(orderId);
+        assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(replies.log).isEmpty();
+    }
+
+    @Test
+    void pay_circuitOpen_seals_soLaterProcessingNeverCallsPg() {
+        UUID orderId = UUID.randomUUID();
+        gateway.circuitOpen = true;
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        assertThat(attempts.sealed).contains(orderId);
+
+        // 회로가 닫힌 다른 처리(다른 인스턴스·Saga 재전송)가 와도 PG 를 부르지 않고 같은 거절
+        gateway.circuitOpen = false;
+        payments.store.remove(orderId); // 앞선 처리의 기록이 아직 커밋되지 않은 경우
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
+        assertThat(payments.store.get(orderId).reason()).isEqualTo(PaymentService.CIRCUIT_OPEN_REASON);
+    }
+
+    @Test
+    void pay_claimsBeforeCallingPg() {
+        UUID orderId = UUID.randomUUID();
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(attempts.calls).containsEntry(orderId, 1);
     }
 
     @Test
@@ -126,11 +204,16 @@ class PaymentServiceTest {
         int calls;
         // true 면 approve 가 타임아웃 (PG 는 pgLedger 에 결과를 나중에 남길 수 있다)
         boolean timeout;
+        // true 면 서킷 브레이커가 열린 것처럼 PG 를 부르지 않는다
+        boolean circuitOpen;
         final Map<UUID, GatewayResult> pgLedger = new HashMap<>();
         final List<UUID> refunds = new ArrayList<>();
 
         @Override
         public GatewayResult approve(UUID orderId, long userId, Money amount) {
+            if (circuitOpen) {
+                throw new com.klmin.commerce.paymentservice.payment.application.PaymentGatewayUnavailableException(orderId);
+            }
             calls++;
             if (timeout) {
                 throw new PaymentGatewayTimeoutException(orderId);

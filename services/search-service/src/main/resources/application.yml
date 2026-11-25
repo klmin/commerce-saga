@@ -1,0 +1,63 @@
+server:
+  port: ${SERVER_PORT:8089}
+
+spring:
+  application:
+    name: search-service
+  # access token 검증 (ADR 0008). 검색은 공개라 지금은 토큰이 필요한 API 가 없다
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8086/.well-known/jwks.json}
+          issuer-uri: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+          authorities-claim-name: roles
+          authority-prefix: ROLE_
+  kafka:
+    # 받은 메시지의 traceparent 헤더를 이어받아 처리 span 을 만든다 (ADR 0013). CDC 메시지에는 없어 새 trace 가 된다
+    listener:
+      observation-enabled: true
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+  mvc:
+    problemdetails:
+      enabled: true
+
+# Elasticsearch (ADR 0010). index 는 별칭이다. 처음 뜰 때 별칭이 없으면 <index>-v1 을 만들고 별칭을 건다
+search:
+  elasticsearch:
+    uri: ${ELASTICSEARCH_URI:http://localhost:9200}
+    index: products
+    connect-timeout: 2s
+    read-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  # 분산 트레이싱·로그 (ADR 0013). OTLP 로 Alloy 에 보내면 trace 는 Tempo, 로그는 Loki 로 간다
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4328/v1/traces}
+    logging:
+      export:
+        otlp:
+          endpoint: ${OTLP_LOGGING_ENDPOINT:http://localhost:4328/v1/logs}
+  # 로그를 OTLP 로 보낼지 (k8s 처럼 수집기가 없는 곳에서는 끈다)
+  logging:
+    export:
+      enabled: ${OTLP_LOGGING_EXPORT_ENABLED:true}
+  otlp:
+    metrics:
+      export:
+        enabled: false

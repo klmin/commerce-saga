@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 컨텍스트를 테스트끼리 공유하므로 테스트마다 다른 사용자 id 를 쓴다.
  */
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, StubProductCatalogConfiguration.class})
 @Testcontainers(disabledWithoutDocker = true)
 class OrderQueryAndIdempotencyIntegrationTest {
 

@@ -2,6 +2,7 @@
 #   서비스 ──OTLP(trace·로그)──▶ alloy ──▶ tempo (trace), loki (로그)
 #   alloy ──scrape──▶ 서비스 /actuator/prometheus, kafka-exporter (lag·DLT), tempo·loki·prometheus·alloy 자신,
 #                     노드 kubelet 의 컨테이너 메모리(k8s 만, kubernetes.alloy) ──remote_write──▶ prometheus (저장·경보 규칙)
+#   prometheus ──firing 경보──▶ alertmanager (심각도별 묶기) ──▶ Discord 웹훅 (Secret 이 없으면 null receiver)
 #   grafana: Tempo·Loki·Prometheus 데이터 소스(span ↔ 로그 링크)와 대시보드 commerce-saga
 # Service 이름이 compose 의 컨테이너 이름과 같아서 설정 파일(files/observability, infra/ 의 사본)을 그대로 쓴다.
 # 저장은 emptyDir 이다(Pod 가 바뀌면 사라짐). 로컬·CI 확인용이고 운영이면 오브젝트 스토리지·보존 기간을 정한다
@@ -303,6 +304,82 @@ spec:
     app.kubernetes.io/name: prometheus
   ports:
     - { name: http, port: 9090, targetPort: http }
+---
+# 경보 전달 (ADR 0013 "경보 전달"). prometheus 가 firing 경보를 보내면 심각도별로 묶어 Discord 웹훅으로 보낸다.
+# 웹훅 URL 은 차트에 넣지 않고 Secret 으로 받는다(optional). Secret 이 없으면 entrypoint 가 null receiver 로 띄운다
+#   kubectl -n commerce create secret generic alertmanager-discord --from-literal=webhook-url='https://discord.com/api/webhooks/…'
+#   kubectl -n commerce rollout restart deploy/alertmanager    (URL 은 기동 때 읽는다)
+{{- $amConfig := printf "%s%s" (.Files.Get (printf "%s/alertmanager.yml" $files)) (.Files.Get (printf "%s/alertmanager-entrypoint.sh" $files)) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  labels: {{- include "commerce.labels" (dict "name" "alertmanager" "root" $root) | nindent 4 }}
+data:
+  alertmanager.yml: |-
+{{ .Files.Get (printf "%s/alertmanager.yml" $files) | indent 4 }}
+  entrypoint.sh: |-
+{{ .Files.Get (printf "%s/alertmanager-entrypoint.sh" $files) | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  labels: {{- include "commerce.labels" (dict "name" "alertmanager" "root" $root) | nindent 4 }}
+spec:
+  # 한 개. 여러 개면 gossip 클러스터(--cluster.peer)로 묶어야 같은 경보를 두 번 보내지 않는다
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "alertmanager" "root" $root) | nindent 8 }}
+      annotations:
+        checksum/config: {{ $amConfig | sha256sum }}
+    spec:
+      containers:
+        - name: alertmanager
+          image: {{ $o.alertmanager.image }}
+          command: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+          env:
+            - { name: DISCORD_WEBHOOK_URL_FILE, value: /etc/alertmanager/secrets/webhook-url }
+          ports:
+            - { name: http, containerPort: 9093 }
+          readinessProbe:
+            httpGet: { path: /-/ready, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: config, mountPath: /etc/alertmanager/alertmanager.yml, subPath: alertmanager.yml }
+            - { name: config, mountPath: /etc/alertmanager/entrypoint.sh, subPath: entrypoint.sh }
+            - { name: discord, mountPath: /etc/alertmanager/secrets, readOnly: true }
+            - { name: data, mountPath: /alertmanager }
+          resources: {{- toYaml $o.alertmanager.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: { name: alertmanager-config }
+        - name: discord
+          secret:
+            secretName: {{ $o.alertmanager.discordWebhookSecret.name }}
+            items:
+              - { key: {{ $o.alertmanager.discordWebhookSecret.key }}, path: webhook-url }
+            optional: true
+        # 실행 중 상태(침묵·알림 기록)와 entrypoint 가 고른 설정. Pod 가 바뀌면 사라진다
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  labels: {{- include "commerce.labels" (dict "name" "alertmanager" "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: alertmanager
+  ports:
+    - { name: http, port: 9093, targetPort: http }
 ---
 # 컨슈머 그룹 lag·DLT 적재 (compose 와 같은 exporter). Kafka 가 뜨기 전에는 재시작하다가 붙는다
 apiVersion: apps/v1

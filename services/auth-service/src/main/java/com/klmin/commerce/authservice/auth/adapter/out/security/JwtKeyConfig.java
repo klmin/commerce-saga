@@ -21,6 +21,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.KeyPairGenerator;
@@ -32,6 +33,7 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -71,9 +73,17 @@ class JwtKeyConfig {
     }
 
     private static RSAKey signingKey(JwtProperties properties, ResourceLoader resourceLoader) {
+        // 1. 주입받은 키 (k8s·운영)  2. 로컬 개발용 키 파일 (있으면 쓰고 없으면 만든다)  3. 기동할 때마다 새 임시 키
         if (properties.privateKeyLocation() == null || properties.privateKeyLocation().isBlank()) {
+            // 파일을 만들 수 없으면(홈에 쓸 수 없는 컨테이너 등) 기동을 막지 않고 임시 키로
+            if (properties.devKeyFile() != null && !properties.devKeyFile().isBlank()) {
+                Optional<RSAKey> fromFile = DevSigningKeyFile.loadOrCreate(Path.of(properties.devKeyFile()));
+                if (fromFile.isPresent()) {
+                    return fromFile.get();
+                }
+            }
             String keyId = "dev-" + UUID.randomUUID().toString().substring(0, 8);
-            log.warn("auth.jwt.private-key-location 이 비어 임시 서명 키(kid={})를 만든다. 로컬 개발용이며 재시작하면 이전 토큰은 검증되지 않는다", keyId);
+            log.warn("주입받은 서명 키·로컬 개발용 키 파일이 없어 임시 서명 키(kid={})를 만든다. 재시작하면 이전 토큰은 검증되지 않는다", keyId);
             return generate(keyId);
         }
         if (properties.keyId() == null || properties.keyId().isBlank()) {

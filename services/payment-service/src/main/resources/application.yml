@@ -63,6 +63,25 @@ payment:
     not-found-after: ${PAYMENT_RECONCILE_NOT_FOUND_AFTER:2m}
     batch-size: 100
 
+# PG 승인 서킷 브레이커 (PROGRESS 4-4절 ③). 최근 20건 중 10건 이상 쌓였고 실패(타임아웃·오류) 50% 이상이면 연다.
+# 열려 있는 동안은 PG 를 부르지 않고 결제 실패로 바로 응답, open-wait 뒤 3건을 시험으로 보낸다
+  circuit-breaker:
+    enabled: ${PAYMENT_CB_ENABLED:true}
+    failure-rate-threshold: 50
+    sliding-window-size: 20
+    minimum-number-of-calls: ${PAYMENT_CB_MIN_CALLS:10}
+    wait-duration-in-open-state: ${PAYMENT_CB_OPEN_WAIT:30s}
+    permitted-calls-in-half-open: 3
+
+# 멱등 기록 정리 (PROGRESS 4-4절 ②, ADR 0006). processed_message 보존은 Kafka 토픽 보존(7일) + DLT 재처리 기간보다 길게
+idempotency:
+  cleanup:
+    enabled: ${IDEMPOTENCY_CLEANUP_ENABLED:true}
+    interval: ${IDEMPOTENCY_CLEANUP_INTERVAL:1h}
+    processed-message-retention: ${PROCESSED_MESSAGE_RETENTION:30d}
+    batch-size: 1000
+    max-batches-per-run: 100
+
 management:
   endpoints:
     web:

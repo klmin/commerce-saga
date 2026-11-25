@@ -6,7 +6,7 @@
 - DB 저장과 메시지 발행의 이중 쓰기 → **Transactional Outbox** + relay (스케줄러 → **Debezium CDC**)
 - at-least-once 전달로 같은 메시지가 여러 번 온다 → **멱등 처리**, 늦은 응답에 단계가 되돌아가지 않는 상태 머신
 
-> 3단계(신뢰성)까지 완료, `v0.3-reliability`가 완성 기준이다. 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정), 타임아웃·장애 복구(멈춘 Saga 재전송·보상, 결제 타임아웃 PG 조회 보정, 늦은 승인 자동 환불). 후속 1(관측성)도 완료: 분산 트레이싱(주문 한 건 = trace 하나), 메트릭·경보(결제 UNKNOWN·환불 대기·멈춘 Saga·lag·DLT·slot 적체). 후속 2(인증 + 프론트엔드)도 완료: 자체 JWT auth-service, Spring Cloud Gateway, 서비스 JWT 검증, 프론트용 백엔드 보강(내 주문·결제·포인트 내역, 주문 Idempotency-Key, 가입 → 포인트 계정), Next.js 화면(로그인·가입, 상품·주문·주문 상세 Saga 타임라인, 포인트·결제 내역·알림, 로그인 기기 관리, 관리자 결제 장애 주입)과 CI 브라우저 e2e. 후속 3(k8s)도 완료: Helm 차트 하나(Postgres·Redis·Strimzi Kafka·서비스·화면), Strimzi KafkaConnect 의 Debezium relay, ArgoCD app-of-apps, Gateway API edge(화면만 공개), PR 마다 kind 에서 배포·스모크. 그다음 검색(후속 4). 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md), 왜 이 규모에 서비스를 나눴는지는 [ADR 0000](docs/adr/0000-why-msa.md).
+> 3단계(신뢰성)까지 완료, `v0.3-reliability`가 완성 기준이다. 멱등 컨슈머·DLT 재처리, Debezium relay(커넥터 중단 복구·relay 비교 측정), 타임아웃·장애 복구(멈춘 Saga 재전송·보상, 결제 타임아웃 PG 조회 보정, 늦은 승인 자동 환불). 후속 1(관측성)도 완료: 분산 트레이싱(주문 한 건 = trace 하나), 메트릭·경보(결제 UNKNOWN·환불 대기·멈춘 Saga·lag·DLT·slot 적체). 후속 2(인증 + 프론트엔드)도 완료: 자체 JWT auth-service, Spring Cloud Gateway, 서비스 JWT 검증, 프론트용 백엔드 보강(내 주문·결제·포인트 내역, 주문 Idempotency-Key, 가입 → 포인트 계정), Next.js 화면(로그인·가입, 상품·주문·주문 상세 Saga 타임라인, 포인트·결제 내역·알림, 로그인 기기 관리, 관리자 결제 장애 주입)과 CI 브라우저 e2e. 후속 3(k8s)도 완료: Helm 차트 하나(Postgres·Redis·Strimzi Kafka·서비스·화면), Strimzi KafkaConnect 의 Debezium relay, ArgoCD app-of-apps, Gateway API edge(화면만 공개), PR 마다 kind 에서 배포·스모크. 후속 4(상품 검색·관리 이력)도 완료: product-service(가격·서버 가격 확인·장바구니), 상품 테이블 CDC(Debezium) → search-service(Elasticsearch, 외부 버전으로 순서·중복 처리) → 검색 화면, 상품 관리 이력과 관리자 상품 화면. 태그 `v0.6-search-audit`. 진행 현황은 [PROGRESS](docs/PROGRESS.md), 전체 계획과 설계 근거는 [브리프](docs/commerce-msa-portfolio-brief.md), 왜 이 규모에 서비스를 나눴는지는 [ADR 0000](docs/adr/0000-why-msa.md).
 
 ## 아키텍처 (3단계)
 
@@ -16,6 +16,10 @@ flowchart LR
     gw -- "/orders (JWT 재검증)" --> order
     client -- "/auth/login" --> gw
     gw --> auth[auth-service\nauth_db · Redis\nJWT 발급 · JWKS]
+    gw -- "/products (공개 조회)\n/admin/products" --> product[product-service\nproduct_db\n상품 · 가격 · 가격 이력]
+    product -. "products 테이블 CDC\n(Debezium, ADR 0010)" .-> kafka
+    gw -- "/search (공개)" --> search[search-service\nElasticsearch\n상품 검색]
+    kafka -. product.cdc.products .-> search
 
     subgraph order-service [order-service · 오케스트레이터]
         order[Order API] --> odb[(order_db\norders · order_sagas · outbox\nprocessed_message)]
@@ -60,13 +64,15 @@ flowchart LR
 ## 실행
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Alloy(OTLP 4328)·Tempo·Loki·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Alloy(OTLP 4328)·Tempo·Loki·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380), Elasticsearch(9200)
 ./gradlew :services:inventory-service:bootRun              # 8082   (각각 다른 터미널에서)
 ./gradlew :services:point-service:bootRun                  # 8083
 ./gradlew :services:payment-service:bootRun                # 8084
 ./gradlew :services:order-service:bootRun                  # 8081
 ./gradlew :services:notification-service:bootRun           # 8085 (선택)
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
+./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
+./gradlew :services:search-service:bootRun                 # 8089 상품 검색 (후속 4-2, Elasticsearch 9200 + product-cdc 커넥터 등록)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
 (cd frontend && npm ci && npm run dev)                 # 화면 http://localhost:3500. frontend/README.md
 ```
@@ -76,7 +82,7 @@ TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/
   -d '{"loginId":"user1","password":"local-dev-pass"}' | sed -nE 's/.*"accessToken":"([^"]+)".*/\1/p')   # 개발용 시드 사용자 1
 curl -X POST localhost:8000/api/orders -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":1000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
+  -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":39000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
 curl localhost:8000/api/orders/<orderId> -H "Authorization: Bearer $TOKEN"        # PENDING -> COMPLETED
 curl localhost:8000/api/orders/<orderId>/saga -H "Authorization: Bearer $TOKEN"   # Saga 단계 타임라인 (본인 주문만)
 curl localhost:8000/api/orders?size=20 -H "Authorization: Bearer $TOKEN"          # 내 주문 목록 (최신순, 다음 쪽은 before=<마지막 orderId>). 결제는 /api/payments
@@ -114,6 +120,10 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
 | 13 | [가입 → auth.events(UserRegistered, outbox) → 포인트 계정 하나·가입 축하 1,000P → 그 포인트로 주문](docs/scenarios/13-signup-point-account.md) | 통과 (CI `e2e`) |
+| 14 | [목록에서 본 가격과 주문 때 가격이 다름 → 409 + 지금 가격 → 같은 키로 새 가격 주문(스냅샷), 판매 중지 422, 장바구니 가격 변경 표시·장바구니 주문](docs/scenarios/14-price-change.md) | CI `e2e` |
+| 15 | [PG 장애가 이어지면 서킷 브레이커가 열려 결제 즉시 실패·보상, 복구 후 시험 호출로 닫힘](docs/scenarios/15-pg-circuit-breaker.md) | CI `e2e` |
+| 16 | [상품 테이블 CDC: products 변경이 product.cdc.products 로 (키 = 상품 id, 변경 후 행, 헤더 __lsn)](docs/scenarios/16-product-cdc.md) | CI `e2e`·`k8s` |
+| 17 | [상품 검색: 가격 변경·판매 중지가 몇 초 안에 검색에 반영, 옛 변경 무시, ES 중단 중 검색만 503 → 재개 후 따라잡음](docs/scenarios/17-product-search.md) | CI `e2e`·`k8s` |
 
 ## 설계 결정 (ADR)
 
@@ -126,10 +136,13 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0006 멱등 컨슈머: 메시지 ID 기록 + 주문별 기록, 두 겹](docs/adr/0006-idempotent-consumer.md)
 - [0007 Saga 타임아웃과 결제 타임아웃 보정: 재전송 후 포기하면 역순 보상, 결제는 PG 조회로 확정하고 늦은 승인은 자동 환불](docs/adr/0007-saga-timeout.md)
 - [0008 인증: 자체 auth-service 가 JWT(RS256 + JWKS) 발급, refresh token 은 회전(RTR)하고 재사용하면 그 기기 세션 폐기](docs/adr/0008-auth-self-issued-jwt.md)
+- [0010 상품 검색 CQRS: Debezium 테이블 CDC → search-service → Elasticsearch, 외부 버전(LSN)으로 멱등·순서](docs/adr/0010-product-search-cqrs-table-cdc.md)
 - [0011 프론트엔드: Next.js + Tailwind + shadcn/ui, Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다(BFF), refresh 는 proxy.ts](docs/adr/0011-frontend-nextjs-bff-session.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
 - [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, GitOps 는 ArgoCD, edge 는 Gateway API, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
+- [0015 컨텍스트 맵과 용어집, 쓰지 않기로 한 DDD 전술 패턴(도메인 이벤트 객체·이벤트 소싱·JPA Auditing)](docs/adr/0015-context-map-and-glossary.md)
+- [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
 
 ## 구성
 
