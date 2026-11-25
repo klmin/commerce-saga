@@ -107,8 +107,19 @@ ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 
 
 | 환경 | 사용자 | 관리자 | 인증 | 앞단 |
 |---|---|---|---|---|
-| k8s | `example.com` | `admin.example.com` | `auth.example.com` | Envoy Gateway `HTTPRoute` 호스트별. 호스트마다 `/api/**` → SCG, 나머지 → 그 화면. `auth` 호스트는 `/oauth2/**`·`/login`(POST)·`/.well-known/**`·가입 API → auth-service |
-| compose | `localhost` | `admin.localhost` | `auth.localhost` | **Caddy** 하나(80). `*.localhost` 는 크롬·엣지·파이어폭스가 hosts 수정 없이 127.0.0.1 로 연결 |
+| k8s | `example.com` | `admin.example.com` | `auth.example.com` | Envoy Gateway `HTTPRoute` 호스트별. 사용자·관리자 호스트는 아래 **SCG 경로** → SCG, 나머지 → 그 화면. `auth` 호스트는 `/oauth2/**`·`/login`(POST)·`/.well-known/**`·`/connect/logout`·가입 API → auth-service, 나머지 → 인증 화면 |
+| compose | `localhost` | `admin.localhost` | `auth.localhost` | **Caddy** 하나(80), 규칙은 k8s 와 같다. `*.localhost` 는 크롬·엣지·파이어폭스가 hosts 수정 없이 127.0.0.1 로 연결 |
+
+**사용자·관리자 호스트에서 SCG 로 보내는 경로** (빠지면 로그인이 SCG 에 닿지 않아 BFF 세션이 만들어지지 않는다)
+
+| 경로 | 용도 |
+|---|---|
+| `/api/**` | API 호출 (토큰 릴레이) |
+| `/oauth2/authorization/**` | 로그인 시작 (SCG 가 SAS 로 리다이렉트) |
+| `/login/oauth2/code/**` | 인가 코드 콜백 (SCG 가 토큰 교환 후 세션 ② 생성) |
+| `/logout` | 로그아웃 (세션 ② 삭제 → SAS OIDC 로그아웃) |
+
+화면 라우터는 이 경로들을 쓰지 않는다(경로 예약). Envoy·Caddy 규칙은 이 표를 한 곳(Helm values·Caddyfile)에 두고 같이 바꾼다.
 | 호스트 개발 | `localhost:5173` | `localhost:5174` | `localhost:5175` | 화면 dev 서버의 프록시로 `/api` → SCG. 화면을 넘나드는 로그인 흐름은 compose(Caddy)로 확인 |
 
 - SPA 는 같은 출처의 `/api` 만 부른다 → CORS 없음, 세션 쿠키 `SameSite=Lax`
