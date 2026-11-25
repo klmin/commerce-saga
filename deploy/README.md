@@ -2,6 +2,7 @@
 
 로컬 개발은 지금처럼 `infra/docker-compose.yml` + `java -jar` 로 한다. 이 디렉터리는 같은 구성을 k8s 에 올리는 방법이다.
 클러스터를 상시 띄우지 않고, PR 마다 CI(`.github/workflows/k8s.yml`)가 kind 에 올려 스모크를 돈다.
+운영 환경에서 구성 요소별로 무엇을 더 해야 안정적인지(이중화·저장소·경보)는 [docs/k8s-operations.md](../docs/k8s-operations.md).
 
 | 경로 | 내용 |
 |---|---|
