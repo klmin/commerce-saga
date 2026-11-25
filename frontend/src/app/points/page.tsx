@@ -9,17 +9,12 @@ import { pointEntryView, signedPoints } from "@/lib/history/labels";
 import { formatTime } from "@/lib/orders/format";
 import { cn } from "@/lib/utils";
 
+import { ListSkeleton, ValueSkeleton } from "../loading-skeletons";
 import { CursorNav } from "../cursor-nav";
 import { pointBalanceOrUndefined } from "../shop-data";
 import { ToneBadge } from "../tone-badge";
 
 export const metadata: Metadata = { title: "내 포인트 · commerce-saga" };
-
-const loading = (
-  <p role="status" className="text-sm text-muted-foreground">
-    불러오는 중...
-  </p>
-);
 
 async function Balance() {
   const balance = await pointBalanceOrUndefined();
@@ -106,7 +101,7 @@ export default function PointsPage({ searchParams }: PageProps<"/points">) {
           <CardTitle>내 포인트</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={loading}>
+          <Suspense fallback={<ValueSkeleton />}>
             <Balance />
           </Suspense>
         </CardContent>
@@ -120,7 +115,7 @@ export default function PointsPage({ searchParams }: PageProps<"/points">) {
             주문이 취소되면 쓴 포인트는 보상 단계에서 돌려받습니다(환불됨). 잔액이 모자라 쓰지 못한
             주문은 &quot;사용 안 됨&quot;으로 남습니다.
           </p>
-          <Suspense fallback={loading}>
+          <Suspense fallback={<ListSkeleton />}>
             <History searchParams={searchParams} />
           </Suspense>
         </CardContent>

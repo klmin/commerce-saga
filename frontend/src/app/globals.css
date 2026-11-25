@@ -127,3 +127,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 로딩 표시를 200ms 뒤에야 보이게 한다. 빨리 끝나는 요청에서는 깜빡이지 않는다 */
+@keyframes delayed-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+.delayed-reveal {
+  opacity: 0;
+  animation: delayed-reveal 150ms ease-out 200ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delayed-reveal {
+    animation-duration: 0s;
+  }
+}

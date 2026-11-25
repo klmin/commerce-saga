@@ -8,6 +8,8 @@ import { myOrders, ORDERS_PAGE_SIZE } from "@/lib/api/orders";
 import { formatTime, orderTitle } from "@/lib/orders/format";
 import { won } from "@/lib/products";
 
+import { LinkPendingHint } from "../link-pending-hint";
+import { ListSkeleton } from "../loading-skeletons";
 import { OrderStatusBadge } from "./order-status-badge";
 
 export const metadata: Metadata = { title: "내 주문 · commerce-saga" };
@@ -39,7 +41,7 @@ async function OrderList({ searchParams }: Pick<PageProps<"/orders">, "searchPar
           <li key={o.orderId}>
             <Link
               href={`/orders/${o.orderId}`}
-              className="flex items-center gap-4 py-3 hover:bg-muted/50"
+              className="relative flex items-center gap-4 py-3 hover:bg-muted/50"
             >
               <div className="flex flex-1 flex-col">
                 <span className="font-medium">{orderTitle(o)}</span>
@@ -49,6 +51,7 @@ async function OrderList({ searchParams }: Pick<PageProps<"/orders">, "searchPar
                 </span>
               </div>
               <OrderStatusBadge status={o.status} />
+              <LinkPendingHint />
             </Link>
           </li>
         ))}
@@ -80,13 +83,7 @@ export default function OrdersPage({ searchParams }: PageProps<"/orders">) {
           </Button>
         </CardHeader>
         <CardContent>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<ListSkeleton />}>
             <OrderList searchParams={searchParams} />
           </Suspense>
         </CardContent>
