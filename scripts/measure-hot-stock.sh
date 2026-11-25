@@ -15,7 +15,9 @@
 #   2. 리스너 한 건 처리 시간: /actuator/prometheus 의 spring_kafka_listener 타이머(측정 전후 차이)의 평균
 #   3. 락 대기: 처리 중 pg_stat_activity 를 0.05초마다 훑어 재고 행 락(wait_event_type = Lock)을 기다리던 연결 수
 #
-# 측정용 상품(9001~)은 재고 행이 없는 id 만 쓴다(이미 있으면 중단). 넉넉히 넣었다가 끝나면(실패해도) 이번 실행이 만든 행과 예약 기록만 지운다. 응답(inventory.reply)은
+# 측정용 상품(9001~)은 재고 행이 없는 id 만 쓴다(이미 있으면 중단). 넉넉히 넣었다가 끝나면 이번 실행이 만든 행과 예약 기록만
+# 지운다. 커맨드가 다 처리되기 전에 끝나면(타임아웃·중단) 남은 커맨드가 나중에 처리될 수 있어 기록을 남기고,
+# 다 처리된 뒤 CLEANUP_RUN=<run> PRODUCTS="..." 로 정리한다. 응답(inventory.reply)은
 # order-service 가 "Saga 없는 주문의 응답"으로 무시한다. 검증(PASS/FAIL)이 아니라 측정용
 set -euo pipefail
 # Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 Windows 경로로 바꾸지 않게
@@ -41,18 +43,44 @@ stop_sampler() {
   wait "$sampler_pid" 2> /dev/null || true
   sampler_pid=
 }
+# 측정용 재고는 available + reserved = STOCK_MARK 로 넣는다 (예약은 available → reserved 로 옮길 뿐이라 합이 유지된다).
+# 정리할 때 이 합인 행만 지워, 다른 재고 행을 지우지 않는다
+STOCK_MARK=100000000
+purge() { # run products(쉼표) — 그 실행의 예약·멱등 기록과 측정용 재고 행을 지운다
+  psql_q "
+    delete from stock_reservation_lines where order_id::text like 'eeeeeeee-$1%';
+    delete from stock_reservations where order_id::text like 'eeeeeeee-$1%';
+    delete from processed_message where message_id::text like 'ffffffff-$1%';
+    ${2:+delete from stocks where product_id in ($2) and available + reserved = $STOCK_MARK;}" > /dev/null
+}
 created_stocks=
+published=
+completed=
 cleanup() {
   stop_sampler || true
-  # 이번 실행의 예약·멱등 기록과, 이번 실행이 만든 측정용 재고 행만 지운다 (실패·중단해도)
-  psql_q "
-    delete from stock_reservation_lines where order_id::text like '$PREFIX%';
-    delete from stock_reservations where order_id::text like '$PREFIX%';
-    delete from processed_message where message_id::text like 'ffffffff-$RUN%';
-    ${created_stocks:+delete from stocks where product_id in ($created_stocks);}" > /dev/null || true
+  if [ -n "$published" ] && [ -z "$completed" ]; then
+    # 처리되지 않은 커맨드가 Kafka 에 남아 있을 수 있다. 지금 재고를 지우면 나중에 처리될 때 unknown product 실패
+    # 예약·멱등 기록·응답이 새로 생기므로, 실행 식별자와 재고를 남기고 다 처리된 뒤 정리하게 한다
+    echo "측정 커맨드가 다 처리되지 않아 기록을 남겼다. 처리가 끝난 뒤(컨슈머 lag 0) 정리:" >&2
+    echo "  CLEANUP_RUN=$RUN PRODUCTS=\"${PRODUCTS}\" $0" >&2
+  else
+    purge "$RUN" "$created_stocks" || true
+  fi
   rm -rf "$tmp"
 }
 trap cleanup EXIT
+
+# 앞선 실패 실행 정리 모드
+if [ -n "${CLEANUP_RUN:-}" ]; then
+  read -r -a products <<< "$PRODUCTS"
+  ids=$(IFS=,; echo "${products[*]}")
+  left=$(psql_q "select count(*) from stock_reservations where order_id::text like 'eeeeeeee-$CLEANUP_RUN%'")
+  purge "$CLEANUP_RUN" "$ids"
+  echo "run=$CLEANUP_RUN 정리: 예약 기록 ${left}건, 측정용 재고(${ids}) 삭제"
+  trap - EXIT
+  rm -rf "$tmp"
+  exit 0
+fi
 calc() { awk "BEGIN{printf \"%.1f\", $1}"; }
 listener() { # -> "count sum" (리스너 타이머 누적, 성공한 처리만. 인스턴스가 여럿이면 합친다)
   local url
@@ -72,7 +100,7 @@ if [ -n "$existing" ]; then
   echo "FAIL: 재고 행이 이미 있는 상품($existing)은 측정에 쓰지 않는다. 없는 상품 id(9001~ 등)를 PRODUCTS 로 준다" >&2
   exit 1
 fi
-values=$(for p in "${products[@]}"; do printf "(%d, 100000000, 0, now())," "$p"; done)
+values=$(for p in "${products[@]}"; do printf "(%d, %d, 0, now())," "$p" "$STOCK_MARK"; done)
 psql_q "insert into stocks (product_id, available, reserved, updated_at) values ${values%,}" > /dev/null
 created_stocks=$ids
 
@@ -101,6 +129,7 @@ dc -e PGPASSWORD=postgres -e PGAPPNAME=hot-stock-sampler postgres psql -U postgr
 sampler_pid=$!
 
 t0=$(date +%s.%N)
+published=1   # 발행 도중 실패해도 일부는 이미 나갔을 수 있다
 dc kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:29092 --topic inventory.command \
   --reader-property parse.key=true --reader-property parse.headers=true < "$tmp/commands"
 produced=$(calc "$(date +%s.%N) - $t0")
@@ -115,6 +144,7 @@ while :; do
   fi
   sleep 0.5
 done
+completed=1   # 발행한 커맨드가 모두 예약 기록을 남김 = 남은 커맨드 없음
 stop_sampler
 after=$(listener)
 
