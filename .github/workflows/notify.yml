@@ -1,0 +1,126 @@
+name: notify
+
+# CI·배포 결과를 Discord 로 보낸다. 채널(웹훅)은 둘:
+#   DISCORD_WEBHOOK_MAIN  main push·매일 실행의 실패, release 성공(배포된 커밋)
+#   DISCORD_WEBHOOK_PR    PR 열림·머지·닫힘, PR 체크 실패, 커밋 하나의 체크가 모두 통과했을 때 한 번
+# 웹훅 URL 은 저장소 시크릿에만 둔다(URL 만 있으면 누구나 그 채널에 쓸 수 있다). 없으면 그 채널 알림만 건너뛴다.
+# 실패 알림 앞에 붙일 멘션(예: @here, <@&역할ID>)은 저장소 변수 DISCORD_FAILURE_MENTION (선택)
+#
+# workflow_run 은 main 에 있는 이 파일 기준으로 돈다 → 여기를 바꾸면 머지 뒤부터 적용된다
+on:
+  workflow_run:
+    workflows: [backend, frontend, e2e, browser-e2e, infra, k8s, codeql, release]
+    types: [completed]
+  pull_request:
+    types: [opened, reopened, ready_for_review, closed]
+
+permissions:
+  contents: read
+  actions: read # 실패한 잡 이름
+  checks: read
+  statuses: write # 커밋마다 "모두 통과" 알림을 한 번만 보냈다는 표시(notify/all-passed)
+
+jobs:
+  pr-event:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR }}
+          ACTION: ${{ github.event.action }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          [ -n "$WEBHOOK" ] || { echo "DISCORD_WEBHOOK_PR 없음, 건너뜀"; exit 0; }
+          case "$ACTION" in
+            opened|reopened|ready_for_review) what="열림"; color=3447003 ;;
+            closed) if [ "$MERGED" = true ]; then what="머지됨"; color=10181046; else what="닫힘"; color=9807270; fi ;;
+            *) exit 0 ;;
+          esac
+          jq -n --arg t "#$NUMBER $what" --arg d "$TITLE ($AUTHOR)" --arg u "$URL" --argjson c "$color" \
+            '{embeds: [{title: $t, description: $d, url: $u, color: $c}]}' \
+            | curl -sf -H 'Content-Type: application/json' -d @- "$WEBHOOK"
+
+  workflow-result:
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 같은 커밋의 워크플로가 거의 동시에 끝나도 "모두 통과" 판단이 겹치지 않게 커밋마다 하나씩
+    concurrency:
+      group: notify-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MAIN_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_MAIN }}
+          PR_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR }}
+          MENTION: ${{ vars.DISCORD_FAILURE_MENTION }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+          short=${SHA:0:7}
+          subject=$(printf '%s' "$COMMIT_MSG" | head -1)
+
+          send() { # webhook, content, title, description, url, color
+            jq -n --arg m "$2" --arg t "$3" --arg d "$4" --arg u "$5" --argjson c "$6" \
+              '{content: $m, embeds: [{title: $t, description: $d, url: $u, color: $c}]}' \
+              | curl -sf -H 'Content-Type: application/json' -d @- "$1"
+          }
+          failed_jobs() {
+            gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --paginate \
+              --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled") | .name' \
+              | paste -sd ',' - | sed 's/,/, /g'
+          }
+          failed=false
+          case "$CONCLUSION" in failure|timed_out) failed=true ;; esac
+
+          # main push·매일·수동 실행 → main 채널
+          if [ "$EVENT" != pull_request ]; then
+            [ "$BRANCH" = main ] || exit 0
+            [ -n "$MAIN_WEBHOOK" ] || { echo "DISCORD_WEBHOOK_MAIN 없음, 건너뜀"; exit 0; }
+            if [ "$failed" = true ]; then
+              send "$MAIN_WEBHOOK" "$MENTION" "main $WORKFLOW 실패 ($EVENT)" \
+                "$short $subject"$'\n'"실패한 잡: $(failed_jobs)" "$RUN_URL" 15158332
+            elif [ "$WORKFLOW" = release ] && [ "$CONCLUSION" = success ]; then
+              send "$MAIN_WEBHOOK" "" "배포: $short → release/eks" \
+                "$subject"$'\n'"이미지 amd64·arm64, ArgoCD(EKS)가 이 커밋을 가져간다" "$RUN_URL" 3066993
+            fi
+            exit 0
+          fi
+
+          # PR 의 CI → PR 채널 (포크 PR 은 번호가 비어 있다 → 건너뜀)
+          [ -n "$PR_NUMBER" ] || exit 0
+          [ -n "$PR_WEBHOOK" ] || { echo "DISCORD_WEBHOOK_PR 없음, 건너뜀"; exit 0; }
+          pr_url="https://github.com/$REPO/pull/$PR_NUMBER"
+          if [ "$failed" = true ]; then
+            send "$PR_WEBHOOK" "" "#$PR_NUMBER $WORKFLOW 실패" \
+              "$short $subject"$'\n'"실패한 잡: $(failed_jobs)"$'\n'"$pr_url" "$RUN_URL" 15158332
+            exit 0
+          fi
+          [ "$CONCLUSION" = success ] || exit 0
+
+          # 이 커밋의 체크가 모두 끝났고 실패가 없을 때만, 커밋마다 한 번
+          sent=$(gh api "repos/$REPO/commits/$SHA/statuses" --jq '[.[] | select(.context == "notify/all-passed")] | length')
+          [ "$sent" = 0 ] || exit 0
+          read -r pending bad < <(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
+            --jq '.check_runs[] | [.status, (.conclusion // "")] | @tsv' \
+            | awk -F'\t' '$1 != "completed" {p++} $1 == "completed" && $2 !~ /^(success|skipped|neutral)$/ {b++} END {print p+0, b+0}')
+          echo "남은 체크 $pending, 실패 $bad"
+          [ "$pending" = 0 ] && [ "$bad" = 0 ] || exit 0
+          send "$PR_WEBHOOK" "" "#$PR_NUMBER 모든 체크 통과" "$short $subject" "$pr_url" 3066993
+          gh api "repos/$REPO/statuses/$SHA" -f state=success -f context=notify/all-passed \
+            -f description="Discord 에 모두 통과 알림을 보냄" > /dev/null

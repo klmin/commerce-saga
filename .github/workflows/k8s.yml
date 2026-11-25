@@ -9,15 +9,42 @@ on:
     paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
   pull_request:
     paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+  # argocd 잡은 PR 에서 배포 설정이 바뀔 때만 돈다 → main 에 들어간 결과는 매일 한 번 다시 본다
+  schedule:
+    - cron: '0 19 * * *' # 매일 04:00 KST
+  workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # PR 에서 배포 설정(차트·ArgoCD·배포 스크립트)이 바뀌었는지. 서비스 코드만 바뀐 PR 은 kind 잡이 같은 차트로 확인하므로
+  # argocd 잡(GitOps 경로: ArgoCD 가 저장소에서 가져와 sync)은 건너뛴다. main push·매일·수동 실행에서는 항상 돈다
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.diff.outputs.deploy }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
+          if echo "$files" | grep -qE '^(deploy/|scripts/k8s-|\.github/workflows/k8s\.yml$)'; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
   kind:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -139,6 +166,8 @@ jobs:
   # 후속 3 K-3: 같은 구성을 ArgoCD(GitOps)로. root Application 하나만 apply 하면 ArgoCD 가 이 PR 의 커밋을 GitHub 에서 가져와
   # Strimzi·Envoy Gateway·commerce-saga 를 sync 한다. 외부 입구는 edge(Gateway API) 하나이고 화면만 연다
   argocd:
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -193,6 +222,10 @@ jobs:
       - name: 상태·로그
         if: always()
         run: |
+          # ArgoCD 설치(helm --wait)에서 멈추면 commerce 에는 아무것도 없다 → argocd 네임스페이스부터
+          kubectl -n argocd get pods -o wide || true
+          kubectl -n argocd describe pods -l app.kubernetes.io/name=argocd-redis || true
+          kubectl -n argocd get events --sort-by=.lastTimestamp | tail -40 || true
           kubectl -n argocd get applications -o wide || true
           kubectl -n argocd get application commerce-saga -o jsonpath='{.status.conditions}{"\n"}{.status.operationState.message}{"\n"}' || true
           kubectl -n commerce get pods,kafka,kafkaconnector,gateway,httproute -o wide || true
