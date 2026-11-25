@@ -172,6 +172,16 @@ observability:
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 512Mi }
+  # 경보 전달(Discord 웹훅). URL 은 비밀값이라 여기 두지 않고 Secret 으로 만든다(deploy/README.md "경보 알림").
+  # Secret 이 없으면 null receiver 로 떠서 경보는 Alertmanager UI 에서만 보인다
+  alertmanager:
+    image: prom/alertmanager:v0.29.0
+    discordWebhookSecret:
+      name: alertmanager-discord
+      key: webhook-url
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }
   kafkaExporter:
     image: danielqsj/kafka-exporter:v1.11.0
     resources:

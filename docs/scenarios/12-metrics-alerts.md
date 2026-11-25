@@ -10,7 +10,8 @@
 2. `scripts/smoke-alerts.sh`
    - **12a**: `payment.command`에 깨진 JSON(`type: Pay`)을 넣는다 → payment-service가 `payment.command.DLT`로 옮김 → kafka-exporter의 DLT 끝 오프셋 증가 → `DeadLetterMessage{topic="payment.command.DLT"}`
    - **12b**: PG를 45초 늦춘다(시나리오 2b와 같은 상황) → 결제 `UNKNOWN` → Saga가 결제를 약 30초 기다리다 포기(`commerce_saga_timeout_give_ups_total` 증가) → `SagaTimeoutGiveUp` → `UNKNOWN`이 30초를 넘어 `PaymentResultUnknown` → PG가 늦게 승인 → 결제 서비스가 환불(`REFUNDED`) → `PaymentResultUnknown` 해제
-3. 눈으로 보려면 Grafana(http://localhost:3030) 대시보드 `commerce-saga`, 또는 Prometheus(http://localhost:9091/alerts)
+   - **12c**: 12a 의 `DeadLetterMessage` 가 Prometheus → Alertmanager 로 전달돼 `/api/v2/alerts` 에 receiver 와 함께 있는지 본다. `DISCORD_WEBHOOK_URL` 이 있으면 receiver `discord`(warning 이라 2분 뒤 채널에 온다), 없으면 `null` (ADR 0013 "경보 전달"). 12a 경보는 5분 뒤 풀리므로 12b 보다 먼저 본다
+3. 눈으로 보려면 Grafana(http://localhost:3030) 대시보드 `commerce-saga`, Prometheus(http://localhost:9091/alerts), Alertmanager(http://localhost:9095)
 
 CI `e2e`가 두 relay 모드에서 시나리오 11 다음에 이 스크립트를 돈다.
 
@@ -19,6 +20,7 @@ CI `e2e`가 두 relay 모드에서 시나리오 11 다음에 이 스크립트를
 | | 메트릭 | 경보 |
 |---|---|---|
 | 12a | `kafka_topic_partition_current_offset{topic="payment.command.DLT"}` +1 | `DeadLetterMessage` firing (5분 동안) |
+| 12c | (Prometheus `/api/v1/alertmanagers` 에 alertmanager 1개) | Alertmanager `/api/v2/alerts` 에 `DeadLetterMessage{topic="payment.command.DLT"}`, receiver `discord` 또는 `null` |
 | 12b | `commerce_payment_unknown` 1 → 0, `commerce_payment_oldest_unknown_age_seconds` 30 초과, `commerce_saga_timeout_give_ups_total` +1 | `SagaTimeoutGiveUp` firing, `PaymentResultUnknown` firing → 환불 후 해제 |
 
 ## 실제 결과

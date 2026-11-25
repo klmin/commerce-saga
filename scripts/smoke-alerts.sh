@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 시나리오 12. 장애를 넣으면 경보가 실제로 firing 되는지 (docs/scenarios/12-metrics-alerts.md)
 #
-# 준비: 인프라(prometheus, kafka-exporter 포함)와 다섯 서비스를 띄운다. 타임아웃은 CI e2e 와 같은 값
+# 준비: 인프라(prometheus, alertmanager, kafka-exporter 포함)와 다섯 서비스를 띄운다. 타임아웃은 CI e2e 와 같은 값
 #   order-service:   SAGA_STEP_TIMEOUT=10s SAGA_PAYMENT_MAX_RESENDS=2 SAGA_TIMEOUT_SCAN_INTERVAL=1s
 #   payment-service: PG_CLIENT_TIMEOUT=3s(기본) PAYMENT_RECONCILE_INTERVAL=1s
 # 실행: scripts/smoke-alerts.sh
@@ -12,6 +12,8 @@
 #   12b. PG 를 45초 늦추면 결제가 UNKNOWN 으로 30초 넘게 남아 PaymentResultUnknown 이 firing,
 #        Saga 가 결제를 포기하면 SagaTimeoutGiveUp 이 firing (메트릭 출처: payment·order-service /actuator/prometheus).
 #        PG 가 늦게 승인해 환불까지 끝나면 PaymentResultUnknown 이 풀린다
+#   12c. Prometheus 가 firing 경보를 Alertmanager 로 보내 DeadLetterMessage 가 Alertmanager 에 도착하고 receiver 가 붙는다
+#        (DISCORD_WEBHOOK_URL 이 있으면 discord, 없으면 null. Discord 로 실제 나갔는지는 채널에서 본다)
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
@@ -20,6 +22,7 @@ export MSYS_NO_PATHCONV=1
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 PROMETHEUS_URL=${PROMETHEUS_URL:-http://localhost:9091}
+ALERTMANAGER_URL=${ALERTMANAGER_URL:-http://localhost:9095}
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
 USER_ID=${USER_ID:-1}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
@@ -75,6 +78,19 @@ wait_until "payment.command.DLT 오프셋 증가" "$TIMEOUT_SECONDS" greater "$d
 echo "  ok  payment.command.DLT 메시지 $dlt_before → $(metric "$dlt_query")"
 wait_until "DeadLetterMessage firing" "$TIMEOUT_SECONDS" firing DeadLetterMessage '"topic":"payment.command.DLT"'
 echo "  ok  DeadLetterMessage{topic=payment.command.DLT} firing"
+
+# 12b 보다 먼저 본다: 12a 의 DeadLetterMessage 는 DLT 증가 후 5분이 지나면 풀린다
+echo "== 12c. Prometheus → Alertmanager: firing 경보가 전달 경로에 도착"
+# Prometheus 가 Alertmanager 를 찾았는지 (prometheus.yml 의 alerting.alertmanagers)
+am_connected() { curl -sf "$PROMETHEUS_URL/api/v1/alertmanagers" | grep -q '"activeAlertmanagers":\[{'; }
+wait_until "Prometheus 의 Alertmanager 연결" 30 am_connected
+# Alertmanager 가 받은 경보 하나 (v2 API, 경보 이름으로 거른다). receivers 는 라우팅 결과
+am_alert() { curl -sf -G "$ALERTMANAGER_URL/api/v2/alerts" --data-urlencode "filter=alertname=\"$1\"" --data-urlencode 'active=true' || true; }
+am_received() { am_alert "$1" | grep -q -- "$2"; }
+wait_until "Alertmanager 에 DeadLetterMessage 도착" "$TIMEOUT_SECONDS" am_received DeadLetterMessage '"topic":"payment.command.DLT"'
+receiver=$(am_alert DeadLetterMessage | sed -nE 's/.*"receivers":\[\{"name":"([^"]+)".*/\1/p' | head -1)
+[ -n "$receiver" ] || { echo "FAIL: DeadLetterMessage 에 receiver 가 없음" >&2; exit 1; }
+echo "  ok  Alertmanager 가 DeadLetterMessage{topic=payment.command.DLT} 를 받음 → receiver $receiver (warning: 2분 모았다가 보냄)"
 
 echo "== 12b. PG 지연 45초 → PaymentResultUnknown, SagaTimeoutGiveUp firing → 환불 후 UNKNOWN 경보 해제"
 give_up_query='sum(commerce_saga_timeout_give_ups_total)'
