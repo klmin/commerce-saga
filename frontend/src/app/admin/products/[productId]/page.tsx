@@ -16,6 +16,7 @@ import {
   changeSaleStatusAction,
   describeProductAction,
 } from "../product-actions";
+import { FormSkeleton } from "../../../loading-skeletons";
 import { ProductEditForms } from "../product-forms";
 
 export const metadata: Metadata = { title: "상품 관리 · commerce-saga" };
@@ -133,13 +134,7 @@ export default function AdminProductPage(props: PageProps<"/admin/products/[prod
       <Button variant="ghost" size="sm" asChild className="self-start">
         <Link href="/admin/products">← 상품 관리</Link>
       </Button>
-      <Suspense
-        fallback={
-          <p role="status" className="text-sm text-muted-foreground">
-            불러오는 중...
-          </p>
-        }
-      >
+      <Suspense fallback={<FormSkeleton fields={3} />}>
         <ProductManagement {...props} />
       </Suspense>
     </main>

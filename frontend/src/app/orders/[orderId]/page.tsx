@@ -12,6 +12,7 @@ import { formatTime, orderTitle } from "@/lib/orders/format";
 import { isFinished, sagaStateLabel, sagaSteps } from "@/lib/orders/saga-view";
 import { productName, won } from "@/lib/products";
 
+import { OrderDetailSkeleton } from "../../loading-skeletons";
 import { OrderStatusBadge } from "../order-status-badge";
 import { AutoRefresh } from "./auto-refresh";
 import { SagaStepList, SagaTimeline } from "./saga-progress";
@@ -113,13 +114,7 @@ export default function OrderDetailPage({ params }: PageProps<"/orders/[orderId]
           <Link href="/orders">← 내 주문</Link>
         </Button>
       </nav>
-      <Suspense
-        fallback={
-          <p role="status" className="text-sm text-muted-foreground">
-            불러오는 중...
-          </p>
-        }
-      >
+      <Suspense fallback={<OrderDetailSkeleton />}>
         <OrderDetail params={params} />
       </Suspense>
     </main>
