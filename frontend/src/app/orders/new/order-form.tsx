@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MAX_QUANTITY, orderTotal } from "@/lib/orders/order-input";
-import { PRODUCTS, won } from "@/lib/products";
+import { type Product, won } from "@/lib/products";
 
 import { type OrderFormState, placeOrderAction } from "../order-actions";
 
 type Props = {
   /** 폼을 열 때 서버가 정한 Idempotency-Key */
   idempotencyKey: string;
+  /** 판매 중인 상품 (product-service). 가격은 화면을 연 시점 값 */
+  products: Product[];
   /** 상품 id → 지금 주문 가능한 재고 (모르면 없음) */
   stocks: Record<number, number | undefined>;
   /** 내 포인트 잔액 (계정이 아직 없으면 없음) */
@@ -27,20 +29,37 @@ function toNumber(text: string): number {
 
 /**
  * 주문 폼. 수량·포인트는 화면 상태로 들고 있어 실패해도 입력이 남는다.
+ * 보이는 가격을 hidden 필드로 함께 보낸다. 서버 가격과 다르면(409) 바뀐 가격을 보여 주고, 다시 누르면 그 가격으로 주문한다 (ADR 0016).
  * 제출은 직접 Server Action 을 부른다 (form action 으로 넘기면 React 가 제출 뒤 폼을 초기화한다)
  */
-export function OrderForm({ idempotencyKey, stocks, pointBalance, initialProductId }: Props) {
+export function OrderForm({
+  idempotencyKey,
+  products,
+  stocks,
+  pointBalance,
+  initialProductId,
+}: Props) {
   const [state, formAction, pending] = useActionState<OrderFormState, FormData>(placeOrderAction, {
     idempotencyKey,
   });
   const id = useId();
   const [quantities, setQuantities] = useState<Record<number, string>>(() =>
-    Object.fromEntries(PRODUCTS.map((p) => [p.id, p.id === initialProductId ? "1" : ""])),
+    Object.fromEntries(products.map((p) => [p.id, p.id === initialProductId ? "1" : ""])),
   );
   const [point, setPoint] = useState("");
 
+  // 409 로 받은 지금 가격이 있으면 그 가격으로 보여 주고 보낸다
+  const shown = products.map((p) => ({
+    ...p,
+    price: state.currentPrices?.[p.id] ?? p.price,
+    previousPrice:
+      state.currentPrices?.[p.id] !== undefined && state.currentPrices[p.id] !== p.price
+        ? p.price
+        : undefined,
+  }));
   const total = orderTotal(
-    Object.fromEntries(PRODUCTS.map((p) => [p.id, toNumber(quantities[p.id] ?? "")])),
+    Object.fromEntries(shown.map((p) => [p.id, toNumber(quantities[p.id] ?? "")])),
+    shown,
   );
   const pointAmount = toNumber(point);
   const toPay = Math.max(0, total - pointAmount);
@@ -64,8 +83,15 @@ export function OrderForm({ idempotencyKey, stocks, pointBalance, initialProduct
       aria-describedby={errorId}
     >
       <input type="hidden" name="idempotencyKey" value={state.idempotencyKey} />
+      <input type="hidden" name="productIds" value={shown.map((p) => p.id).join(",")} />
+      {shown.map((p) => (
+        <span key={p.id} hidden>
+          <input type="hidden" name={`name-${p.id}`} value={p.name} />
+          <input type="hidden" name={`price-${p.id}`} value={p.price} />
+        </span>
+      ))}
       <ul className="flex flex-col divide-y rounded-md border">
-        {PRODUCTS.map((p) => {
+        {shown.map((p) => {
           const stock = stocks[p.id];
           const soldOut = stock === 0;
           return (
@@ -73,7 +99,14 @@ export function OrderForm({ idempotencyKey, stocks, pointBalance, initialProduct
               <div className="flex flex-1 flex-col">
                 <Label htmlFor={`${id}-qty-${p.id}`}>{p.name}</Label>
                 <span className="text-sm text-muted-foreground">
-                  {won(p.price)} · {stock === undefined ? "재고 확인 불가" : `재고 ${stock}개`}
+                  {p.previousPrice !== undefined && (
+                    <>
+                      <s>{won(p.previousPrice)}</s>{" "}
+                      <span className="font-medium text-destructive">→ </span>
+                    </>
+                  )}
+                  <span data-testid={`price-${p.id}`}>{won(p.price)}</span> ·{" "}
+                  {stock === undefined ? "재고 확인 불가" : `재고 ${stock}개`}
                   {soldOut && " (품절)"}
                 </span>
               </div>

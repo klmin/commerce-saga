@@ -84,13 +84,13 @@ avail_before=$(stock 1 | field available)
 reserved_before=$(stock 1 | field reserved)
 points_before=$(points 1)
 start=$(now_ms)
-order=$(place_order 1 '{"lines":[{"productId":1,"quantity":2,"unitPrice":1000}],"pointAmount":500}')
+order=$(place_order 1 '{"lines":[{"productId":1,"quantity":2,"unitPrice":39000}],"pointAmount":500}')
 order_id=$(echo "$order" | field orderId)
 expect_eq "생성 직후 status" PENDING "$(echo "$order" | field status)"
 wait_until "order COMPLETED" status_is 1 "$order_id" COMPLETED
 elapsed=$(( $(now_ms) - start ))
 echo "  ok  orderId=$order_id COMPLETED (${elapsed}ms)"
-expect_eq "결제 금액" 1500 "$(get_order 1 "$order_id" | field paidAmount)"
+expect_eq "결제 금액" 77500 "$(get_order 1 "$order_id" | field paidAmount)"
 expect_eq "포인트 잔액" $(( points_before - 500 )) "$(points 1)"
 expect_eq "결제 상태" APPROVED "$(curl -sf "$PAYMENT_URL/payments/orders/$order_id" -H "$(auth 1)" | field status)"
 # OrderCompleted 이벤트(코레오그래피)로 예약 재고가 판매 확정되어 reserved 가 원래대로
@@ -100,7 +100,7 @@ expect_eq "Saga 단계" COMPLETED "$(saga 1 "$order_id" | field state)"
 
 echo "== 2. 품절 상품 포함 주문 -> CANCELLED, 아무 재고도 잡지 않음"
 avail2_before=$(stock 2 | field available)
-order=$(place_order 1 '{"lines":[{"productId":2,"quantity":1,"unitPrice":500},{"productId":5,"quantity":1,"unitPrice":500}]}')
+order=$(place_order 1 '{"lines":[{"productId":2,"quantity":1,"unitPrice":25000},{"productId":5,"quantity":1,"unitPrice":45000}]}')
 oos_id=$(echo "$order" | field orderId)
 wait_until "order CANCELLED" status_is 1 "$oos_id" CANCELLED
 expect_eq "cancelReason" "insufficient stock: productId=5" "$(get_order 1 "$oos_id" | field cancelReason)"
@@ -111,7 +111,7 @@ set_pg DECLINE
 avail3_before=$(stock 3 | field available)
 reserved3_before=$(stock 3 | field reserved)
 points3_before=$(points 2)
-order=$(place_order 2 '{"lines":[{"productId":3,"quantity":1,"unitPrice":2000}],"pointAmount":300}')
+order=$(place_order 2 '{"lines":[{"productId":3,"quantity":1,"unitPrice":18000}],"pointAmount":300}')
 fail_id=$(echo "$order" | field orderId)
 wait_until "order CANCELLED" status_is 2 "$fail_id" CANCELLED
 set_pg APPROVE

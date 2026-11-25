@@ -10,7 +10,6 @@ import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase
 import com.klmin.commerce.orderservice.order.application.port.in.HandleSagaReplyUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderCommand;
 import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderResult;
-import com.klmin.commerce.orderservice.order.application.port.in.PlaceOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.SagaReplyCommand;
 import com.klmin.commerce.orderservice.order.application.port.out.LoadOrderPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderEventPort;
@@ -43,7 +42,7 @@ import java.util.UUID;
  * Order 와 OrderSaga 두 애그리거트를 함께 바꾸는 것은 의도한 타협이다 (같은 서비스·같은 DB, ADR 0003).
  */
 @Service
-class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaReplyUseCase, GetOrderSagaUseCase {
+class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderSagaUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -70,8 +69,20 @@ class OrderService implements PlaceOrderUseCase, GetOrderUseCase, HandleSagaRepl
         this.clock = clock;
     }
 
-    // (키 선점) + 주문 + Saga 저장 + 재고 예약 커맨드(outbox) = 한 트랜잭션
-    @Override
+    /**
+     * 같은 Idempotency-Key 로 이미 만든 주문이 있으면 그 결과 (가격 확인 전에 본다, PlaceOrderService).
+     * 내용이 다르면 422. 동시에 처음 요청이 진행 중이면 여기서는 비어 있고, 아래 placeOrder 의 선점이 다시 거른다
+     */
+    @Transactional(readOnly = true)
+    public Optional<PlaceOrderResult> findReplay(PlaceOrderCommand command) {
+        return idempotencyPort.find(command.userId(), command.idempotencyKey())
+                .map(existing -> replay(command, existing, OrderRequestHash.of(command)));
+    }
+
+    /**
+     * (키 선점) + 주문 + Saga 저장 + 재고 예약 커맨드(outbox) = 한 트랜잭션.
+     * 가격 확인은 이 트랜잭션 밖에서 끝낸 뒤 부른다 (PlaceOrderService, ADR 0016)
+     */
     @Transactional
     public PlaceOrderResult placeOrder(PlaceOrderCommand command) {
         Instant now = clock.instant();

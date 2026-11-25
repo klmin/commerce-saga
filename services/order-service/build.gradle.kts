@@ -12,6 +12,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
+    // product-service 가격 조회 (ADR 0016). RestClient.Builder 로 trace 문맥이 이어진다
+    implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 

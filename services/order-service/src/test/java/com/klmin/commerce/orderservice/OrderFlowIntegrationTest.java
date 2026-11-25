@@ -54,7 +54,7 @@ import static org.awaitility.Awaitility.await;
  * 커맨드 토픽을 구독해 order-service 가 보낸 커맨드를 확인하고 응답을 직접 보낸다.
  */
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, StubProductCatalogConfiguration.class})
 @Testcontainers(disabledWithoutDocker = true)
 class OrderFlowIntegrationTest {
 
