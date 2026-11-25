@@ -54,7 +54,7 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 **첫 로그인 (사용자 화면)**: 호스트는 바뀌지만 각 경로가 어디로 가는지는 7절 라우팅 표 그대로다.
 
 ```
-① example.com/oauth2/authorization/gateway-web     → SCG          (화면 호스트의 SCG 경로)
+① example.com/oauth2/authorization/auto            → SCG          (화면 호스트의 SCG 경로, SCG 가 gateway-web 으로 고름)
      302 ↓
 ② auth.example.com/oauth2/authorize?client_id=…     → auth-service (SAS)
      SSO 세션 ① 없음 → 302 ↓
