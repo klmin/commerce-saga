@@ -13,6 +13,7 @@ import {
   changeProductPrice,
   changeProductSaleStatus,
   describeProduct,
+  isProductId,
   registerProduct,
 } from "@/lib/api/admin-products";
 import { ApiError } from "@/lib/api/client";
@@ -59,6 +60,9 @@ export async function describeProductAction(
   _prev: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
+  if (!isProductId(productId)) {
+    return { error: "없는 상품입니다." };
+  }
   const input = parseDescribeInput(formData);
   if (!input.ok) {
     return { error: input.error };
@@ -77,6 +81,9 @@ export async function changePriceAction(
   _prev: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
+  if (!isProductId(productId)) {
+    return { error: "없는 상품입니다." };
+  }
   const input = parsePriceInput(formData);
   if (!input.ok) {
     return { error: input.error };
@@ -95,6 +102,9 @@ export async function changeSaleStatusAction(
   _prev: ProductFormState,
   formData: FormData,
 ): Promise<ProductFormState> {
+  if (!isProductId(productId)) {
+    return { error: "없는 상품입니다." };
+  }
   const input = parseSaleInput(formData);
   if (!input.ok) {
     return { error: input.error };

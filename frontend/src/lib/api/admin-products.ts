@@ -47,6 +47,19 @@ const auditPage = z.object({
 /** 한 화면에 보여 줄 수 (product-service size 최대 100) */
 export const ADMIN_PAGE_SIZE = 50;
 
+/** 상품 id 로 쓸 수 있는 값 (양의 안전한 정수). 서버 액션의 bind 인자는 브라우저가 보내므로 믿지 않는다 */
+export function isProductId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+/** URL 경로 조각. 숫자가 아니면 요청하지 않는다(다른 경로로 새지 않게) */
+function idPath(productId: number): string {
+  if (!isProductId(productId)) {
+    throw new Error(`invalid product id: ${String(productId)}`);
+  }
+  return encodeURIComponent(String(productId));
+}
+
 /** 판매 중지 포함 전체 (id 순) */
 export async function listAllProducts(
   page: number,
@@ -58,7 +71,7 @@ export async function listAllProducts(
 
 /** 상품 하나 (판매 중지 포함). 없으면 ApiError(404) */
 export async function getProduct(productId: number): Promise<Product> {
-  return product.parse(await authedRequest<unknown>(`/api/products/${productId}`));
+  return product.parse(await authedRequest<unknown>(`/api/products/${idPath(productId)}`));
 }
 
 /** 관리 이력 (최근부터). 없는 상품이면 ApiError(404) */
@@ -68,7 +81,7 @@ export async function productAuditLog(
 ): Promise<{ items: AuditEntry[]; hasNext: boolean }> {
   return auditPage.parse(
     await authedRequest<unknown>(
-      `/api/admin/products/${productId}/audit-log?page=${page}&size=${ADMIN_PAGE_SIZE}`,
+      `/api/admin/products/${idPath(productId)}/audit-log?page=${page}&size=${ADMIN_PAGE_SIZE}`,
     ),
   );
 }
@@ -84,7 +97,7 @@ export async function registerProduct(input: RegisterInput): Promise<Product> {
 
 export async function describeProduct(productId: number, input: DescribeInput): Promise<Product> {
   return product.parse(
-    await authedRequest<unknown>(`/api/admin/products/${productId}`, {
+    await authedRequest<unknown>(`/api/admin/products/${idPath(productId)}`, {
       method: "PUT",
       body: JSON.stringify(input),
     }),
@@ -93,7 +106,7 @@ export async function describeProduct(productId: number, input: DescribeInput): 
 
 export async function changeProductPrice(productId: number, price: number): Promise<Product> {
   return product.parse(
-    await authedRequest<unknown>(`/api/admin/products/${productId}/price`, {
+    await authedRequest<unknown>(`/api/admin/products/${idPath(productId)}/price`, {
       method: "PUT",
       body: JSON.stringify({ price }),
     }),
@@ -105,7 +118,7 @@ export async function changeProductSaleStatus(
   onSale: boolean,
 ): Promise<Product> {
   return product.parse(
-    await authedRequest<unknown>(`/api/admin/products/${productId}/sale`, {
+    await authedRequest<unknown>(`/api/admin/products/${idPath(productId)}/sale`, {
       method: "PUT",
       body: JSON.stringify({ onSale }),
     }),
