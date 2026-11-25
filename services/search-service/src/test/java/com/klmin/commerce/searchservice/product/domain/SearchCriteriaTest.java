@@ -40,6 +40,9 @@ class SearchCriteriaTest {
         assertThatThrownBy(() -> new SearchCriteria(null, null, null, true, null, 100, 100))
                 .isInstanceOf(DomainValidationException.class);
         assertThat(new SearchCriteria(null, null, null, true, null, 99, 100).from()).isEqualTo(9_900);
+        // int 최댓값 page 는 넘치지 않고 거절된다
+        assertThatThrownBy(() -> new SearchCriteria(null, null, null, true, null, Integer.MAX_VALUE, 20))
+                .isInstanceOf(DomainValidationException.class);
     }
 
     @Test

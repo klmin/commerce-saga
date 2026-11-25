@@ -118,6 +118,9 @@ services:
       ES_JAVA_OPTS: -Xms512m -Xmx512m
     ports:
       - "${ELASTICSEARCH_PORT:-9200}:9200"
+    # 색인을 남긴다. 소비 오프셋(Kafka 볼륨)과 수명을 맞춰야 재기동 뒤 검색이 비지 않는다 (CDC 스냅샷은 처음 한 번뿐)
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -sf 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' > /dev/null"]
       interval: 5s
@@ -289,3 +292,4 @@ services:
 volumes:
   postgres-data:
   kafka-data:
+  elasticsearch-data:

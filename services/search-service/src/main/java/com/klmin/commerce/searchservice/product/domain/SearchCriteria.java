@@ -35,18 +35,20 @@ public record SearchCriteria(String keyword, Long minPrice, Long maxPrice, boole
         if (sort == null) {
             sort = SearchSort.RELEVANCE;
         }
-        if (page < 0) {
-            throw new DomainValidationException("page 는 0 이상이어야 합니다");
+        if (page < 0 || page >= MAX_WINDOW) {
+            throw new DomainValidationException("page 는 0 이상 " + MAX_WINDOW + " 미만이어야 합니다");
         }
         if (size < 1 || size > MAX_SIZE) {
             throw new DomainValidationException("size 는 1~" + MAX_SIZE + " 이어야 합니다");
         }
-        if ((long) (page + 1) * size > MAX_WINDOW) {
+        // long 으로 먼저 바꿔 큰 page(예: int 최댓값)가 넘쳐 검사를 통과하지 않게
+        if (((long) page + 1) * size > MAX_WINDOW) {
             throw new DomainValidationException("앞에서부터 " + MAX_WINDOW + "건까지만 볼 수 있습니다. 검색어를 좁혀 주세요");
         }
     }
 
+    /** 위 검사로 {@value #MAX_WINDOW} 이하라 int 에 들어간다 */
     public int from() {
-        return page * size;
+        return Math.toIntExact((long) page * size);
     }
 }
