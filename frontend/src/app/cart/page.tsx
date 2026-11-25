@@ -124,7 +124,10 @@ async function CartContent({ searchParams }: Pick<PageProps<"/cart">, "searchPar
             주문하면 주문한 상품이 장바구니에서 빠집니다. 수량을 0 으로 두면 그 상품은 주문하지 않고
             남겨 둡니다.
           </p>
+          {/* 폼 상태(수량)는 처음 마운트 때만 initialQuantities 를 읽는다. 장바구니가 바뀌면(수량 변경·빼기)
+              key 가 바뀌어 새 수량으로 다시 마운트한다 */}
           <OrderForm
+            key={cart.items.map((i) => `${i.productId}:${i.quantity}`).join(",")}
             idempotencyKey={randomUUID()}
             products={orderable}
             stocks={stocks}
