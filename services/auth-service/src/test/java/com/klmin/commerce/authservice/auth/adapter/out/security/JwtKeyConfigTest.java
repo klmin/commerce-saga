@@ -105,6 +105,22 @@ class JwtKeyConfigTest {
     }
 
     @Test
+    void 로컬_키_파일을_만들_수_없으면_기동을_막지_않고_임시_키를_쓴다() throws Exception {
+        // 홈에 쓸 수 없는 컨테이너처럼: 상위 경로가 디렉터리가 아니라 파일이라 디렉터리를 만들 수 없다
+        Path notADirectory = Files.writeString(dir.resolve("home"), "file");
+        Path file = notADirectory.resolve(".commerce-saga/auth-jwt-dev.pem");
+
+        RSAKey first = signingKey(properties(null, null, file.toString()));
+        RSAKey second = signingKey(properties(null, null, file.toString()));
+
+        assertThat(file).doesNotExist();
+        assertThat(first.getKeyID()).isNotEqualTo(second.getKeyID());
+        try (var files = Files.list(dir)) {
+            assertThat(files.map(p -> p.getFileName().toString()).toList()).containsExactly("home");
+        }
+    }
+
+    @Test
     void 둘_다_비면_기동할_때마다_임시_키를_만든다() {
         RSAKey first = signingKey(properties(null, null, ""));
         RSAKey second = signingKey(properties(null, null, null));
