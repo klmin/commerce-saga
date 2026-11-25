@@ -90,7 +90,7 @@ flowchart LR
 | PR | 내용 |
 |---|---|
 | (이번 PR) | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". 다음 PR 은 release 가 main CI 결과를 기다리게(main CI 취소 안 함) |
-| #HOT | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
+| #100 | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
 | #95 | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
 | #93 | 문서: 배포 환경 가이드 `docs/deployment-environments.md`(로컬·compose·k8s·ArgoCD·EKS, Helm·values·Application 매핑) |
 | #94 | 후속 4-3b 관리자 상품 화면: `/admin/products`(판매 중지 포함 목록·페이지, 상품 등록) → `/admin/products/{id}`(이름·설명·가격·판매 상태 변경, 관리 이력 최근부터: 변경 종류·시각·관리자 id·바뀐 값만 전 → 후, 옮겨 온 옛 가격 이력은 가격만). 서버 액션이 저장 뒤 `refresh()` 로 다시 그림, 입력은 값이 바뀌면 key 로 다시 마운트. 관리자가 아니면 404. 입력 검사·이력 표시 `lib/admin/product-input.ts`(Vitest), Playwright `e2e/admin-products.spec.ts`(등록 → 가격·설명·판매 중지 → 이력 4건 순서·전후 값, 같은 가격 요청은 이력 없음, 일반 사용자 404) |
