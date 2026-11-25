@@ -68,7 +68,7 @@ git push origin <옛 커밋>:refs/heads/release/eks --force
 
 - 웹훅 URL 은 저장소 시크릿에만 둔다(URL 만 있으면 누구나 그 채널에 쓸 수 있다). 없으면 그 채널 알림만 건너뛴다. 넣기: `gh secret set DISCORD_WEBHOOK_MAIN` (값은 입력창으로)
 - 실패 알림 앞의 멘션(`@here`, `<@&역할ID>`)은 저장소 변수 `DISCORD_FAILURE_MENTION` (선택)
-- "모든 체크 통과"는 커밋의 check run 을 조회해 남은 것도 실패도 없을 때 보내고, 커밋 status `notify/all-passed` 로 한 번만 보냈음을 남긴다. 같은 커밋의 판단은 `concurrency` 로 한 번에 하나씩
+- "모든 체크 통과"는 그 커밋에서 돈 워크플로 실행(위 표의 워크플로만)을 조회해 남은 것도 실패도 없을 때 보내고, 커밋 status `notify/all-passed` 로 한 번만 보냈음을 남긴다. 조회가 실패하면 보내지 않는다. 같은 커밋의 판정은 `concurrency` 로 한 번에 하나씩(실패 알림은 실행마다 따로라 대기열에서 사라지지 않는다)
 - `workflow_run` 은 main 에 있는 `notify.yml` 기준으로 돈다. 이 파일을 바꾼 PR 은 머지 뒤부터 적용된다
 - 포크 PR 은 알리지 않는다(PR 이벤트는 시크릿이 없고, 워크플로 결과는 PR 번호가 비어 있다). 운영 경보(Alertmanager → Discord)는 별도 웹훅이라 채널을 나누는 편이 낫다
 

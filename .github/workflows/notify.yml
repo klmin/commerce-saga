@@ -9,14 +9,15 @@ name: notify
 # workflow_run 은 main 에 있는 이 파일 기준으로 돈다 → 여기를 바꾸면 머지 뒤부터 적용된다
 on:
   workflow_run:
-    workflows: [backend, frontend, e2e, browser-e2e, infra, k8s, codeql, release]
+    # "모두 통과" 판정은 아래 워크플로의 check run 만 센다 → 목록을 바꾸면 all-passed 의 WORKFLOWS 도 같이
+    workflows: [backend, frontend, e2e, browser-e2e, infra, k8s, codeql, release, Codex review on push]
     types: [completed]
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
 
 permissions:
   contents: read
-  actions: read # 실패한 잡 이름
+  actions: read # 실패한 잡 이름, 실행별 워크플로 이름
   checks: read
   statuses: write # 커밋마다 "모두 통과" 알림을 한 번만 보냈다는 표시(notify/all-passed)
 
@@ -46,14 +47,11 @@ jobs:
             '{embeds: [{title: $t, description: $d, url: $u, color: $c}]}' \
             | curl -sf -H 'Content-Type: application/json' -d @- "$WEBHOOK"
 
+  # 실패·배포 알림: 실행마다 하나씩, 직렬화하지 않는다(같은 커밋 대기열에서 취소되면 실패 알림이 사라진다)
   workflow-result:
     if: github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # 같은 커밋의 워크플로가 거의 동시에 끝나도 "모두 통과" 판단이 겹치지 않게 커밋마다 하나씩
-    concurrency:
-      group: notify-${{ github.event.workflow_run.head_sha }}
-      cancel-in-progress: false
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -72,6 +70,7 @@ jobs:
           COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
         run: |
           set -euo pipefail
+          case "$CONCLUSION" in failure|timed_out) failed=true ;; *) failed=false ;; esac
           short=${SHA:0:7}
           subject=$(printf '%s' "$COMMIT_MSG" | head -1)
 
@@ -80,13 +79,11 @@ jobs:
               '{content: $m, embeds: [{title: $t, description: $d, url: $u, color: $c}]}' \
               | curl -sf -H 'Content-Type: application/json' -d @- "$1"
           }
-          failed_jobs() {
+          failed_jobs() { # 조회가 실패해도 알림은 보낸다
             gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --paginate \
               --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled") | .name' \
-              | paste -sd ',' - | sed 's/,/, /g'
+              2> /dev/null | paste -sd ',' - | sed 's/,/, /g' || echo "(조회 실패)"
           }
-          failed=false
-          case "$CONCLUSION" in failure|timed_out) failed=true ;; esac
 
           # main push·매일·수동 실행 → main 채널
           if [ "$EVENT" != pull_request ]; then
@@ -102,25 +99,57 @@ jobs:
             exit 0
           fi
 
-          # PR 의 CI → PR 채널 (포크 PR 은 번호가 비어 있다 → 건너뜀)
-          [ -n "$PR_NUMBER" ] || exit 0
+          # PR 의 워크플로 실패 → PR 채널 (포크 PR 은 번호가 비어 있다 → 건너뜀)
+          [ "$failed" = true ] && [ -n "$PR_NUMBER" ] || exit 0
           [ -n "$PR_WEBHOOK" ] || { echo "DISCORD_WEBHOOK_PR 없음, 건너뜀"; exit 0; }
-          pr_url="https://github.com/$REPO/pull/$PR_NUMBER"
-          if [ "$failed" = true ]; then
-            send "$PR_WEBHOOK" "" "#$PR_NUMBER $WORKFLOW 실패" \
-              "$short $subject"$'\n'"실패한 잡: $(failed_jobs)"$'\n'"$pr_url" "$RUN_URL" 15158332
-            exit 0
-          fi
-          [ "$CONCLUSION" = success ] || exit 0
+          send "$PR_WEBHOOK" "" "#$PR_NUMBER $WORKFLOW 실패" \
+            "$short $subject"$'\n'"실패한 잡: $(failed_jobs)"$'\n'"https://github.com/$REPO/pull/$PR_NUMBER" "$RUN_URL" 15158332
 
-          # 이 커밋의 체크가 모두 끝났고 실패가 없을 때만, 커밋마다 한 번
+  # "모두 통과": 커밋마다 한 번. 판정이 겹치지 않게 커밋마다 하나씩 돈다. 대기 중인 판정이 새 판정에 밀려 취소돼도
+  # 마지막에 끝난 워크플로의 판정은 남으므로(가장 늦게 들어온 것이 대기열에 남는다) 결과가 같다
+  all-passed:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0].number
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: notify-all-passed-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
+          # 위 on.workflow_run.workflows 와 같은 목록 (이 워크플로들의 실행만 센다)
+          WORKFLOWS: '["backend","frontend","e2e","browser-e2e","infra","k8s","codeql","release","Codex review on push"]'
+        run: |
+          set -euo pipefail
+          [ -n "$PR_WEBHOOK" ] || { echo "DISCORD_WEBHOOK_PR 없음, 건너뜀"; exit 0; }
           sent=$(gh api "repos/$REPO/commits/$SHA/statuses" --jq '[.[] | select(.context == "notify/all-passed")] | length')
-          [ "$sent" = 0 ] || exit 0
-          read -r pending bad < <(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
-            --jq '.check_runs[] | [.status, (.conclusion // "")] | @tsv' \
-            | awk -F'\t' '$1 != "completed" {p++} $1 == "completed" && $2 !~ /^(success|skipped|neutral)$/ {b++} END {print p+0, b+0}')
-          echo "남은 체크 $pending, 실패 $bad"
-          [ "$pending" = 0 ] && [ "$bad" = 0 ] || exit 0
-          send "$PR_WEBHOOK" "" "#$PR_NUMBER 모든 체크 통과" "$short $subject" "$pr_url" 3066993
+          [ "$sent" = 0 ] || { echo "이미 보냄"; exit 0; }
+
+          # 이 커밋에서 돈 워크플로 실행(구독 중인 것만). 실행 단위로 보면 같은 워크플로를 다시 돌린 경우 마지막 시도만 남는다.
+          # 조회가 실패하면 set -e 로 여기서 멈춘다(판정도 status 기록도 하지 않음)
+          runs=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" --paginate \
+            --jq '.workflow_runs[] | [.name, .status, (.conclusion // "")] | @tsv')
+          counts=$(printf '%s\n' "$runs" | jq -Rr --argjson w "$WORKFLOWS" '
+            [inputs | select(length > 0) | split("\t") | select(.[0] as $n | $w | index($n))]
+            | {total: length,
+               pending: map(select(.[1] != "completed")) | length,
+               bad: map(select(.[1] == "completed" and (.[2] | test("^(success|skipped|neutral)$") | not))) | length}
+            | "\(.total) \(.pending) \(.bad)"' -n)
+          read -r total pending bad <<< "$counts"
+          echo "워크플로 실행 $total, 남은 것 $pending, 실패 $bad"
+          [ "$total" -gt 0 ] && [ "$pending" = 0 ] && [ "$bad" = 0 ] || exit 0
+
+          subject=$(printf '%s' "$COMMIT_MSG" | head -1)
+          jq -n --arg t "#$PR_NUMBER 모든 체크 통과" --arg d "${SHA:0:7} $subject" \
+            --arg u "https://github.com/$REPO/pull/$PR_NUMBER" \
+            '{embeds: [{title: $t, description: $d, url: $u, color: 3066993}]}' \
+            | curl -sf -H 'Content-Type: application/json' -d @- "$PR_WEBHOOK"
           gh api "repos/$REPO/statuses/$SHA" -f state=success -f context=notify/all-passed \
             -f description="Discord 에 모두 통과 알림을 보냄" > /dev/null
