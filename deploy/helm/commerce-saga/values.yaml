@@ -48,6 +48,22 @@ kafka:
   replicas: 1
   partitions: 3
   storage: 2Gi
+  # 비우면 request 가 없어 스케줄러가 몫을 셈하지 않고(노드가 빠듯하면 먼저 밀려난다) 힙도 노드 메모리 기준으로 커진다.
+  # 힙을 못박고 힙 밖(메타스페이스·스레드·네트워크 버퍼) 약 400Mi 를 남긴다. 실측 RSS 약 1Gi(힙 상한 없을 때)
+  resources:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 1536Mi }
+  jvmOptions:
+    "-Xms": 512m
+    "-Xmx": 768m
+  # entity operator 의 topic operator (KafkaTopic → 토픽). 실측 RSS 약 300Mi
+  topicOperator:
+    resources:
+      requests: { cpu: 50m, memory: 256Mi }
+      limits: { memory: 512Mi }
+    jvmOptions:
+      "-Xms": 128m
+      "-Xmx": 256m
   topics:
     - inventory.command
     - inventory.reply
@@ -233,6 +249,7 @@ observability:
       limits: { memory: 128Mi }
   grafana:
     image: grafana/grafana:13.2.6
+    # 대시보드를 열면 약 440Mi 까지 쓴다 → 512Mi 는 빠듯하다
     resources:
-      requests: { cpu: 50m, memory: 128Mi }
-      limits: { memory: 512Mi }
+      requests: { cpu: 50m, memory: 256Mi }
+      limits: { memory: 768Mi }
