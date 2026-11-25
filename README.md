@@ -124,6 +124,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 15 | [PG 장애가 이어지면 서킷 브레이커가 열려 결제 즉시 실패·보상, 복구 후 시험 호출로 닫힘](docs/scenarios/15-pg-circuit-breaker.md) | CI `e2e` |
 | 16 | [상품 테이블 CDC: products 변경이 product.cdc.products 로 (키 = 상품 id, 변경 후 행, 헤더 __lsn)](docs/scenarios/16-product-cdc.md) | CI `e2e`·`k8s` |
 | 17 | [상품 검색: 가격 변경·판매 중지가 몇 초 안에 검색에 반영, 옛 변경 무시, ES 중단 중 검색만 503 → 재개 후 따라잡음](docs/scenarios/17-product-search.md) | CI `e2e`·`k8s` |
+| 18 | [인기 상품 재고 락: 한 상품에 몰린 예약은 약 150건/s 에서 막히고 인스턴스를 늘려도 그대로(락 대기), 상품이 나뉘면 늘어남 → 비관적 락 유지](docs/scenarios/18-hot-stock-lock.md) | 측정 (로컬) |
 
 ## 설계 결정 (ADR)
 
