@@ -71,6 +71,8 @@ class GatewayBffTest {
     private static final AtomicReference<String> NONCE = new AtomicReference<>();
     private static final AtomicReference<String> AUDIENCE = new AtomicReference<>("gateway-web");
     private static final AtomicReference<Long> ACCESS_TTL = new AtomicReference<>(600L);
+    private static final AtomicReference<List<String>> ROLES = new AtomicReference<>(List.of("USER"));
+    private static final java.util.concurrent.atomic.AtomicBoolean REFRESH_REFUSED = new java.util.concurrent.atomic.AtomicBoolean();
     private static final List<String> TOKEN_REQUESTS = new CopyOnWriteArrayList<>();
     private static final AtomicReference<String> LAST_API = new AtomicReference<>();
     private static final HttpServer SAS = fakeAuthorizationServerAndServices();
@@ -108,6 +110,8 @@ class GatewayBffTest {
         browser = HttpClient.newBuilder().cookieHandler(cookies).followRedirects(HttpClient.Redirect.NEVER).build();
         ACCESS_TTL.set(600L);
         AUDIENCE.set("gateway-web");
+        ROLES.set(List.of("USER"));
+        REFRESH_REFUSED.set(false);
         TOKEN_REQUESTS.clear();
         LAST_API.set(null);
     }
@@ -178,6 +182,34 @@ class GatewayBffTest {
         get("/api/orders/abc", "localhost:5173");
         assertThat(TOKEN_REQUESTS).anyMatch(r -> r.contains("grant_type=refresh_token") && r.contains("refresh_token=r-1"));
         assertThat(LAST_API.get()).contains("auth=Bearer ey");
+    }
+
+    @Test
+    void 관리자는_토큰이_갱신된_뒤에도_관리자_API_를_쓸_수_있다() throws Exception {
+        ROLES.set(List.of("ADMIN", "USER"));
+        AUDIENCE.set("gateway-admin");
+        ACCESS_TTL.set(30L);
+        login("/", "localhost:5174");
+        ACCESS_TTL.set(600L);
+
+        assertThat(get("/api/admin/payment-faults", "localhost:5174").statusCode()).isEqualTo(200);
+        assertThat(TOKEN_REQUESTS).anyMatch(r -> r.contains("grant_type=refresh_token"));
+        // 갱신으로 세션의 로그인 사용자가 다시 만들어진 뒤에도 ROLE_ADMIN 이 남아 있다
+        assertThat(get("/api/admin/payment-faults", "localhost:5174").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void refresh_가_거절되면_세션을_끝내고_API_는_401() throws Exception {
+        ACCESS_TTL.set(30L);
+        login("/", "localhost:5173");
+        REFRESH_REFUSED.set(true);
+
+        HttpResponse<String> refused = get("/api/orders/abc", "localhost:5173");
+        assertThat(refused.statusCode()).isEqualTo(401);
+        assertThat(LAST_API.get()).isNull();
+        // 세션이 끝나 다음 요청도 401 (다시 로그인할 때까지)
+        REFRESH_REFUSED.set(false);
+        assertThat(get("/api/orders/abc", "localhost:5173").statusCode()).isEqualTo(401);
     }
 
     @Test
@@ -295,8 +327,13 @@ class GatewayBffTest {
                     String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                     TOKEN_REQUESTS.add(form + " auth=" + exchange.getRequestHeaders().getFirst("Authorization"));
                     boolean refresh = form.contains("grant_type=refresh_token");
-                    String access = jwt(Map.of("sub", "8", "roles", List.of("USER")), ACCESS_TTL.get(), AUDIENCE.get(), null);
-                    String id = jwt(Map.of("sub", "8", "roles", List.of("USER"), "auth_time", Instant.now().getEpochSecond()),
+                    if (refresh && REFRESH_REFUSED.get()) {
+                        // SAS 가 refresh 를 거절(만료·SSO 로그아웃으로 기록 삭제)
+                        respond(exchange, 400, "{\"error\":\"invalid_grant\"}");
+                        return;
+                    }
+                    String access = jwt(Map.of("sub", "8", "roles", ROLES.get()), ACCESS_TTL.get(), AUDIENCE.get(), null);
+                    String id = jwt(Map.of("sub", "8", "roles", ROLES.get(), "auth_time", Instant.now().getEpochSecond()),
                             600, AUDIENCE.get(), refresh ? null : NONCE.get());
                     respond(exchange, """
                             {"access_token":"%s","token_type":"Bearer","expires_in":%d,"scope":"openid",
@@ -317,9 +354,13 @@ class GatewayBffTest {
     }
 
     private static void respond(HttpExchange exchange, String body) throws IOException {
+        respond(exchange, 200, body);
+    }
+
+    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
     }

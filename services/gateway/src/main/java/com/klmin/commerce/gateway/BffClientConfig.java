@@ -8,6 +8,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.AuthorizationCodeReactiveOAuth2AuthorizedClientProvider;
 import org.springframework.security.oauth2.client.DelegatingReactiveOAuth2AuthorizedClientProvider;
+import org.springframework.security.oauth2.client.RefreshOidcUserReactiveOAuth2AuthorizationSuccessHandler;
 import org.springframework.security.oauth2.client.RefreshTokenReactiveOAuth2AuthorizedClientProvider;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcReactiveOAuth2UserService;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
@@ -77,14 +78,24 @@ class BffClientConfig {
         return new WebSessionServerOAuth2AuthorizedClientRepository();
     }
 
+    /**
+     * refresh 로 새 토큰(새 ID 토큰 포함)을 받으면 세션의 로그인 사용자도 새 ID 토큰으로 다시 만든다. 이때 기본 사용자 서비스를
+     * 쓰면 {@code roles → ROLE_*} 매핑이 빠져 관리자가 갱신 뒤 {@code /api/admin/**} 에서 403 이 된다 → 같은 사용자 서비스를 쓴다
+     */
     @Bean
     ReactiveOAuth2AuthorizedClientManager authorizedClientManager(ReactiveClientRegistrationRepository registrations,
-                                                                  ServerOAuth2AuthorizedClientRepository authorizedClients) {
+                                                                  ServerOAuth2AuthorizedClientRepository authorizedClients,
+                                                                  ReactiveOAuth2UserService<OidcUserRequest, OidcUser> oidcUserService) {
+        RefreshOidcUserReactiveOAuth2AuthorizationSuccessHandler refreshedUser =
+                new RefreshOidcUserReactiveOAuth2AuthorizationSuccessHandler();
+        refreshedUser.setUserService(oidcUserService);
+        RefreshTokenReactiveOAuth2AuthorizedClientProvider refresh = new RefreshTokenReactiveOAuth2AuthorizedClientProvider();
+        refresh.setAuthorizationSuccessHandler(refreshedUser);
+
         DefaultReactiveOAuth2AuthorizedClientManager manager =
                 new DefaultReactiveOAuth2AuthorizedClientManager(registrations, authorizedClients);
         manager.setAuthorizedClientProvider(new DelegatingReactiveOAuth2AuthorizedClientProvider(
-                new AuthorizationCodeReactiveOAuth2AuthorizedClientProvider(),
-                new RefreshTokenReactiveOAuth2AuthorizedClientProvider()));
+                new AuthorizationCodeReactiveOAuth2AuthorizedClientProvider(), refresh));
         return manager;
     }
 
