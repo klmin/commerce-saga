@@ -187,7 +187,7 @@ services:
 
   # 분산 트레이싱 저장소 (ADR 0013). alloy 가 OTLP 로 넣는다. 호스트 포트는 조회 API 만 (표준 3200 에서 비킴)
   tempo:
-    image: grafana/tempo:2.10.10
+    image: grafana/tempo:3.1.1
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
