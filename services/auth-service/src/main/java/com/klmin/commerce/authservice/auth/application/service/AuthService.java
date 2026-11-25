@@ -5,7 +5,11 @@ import com.klmin.commerce.authservice.auth.application.InvalidCredentialsExcepti
 import com.klmin.commerce.authservice.auth.application.InvalidRefreshTokenException;
 import com.klmin.commerce.authservice.auth.application.LoginLockedException;
 import com.klmin.commerce.authservice.auth.application.SessionNotFoundException;
+import com.klmin.commerce.authservice.auth.application.port.in.AuthenticateCommand;
+import com.klmin.commerce.authservice.auth.application.port.in.AuthenticateUseCase;
+import com.klmin.commerce.authservice.auth.application.port.in.AuthenticatedUserResult;
 import com.klmin.commerce.authservice.auth.application.port.in.GetJwksUseCase;
+import com.klmin.commerce.authservice.auth.application.port.in.TokenClaimsUseCase;
 import com.klmin.commerce.authservice.auth.application.port.in.LoginCommand;
 import com.klmin.commerce.authservice.auth.application.port.in.LoginUseCase;
 import com.klmin.commerce.authservice.auth.application.port.in.LogoutUseCase;
@@ -39,13 +43,15 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
- * 회원가입·로그인·refresh token rotation·로그아웃 (ADR 0008).
+ * 회원가입·로그인·refresh token rotation·로그아웃 (ADR 0008), SAS 로그인 확인과 토큰 클레임 (ADR 0017).
  * 회원은 DB, refresh token family 와 로그인 실패 횟수는 Redis 에 둔다.
  */
 @Service
-public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUseCase, LogoutUseCase,
+public class AuthService implements SignUpUseCase, LoginUseCase, AuthenticateUseCase, TokenClaimsUseCase,
+        RefreshTokenUseCase, LogoutUseCase,
         ManageSessionsUseCase, GetJwksUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
@@ -97,7 +103,34 @@ public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUse
     // 트랜잭션 없이: 조회 한 번뿐이고, 비밀번호 해시 비교·Redis 동안 DB 연결을 쥐고 있지 않게
     @Override
     public TokenResult login(LoginCommand command) {
-        String loginId = User.normalizeLoginId(command.loginId());
+        User user = verifyCredentials(command.loginId(), command.password());
+        Instant now = clock.instant();
+        RefreshToken token = refreshTokens.newFamily();
+        RefreshFamily family = RefreshFamily.start(token, user.id(), agent(command.agent()), now,
+                policy.refreshTokenTtl(), policy.refreshAbsoluteTtl());
+        families.create(family);
+        return tokens(user, now, token, family.remainingLifetime(now));
+    }
+
+    /** SAS 로그인 폼. {@link #login} 과 같은 확인·실패 제한이고 토큰은 SAS 가 만든다 (ADR 0017) */
+    // 트랜잭션 없이 (login 과 같은 이유)
+    @Override
+    public AuthenticatedUserResult authenticate(AuthenticateCommand command) {
+        return claimsOf(verifyCredentials(command.loginId(), command.password()));
+    }
+
+    @Override
+    public AuthenticatedUserResult currentClaims(long userId) {
+        return claimsOf(users.findById(userId).filter(User::isActive).orElseThrow(InvalidCredentialsException::new));
+    }
+
+    private static AuthenticatedUserResult claimsOf(User user) {
+        return new AuthenticatedUserResult(user.id(),
+                user.roles().stream().map(Enum::name).collect(Collectors.toSet()));
+    }
+
+    private User verifyCredentials(String rawLoginId, String password) {
+        String loginId = User.normalizeLoginId(rawLoginId);
         Optional<Duration> locked = loginAttempts.lockedFor(loginId, policy.loginMaxFailures());
         if (locked.isPresent()) {
             throw new LoginLockedException(locked.get());
@@ -105,9 +138,9 @@ public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUse
         Optional<User> found = users.findByLoginId(loginId);
         boolean passwordMatches;
         if (found.isPresent()) {
-            passwordMatches = passwordHasher.matches(command.password(), found.get().passwordHash());
+            passwordMatches = passwordHasher.matches(password, found.get().passwordHash());
         } else {
-            passwordHasher.matchAgainstDummy(command.password());
+            passwordHasher.matchAgainstDummy(password);
             passwordMatches = false;
         }
         if (!passwordMatches || !found.get().isActive()) {
@@ -115,14 +148,7 @@ public class AuthService implements SignUpUseCase, LoginUseCase, RefreshTokenUse
             throw new InvalidCredentialsException();
         }
         loginAttempts.reset(loginId);
-
-        User user = found.get();
-        Instant now = clock.instant();
-        RefreshToken token = refreshTokens.newFamily();
-        RefreshFamily family = RefreshFamily.start(token, user.id(), agent(command.agent()), now,
-                policy.refreshTokenTtl(), policy.refreshAbsoluteTtl());
-        families.create(family);
-        return tokens(user, now, token, family.remainingLifetime(now));
+        return found.get();
     }
 
     /**

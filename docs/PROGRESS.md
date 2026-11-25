@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (후속 5 인증 재구성 설계 확정: 4-7절, 구현 전)
+- 마지막 갱신: 2026-11-26 (후속 5-1 auth-service → SAS: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -90,6 +90,7 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| #107 | 후속 5-1 auth-service → SAS: 표준 엔드포인트(issuer `AUTH_ISSUER`, 서명 키·JWKS 그대로), Flyway V4 SAS 스키마(PostgreSQL 맞춤·hash 인덱스), SSO 세션 Redis(`AUTH_SESSION`), 임시 로그인 화면 `/signin`·처리 `POST /login`(실패 제한 그대로)·가입 폼 `POST /signup`·`GET /csrf`(세션 CSRF), 토큰 `sub`=userId·`roles` 를 토큰마다 DB 에서, 고정 클라이언트 upsert(시크릿: 외부 → 개발용 파일 → 기동 실패), SSO 로그아웃 때 인가 기록 삭제·끝난 기록 정리, 경로 방식(`use-prefix`), k8s hook Job 이 `oauth-client-secrets` 생성. 기존 `/auth/*` API 는 5-3 까지 유지 |
 | #106 | 후속 5-0 [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md): auth-service → SAS(OIDC IdP), Gateway → BFF, 화면 → Vite SPA 3개, 고정 클라이언트 등록·시크릿 출처, 두 배치 방식. 고려한 안(자체 SSO·SAS·Keycloak / PKCE SPA·SCG BFF·Next BFF / 화면 2·3개 / Next CSR·Vite / DCR)과 대체 범위 표. ADR 0008(일부)·0011(전체)은 상태 줄만 대체 표시 |
 | #100 | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
 | (이번 PR) | release 가 main CI 를 기다림: 첫 잡 `ci`(`scripts/release-ci-gate.sh`)가 마지막 배포 이후 main 커밋 하나하나의 CI 가 모두 통과해야 넘어감(경로 필터·모듈별 빌드라 뒤 커밋 통과가 앞 실패를 대신하지 않음, 고친 뒤 수동 실행 `ci_from`), 실행이 안 보이는 커밋은 codeql 이 보일 때까지 대기, 실패·취소면 배포 중단. main CI 는 취소하지 않음(concurrency 그룹 = PR 은 브랜치, 그 밖은 실행 id). ADR 0014 "배포 전 main CI 대기" |
@@ -571,12 +572,21 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | PR | 범위 |
 |---|---|
 | 5-0 | [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md) (결정·대체 범위, ADR 0008 일부·0011 대체 표시) |
-| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지) |
+| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지), PR #107 |
 | 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃) |
 | 5-3 | 사용자 SPA(`frontend/apps/web` + `packages/ui`), compose Caddy·시크릿 init, Helm 호스트 라우트, e2e. 끝나면 Next·기존 `/auth/*` 제거 |
 | 5-4 | 인증 화면(`frontend/apps/auth`) |
 | 5-5 | 관리자 SPA(`frontend/apps/admin`), SSO 확인 |
 | 5-6 | 로그인 기기 관리 재구현, 시나리오 문서, 태그 |
+
+**5-1 에서 정한 것** (설계 문서 11절 중 auth-service 몫, 추천안)
+- SSO 세션(`AUTH_SESSION`) 유휴 만료 30분(`AUTH_SSO_SESSION_IDLE`). Keycloak 의 SSO Session Idle 기본값과 같다. 길게 두면 공용 PC 위험, 짧으면 화면 사이 SSO 가 자주 끊긴다
+- 인가 기록 보존: 들어 있는 토큰이 모두 끝나고 1일 뒤 삭제, 1시간마다(멱등 기록 정리와 같은 모양). SSO 로그아웃 때는 그 사용자의 기록을 바로 지운다(다른 화면의 refresh 도 막힘)
+- refresh token 14일, 갱신마다 새 토큰(회전). ADR 0008 의 "처음 로그인부터 절대 30일" 상한은 SAS 기본에 없어 들고 오지 않았다(한계)
+- 토큰 `roles` 는 토큰을 만들 때마다 DB 에서 읽는다(refresh 때 역할 변경 반영, 정지 계정은 `invalid_grant`). principal 이름 = userId 문자열 → `sub`
+- `AUTH_ISSUER` 로컬 기본값은 `http://localhost:8086`(auth-service 직접). 인증 화면 SPA 가 생기는 5-4 에서 `http://localhost:5175` 로 바꾼다. 기존 `/auth/*` 토큰의 `iss`(`commerce-saga-auth`)와 서비스 검증 값은 5-2 에서 맞춘다
+- 클라이언트 시크릿 k8s: 서명 키와 같은 hook Job 이 Secret `oauth-client-secrets` 를 없을 때만 만든다(설계 문서의 "k8s 스크립트" 자리. 이미 있는 Argo CD 밖 생성 방식을 그대로 씀)
+- 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`

@@ -159,6 +159,17 @@ spec:
             - name: AUTH_JWT_DEV_KEY_FILE
               value: ""
             {{- end }}
+            {{- if eq $name "auth-service" }}
+            # OAuth 클라이언트(Gateway BFF) 시크릿은 Secret 에서 (values oauthClientSecrets, ADR 0017). 로컬 개발용 파일을 끈다:
+            # 시크릿이 없으면 auth-service 가 기동 실패한다(조용히 만들면 Gateway 와 값이 어긋난다)
+            {{- range $client := list "gateway-web" "gateway-admin" }}
+            - name: {{ $client | replace "-" "_" | upper }}_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ $root.Values.oauthClientSecrets.secretName }}, key: {{ $client }} }
+            {{- end }}
+            - name: OAUTH_CLIENT_SECRET_DEV_DIR
+              value: ""
+            {{- end }}
             {{- range $k, $v := $svc.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}

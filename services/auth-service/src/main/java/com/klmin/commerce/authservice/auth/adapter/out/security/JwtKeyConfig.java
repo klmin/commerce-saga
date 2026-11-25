@@ -6,6 +6,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyUse;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
@@ -15,6 +16,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
@@ -70,6 +73,24 @@ class JwtKeyConfig {
         NimbusJwtDecoder decoder = new NimbusJwtDecoder(processor);
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(keys.issuer()));
         return decoder;
+    }
+
+    /**
+     * SAS 가 JWKS({@code /oauth2/jwks})로 내보내는 공개키 (ADR 0017). 지금 {@code /.well-known/jwks.json} 과 같은 집합
+     * (현재 + 은퇴한 키)이라 두 발급 경로의 토큰이 같은 키로 검증된다. 개인키는 넣지 않는다.
+     */
+    @Bean
+    JWKSource<SecurityContext> jwkSource(JwtKeys keys) {
+        return new ImmutableJWKSet<>(keys.publicKeys());
+    }
+
+    /**
+     * SAS 가 access·ID token 을 서명할 때 쓰는 encoder. 현재 키 하나만 넣는다. JWKSource 를 그대로 쓰면 은퇴한 공개키도
+     * 서명 키 후보로 잡혀 "서명 키가 여럿" 오류가 난다(SAS 는 JwtEncoder 빈이 있으면 그것을 쓴다)
+     */
+    @Bean
+    JwtEncoder jwtEncoder(JwtKeys keys) {
+        return new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(keys.signingKey())));
     }
 
     private static RSAKey signingKey(JwtProperties properties, ResourceLoader resourceLoader) {

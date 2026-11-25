@@ -170,7 +170,7 @@ deploy/helm/commerce-saga/   ← 폴더 이름은 자유
 │   ├─ postgres.yaml         ← Postgres StatefulSet, 서비스별 DB 초기화
 │   ├─ redis.yaml
 │   ├─ elasticsearch.yaml    ← 상품 검색용 Elasticsearch
-│   ├─ auth-jwt-key.yaml     ← auth-service 서명 키 Secret 을 한 번 만드는 hook Job
+│   ├─ auth-jwt-key.yaml     ← auth-service 서명 키·OAuth 클라이언트 시크릿 Secret 을 한 번 만드는 hook Job
 │   ├─ kafka.yaml            ← Strimzi Kafka·KafkaNodePool·KafkaTopic CR (브로커 Pod 는 Strimzi 가 띄움)
 │   ├─ debezium.yaml         ← Strimzi KafkaConnect·KafkaConnector (outbox relay)
 │   ├─ observability.yaml    ← Alloy·Tempo·Loki·Prometheus·Alertmanager·Grafana
