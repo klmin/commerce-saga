@@ -69,10 +69,10 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 ⑦ example.com/                                      → 사용자 SPA
 ```
 
-1. SPA 가 `/api/**` 를 불렀는데 BFF 세션이 없으면 SCG 는 `401` 을 준다(API 요청에 리다이렉트를 주지 않는다). SPA 는 로그인 버튼이나 자동으로 ① 로 **페이지 이동**한다. 이때 `?return_to=<지금 화면 경로>` 를 붙여 ⑦ 에서 그 화면으로 돌아온다(7-3)
+1. SPA 가 `/api/**` 를 불렀는데 BFF 세션이 없으면 SCG 는 `401` 을 준다(API 요청에 리다이렉트를 주지 않는다). SPA 는 로그인 버튼이나 자동으로 ① 로 **페이지 이동**한다. 이때 `?return_to=<지금 화면 경로>` 를 붙여 ⑦ 에서 그 화면으로 돌아온다(7-3). 화면은 클라이언트 이름을 모르고 항상 `/oauth2/authorization/auto` 로 시작하며, SCG 가 호스트를 보고 `gateway-web`·`gateway-admin` 중 하나로 바꾼다(7-3 "클라이언트 고르기")
    - 경로 방식이면 ②~⑤ 의 `auth.example.com/…` 이 `example.com/auth/…` 로 바뀔 뿐 순서는 같다(7-4)
 2. SAS 의 로그인 화면은 `/signin`(인증 화면), 로그인 처리는 `POST /login`(auth-service)으로 **경로를 나눈다**: `formLogin().loginPage("/signin").loginProcessingUrl("/login").failureUrl("/signin?error")`. 같은 `/login` 을 메서드로 나누는 라우팅은 하지 않는다
-3. 인증 화면은 정적 파일이라 CSRF 토큰을 만들 수 없다 → 화면을 열 때 `GET /csrf`(auth-service)로 토큰을 받고(`CookieCsrfTokenRepository` 가 `XSRF-TOKEN` 쿠키도 줌), 로그인은 **`<form method="post" action="/login">` + 숨은 필드 `_csrf`** 로 보낸다. `fetch` 로 보내면 302 를 브라우저가 화면 이동으로 따라가지 않아 ⑤ 로 이어지지 않는다
+3. 인증 화면은 정적 파일이라 CSRF 토큰을 만들 수 없다 → 화면을 열 때 `GET csrf`(auth-service)로 토큰을 **응답 본문**(`{parameterName, token}`)으로 받고, 로그인은 **`<form method="post" action="login">` + 숨은 필드 `_csrf`** 로 보낸다(주소는 `<base>` 기준 상대 경로, 7-4). auth-service 는 CSRF 토큰을 쿠키가 아니라 **세션 ①(`HttpSessionCsrfTokenRepository`)** 에 둔다. SCG 의 `XSRF-TOKEN` 쿠키와 이름·경로가 겹치지 않게 하려는 것이다(로컬 개발은 포트만 다른 `localhost`, 경로 방식은 같은 호스트라 쿠키가 섞인다). `fetch` 로 보내면 302 를 브라우저가 화면 이동으로 따라가지 않아 ⑤ 로 이어지지 않는다
 4. 실패하면 `/signin?error` 로 돌아오고 화면이 오류 문구를 보인다. 로그인 실패 제한(아이디별 15분 5회)은 ④ 단계에서
 
 **SSO (관리자 화면으로 이동)**: 호스트 방식이면 ② 에서 세션 ① 이 이미 있으므로 **로그인 화면 없이** 바로 인가 코드가 온다. 관리자 화면은 클라이언트 `gateway-admin`, 세션 ② 도 `admin.example.com` 쿠키로 따로다. 경로 방식이면 세션 ② 를 사용자 화면과 같이 쓰므로 다시 로그인할 일 자체가 없다(클라이언트도 `gateway-web` 하나, 7-4).
@@ -183,12 +183,14 @@ ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 
 ```caddyfile
 # infra/caddy/Caddyfile (compose)
 (scg) {
+    request_header -X-Forwarded-Prefix   # 브라우저가 보낸 값은 버린다(7-3)
     @scg path /api/* /oauth2/authorization/* /login/oauth2/code/* /logout
     handle @scg { reverse_proxy gateway:8000 }
 }
 http://localhost       { import scg; handle { reverse_proxy web:80 } }
 http://admin.localhost { import scg; handle { reverse_proxy admin:80 } }
 http://auth.localhost {
+    request_header -X-Forwarded-Prefix
     @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
     handle @sas { reverse_proxy auth-service:8086 }
     handle      { reverse_proxy auth-front:80 }
@@ -234,7 +236,7 @@ ClientRegistration.withRegistrationId("gateway-web")
     .providerConfigurationMetadata(Map.of(
         "end_session_endpoint", AUTH_ISSUER + "/connect/logout")) // 브라우저가 가므로 공개 주소
     .build();
-// 로그아웃: OidcClientInitiatedServerLogoutSuccessHandler, post_logout_redirect_uri = {baseUrl}/ (SAS 클라이언트 등록에도 같은 값)
+// 로그아웃: OidcClientInitiatedServerLogoutSuccessHandler, post_logout_redirect_uri = 그 화면의 홈(절대 주소, 아래 "로그아웃 뒤 돌아갈 곳". SAS 클라이언트 등록에도 같은 값)
 // SAS: AuthorizationServerSettings.issuer = ${AUTH_ISSUER}, OIDC 로그아웃 엔드포인트 켬
 // 서비스·SCG 리소스 서버: issuer = ${AUTH_ISSUER} (문자열 검사), jwk-set-uri = ${AUTH_INTERNAL_URL}/oauth2/jwks
 ```
@@ -242,10 +244,13 @@ ClientRegistration.withRegistrationId("gateway-web")
 - 확인(5-2 테스트·시나리오): 로그아웃 뒤 다시 로그인하면 **로그인 화면이 나와야** 한다(SAS 세션 ① 이 끝났는지)
 
 - **SCG·auth-service 가 원래 호스트를 알게 한다**: 둘 다 `server.forward-headers-strategy=framework`(auth-service 는 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). Caddy·Envoy·Vite 프록시가 넘긴 `Host`·`X-Forwarded-*` 로 redirect URI(`{baseUrl}/login/oauth2/code/{registrationId}`)를 만들고, 호스트에 맞는 클라이언트(`gateway-web`/`gateway-admin`)를 고른다
+- **프록시는 들어온 `X-Forwarded-*` 를 믿지 않는다**: `framework` 전략은 헤더를 그대로 믿으므로, 브라우저가 직접 넣은 `X-Forwarded-Prefix`·`X-Forwarded-Host` 가 지나가면 auth-service 의 리다이렉트 주소·쿠키 `Path` 와 SCG 의 redirect URI·클라이언트 선택이 조작된다. 앞단(Caddy·Envoy)은 **두 방식 모두** 들어온 `X-Forwarded-Prefix` 를 지우고(경로 방식 `/auth` 경로에서만 자기가 다시 붙임), `X-Forwarded-Host`·`-Proto`·`-For` 는 자기 값으로 덮어쓴다(Caddy `request_header -X-Forwarded-Prefix`, Envoy `RequestHeaderModifier` 의 `remove`/`set`). SCG·auth-service 는 앞단을 거치지 않고는 닿지 않게 둔다(k8s 는 Service 만, 외부 노출은 Envoy 하나)
+- **클라이언트 고르기**: 화면은 클라이언트 이름을 몰라 항상 `/oauth2/authorization/auto` 로 시작한다(같은 빌드가 두 방식에서 돌아야 하므로). SCG 의 인가 요청 resolver 가 `auto` 를 실제 등록 id 로 바꾼다: 요청 호스트가 `ADMIN_CLIENT_HOST`(호스트 방식 `admin.example.com`) 면 `gateway-admin`, 아니면 `gateway-web`. 경로 방식은 `ADMIN_CLIENT_HOST` 를 비워 항상 `gateway-web`(7-4). 콜백 `/login/oauth2/code/{registrationId}` 는 고른 id 그대로라 라우팅(7-1)은 바뀌지 않는다
+- **로그아웃 뒤 돌아갈 곳**: 화면은 `POST /logout`(폼, `_csrf`) 에 `return_to` 로 자기 홈 경로를 보낸다. SCG 는 이를 그 클라이언트의 허용 목록(`WEB_HOME`·`ADMIN_HOME` 중 하나)과 비교해 `post_logout_redirect_uri` 를 정하고, 목록에 없으면 클라이언트 기본 홈. SAS 는 등록된 정확한 절대 주소만 받으므로 상대 값(`/admin/`)은 `{baseUrl}` 을 붙여 절대 주소로 만들고, 경로 방식에서는 `gateway-web` 에 `{origin}/`·`{origin}/admin/` 둘 다 등록한다(auth-service upsert 가 설정값에서)
 - **세션 쿠키 이름을 나눈다**: SCG `GW_SESSION`, auth-service `AUTH_SESSION`(모든 환경 공통). 로컬 개발은 포트만 다른 `localhost` 라 쿠키가 포트를 구분하지 않아 같은 이름이면 서로 덮어쓴다. `SameSite` 는 포트를 보지 않아 `Lax` 로 동작한다
 
 - SPA 는 같은 출처의 `/api` 만 부른다 → CORS 없음, 세션 쿠키 `SameSite=Lax`
-- **로그인 뒤 돌아갈 곳**: 화면은 `/oauth2/authorization/{client}?return_to=<지금 화면 경로>` 로 로그인을 시작한다. SCG 의 필터가 `return_to` 를 검사해(같은 출처의 `/` 로 시작하는 경로만, `//`·`\`·제어문자·스킴 거부: open redirect 방지) 세션에 넣고, 로그인 성공 핸들러가 그리로 보낸다. 없으면 그 클라이언트의 홈(`WEB_HOME`·`ADMIN_HOME`, 7-4). API 요청은 401 만 받으므로 Spring 의 저장된 요청(request cache)에 기대지 않는다
+- **로그인 뒤 돌아갈 곳**: 화면은 `/oauth2/authorization/auto?return_to=<지금 화면 경로>` 로 로그인을 시작한다(경로 방식 관리자 화면이면 `/admin/…`). SCG 의 필터가 `return_to` 를 검사해(같은 출처의 `/` 로 시작하는 경로만, `//`·`\`·제어문자·스킴 거부: open redirect 방지) 세션에 넣고, 로그인 성공 핸들러가 그리로 보낸다. 없으면 그 클라이언트의 홈(`WEB_HOME`·`ADMIN_HOME`, 7-4). API 요청은 401 만 받으므로 Spring 의 저장된 요청(request cache)에 기대지 않는다
 
 ### 7-4. 경로 방식(같은 도메인)으로 돌릴 때
 
@@ -254,9 +259,11 @@ ClientRegistration.withRegistrationId("gateway-web")
 | 대상 | 규칙 |
 |---|---|
 | SPA 빌드 | Vite `base: "./"`(상대 경로)로 빌드하고 앞 경로를 빌드에 넣지 않는다 |
-| SPA 실행 | nginx 가 시작할 때 `index.html` 에 `<base href="${BASE_PATH}">` 를 넣는다(envsubst). 호스트 방식은 모두 `/`, 경로 방식은 `/`·`/admin/`·`/auth/`. 깊은 경로(`/admin/orders/1`)에서 새로고침해도 자산이 `/admin/assets/…` 로 잡힌다 |
+| SPA 실행 | nginx 가 시작할 때 `index.html` 에 `<base href="${BASE_PATH}">` 를 넣는다. 호스트 방식은 모두 `/`, 경로 방식은 `/`·`/admin/`·`/auth/`. 깊은 경로(`/admin/orders/1`)에서 새로고침해도 자산이 `/admin/assets/…` 로 잡힌다. 공식 nginx 이미지의 envsubst 는 `/etc/nginx/templates` 의 설정 파일에만 돌므로 `index.html` 은 `/docker-entrypoint.d/` 시작 스크립트가 바꾼다(`BASE_PATH` 는 `/` 로 시작하고 끝나는지 검사, 아니면 기동 실패). `index.html` 은 `Cache-Control: no-cache`, 해시가 붙은 `assets/` 는 오래 캐시 |
+| `BASE_PATH` 끝의 `/` | 꼭 붙인다. 브라우저는 `<base>` 의 마지막 `/` 뒤를 파일 이름으로 보고 버려서, `/admin` 이면 `./assets/…` 가 `/assets/…`(사용자 화면 자산)로 간다. 반대로 issuer(`AUTH_ISSUER`)는 뒤에 경로를 이어 붙이는 값이라 `/` 를 붙이지 않는다(토큰 `iss` 는 문자열 그대로 비교). 사용자가 `/admin` 으로 오면 프록시가 `/admin/` 으로 보낸다 |
+| SPA 자기 자산 | 코드에서 자기 자산을 루트 절대 경로(`/favicon.ico`)로 부르지 않는다. `<base>` 기준 상대 경로나 Vite import 로 |
 | SPA 라우터 | `basename` 을 `<base>` 에서 읽는다(`new URL(document.baseURI).pathname`) |
-| SPA 가 부르는 주소 | **SCG 경로(`/api/…`, `/oauth2/authorization/…`, `/logout`)는 루트 절대 경로**로. 상대 경로로 쓰면 경로 방식에서 `/admin/api` 가 된다 |
+| SPA 가 부르는 주소 | **SCG 경로(`/api/…`, `/oauth2/authorization/auto`, `/logout`)는 루트 절대 경로**로. 상대 경로로 쓰면 경로 방식에서 `/admin/api` 가 된다. 로그인 클라이언트 이름은 쓰지 않는다(`auto`, 7-3 "클라이언트 고르기") |
 | 인증 화면이 부르는 주소 | **auth-service 경로(`login`, `signup`, `csrf`)와 화면 링크(`signin`, `register`)는 `<base>` 기준 상대 경로**로(앞 `/` 없이). 경로 방식에서 `/auth/login` 으로, 호스트 방식에서 `/login` 으로 저절로 맞는다 |
 | auth-service(SAS) | 항상 루트에서 돈다(context-path 없음). 경로 방식에서는 프록시가 `/auth` 를 떼고 `X-Forwarded-Prefix: /auth` 를 붙인다. `forward-headers-strategy=framework` 가 이를 읽어 SAS 가 만드는 주소(로그인 화면 리다이렉트 `/signin` 등)와 세션 쿠키 `Path` 에 `/auth` 를 붙인다 |
 | issuer | `AUTH_ISSUER` 로 고정(경로 방식은 `https://example.com/auth` 처럼 경로가 붙는다). discovery 주소도 `…/auth/.well-known/openid-configuration`. **경로가 붙은 issuer 를 SAS 가 그대로 받는지 5-1 에서 테스트로 확인**한다 |
@@ -264,7 +271,7 @@ ClientRegistration.withRegistrationId("gateway-web")
 
 **경로 방식에서 달라지는 것**
 - **SCG 세션이 하나다.** 호스트가 같아 `GW_SESSION` 쿠키가 하나라 사용자·관리자 화면이 BFF 세션을 공유한다(로그인·로그아웃이 같이 움직이고, 관리자 세션만 짧게 둘 수 없다)
-- 그래서 **경로 방식에서는 로그인 클라이언트를 하나(`gateway-web`)만** 쓴다. 한 세션에서 두 클라이언트로 번갈아 로그인하면 세션의 로그인 주체가 바뀌어 다른 화면의 토큰 릴레이가 엉킨다. 관리자 화면도 `gateway-web` 으로 로그인하고 `return_to=/admin/…` 로 돌아온다. 관리자 권한은 지금처럼 `roles`(Gateway `/api/admin/**`, 서비스)로 검사한다
+- 그래서 **경로 방식에서는 로그인 클라이언트를 하나(`gateway-web`)만** 쓴다. 한 세션에서 두 클라이언트로 번갈아 로그인하면 세션의 로그인 주체가 바뀌어 다른 화면의 토큰 릴레이가 엉킨다. 관리자 화면도 `gateway-web` 으로 로그인하고(`ADMIN_CLIENT_HOST` 를 비우면 SCG 가 `auto` 를 늘 `gateway-web` 으로 바꾼다. 화면 코드는 그대로) `return_to=/admin/…` 로 돌아온다. 로그아웃은 `return_to=/admin/` 이면 `/admin/` 으로 돌아온다(7-3 "로그아웃 뒤 돌아갈 곳"). 관리자 권한은 지금처럼 `roles`(Gateway `/api/admin/**`, 서비스)로 검사한다
 - 관리자 접근 제한은 호스트가 아니라 경로(`/admin/**` 화면과 관리자 API) 단위로 건다
 - `AUTH_SESSION` 쿠키는 `Path=/auth`(위 prefix 처리로 저절로), `GW_SESSION` 은 `/`
 
@@ -280,6 +287,8 @@ ClientRegistration.withRegistrationId("gateway-web")
 ```caddyfile
 # infra/caddy/Caddyfile.path (compose, 경로 방식). 호스트 방식은 7-2 의 Caddyfile
 http://localhost {
+    request_header -X-Forwarded-Prefix          # 브라우저가 보낸 값은 버린다(7-3)
+    redir /auth /auth/
     handle_path /auth/* {                       # handle_path 가 /auth 를 뗀다
         @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
         handle @sas { reverse_proxy auth-service:8086 { header_up X-Forwarded-Prefix /auth } }
@@ -292,7 +301,7 @@ http://localhost {
     handle { reverse_proxy web:80 }
 }
 ```
-k8s 는 Envoy `HTTPRoute` 에서 같은 규칙: 경로 매칭 + `URLRewrite`(`ReplacePrefixMatch: /`) + `RequestHeaderModifier`(`X-Forwarded-Prefix`). Helm 값 `edge.mode: host | path` 하나로 고른다. compose 는 `CADDY_MODE=host|path` 로 Caddyfile 을 고른다.
+k8s 는 Envoy `HTTPRoute` 에서 같은 규칙: 경로 매칭 + `URLRewrite`(`ReplacePrefixMatch: /`) + `RequestHeaderModifier`(`/auth` 는 `set: X-Forwarded-Prefix: /auth`, 나머지 규칙은 `remove: X-Forwarded-Prefix`). Helm 값 `edge.mode: host | path` 하나로 고른다. compose 는 `CADDY_MODE=host|path` 로 Caddyfile 을 고른다.
 
 **방식별 설정값** (7-3 표에 더해서. 로컬 개발은 호스트 방식 값)
 
@@ -301,14 +310,17 @@ k8s 는 Envoy `HTTPRoute` 에서 같은 규칙: 경로 매칭 + `URLRewrite`(`Re
 | `AUTH_ISSUER` | `https://auth.example.com` | `https://example.com/auth` | `http://localhost/auth` |
 | `WEB_REDIRECT_URI` | `https://example.com/login/oauth2/code/gateway-web` | 같음 | `http://localhost/login/oauth2/code/gateway-web` |
 | 관리자 로그인 클라이언트 | `gateway-admin` (`ADMIN_REDIRECT_URI` = `https://admin.example.com/login/oauth2/code/gateway-admin`) | `gateway-web` (관리자 전용 클라이언트 없음) | `gateway-web` |
+| `ADMIN_CLIENT_HOST` (SCG 가 `auto` 를 `gateway-admin` 으로 바꿀 호스트) | `admin.example.com` | (비움 → 늘 `gateway-web`) | (비움) |
 | `WEB_HOME` / `ADMIN_HOME` (기본 돌아갈 곳·로그아웃 후) | `https://example.com/` / `https://admin.example.com/` | `/` / `/admin/` | `/` / `/admin/` |
+| `gateway-web` 의 `post_logout_redirect_uri` (SAS 등록) | `https://example.com/` | `https://example.com/`, `https://example.com/admin/` | `http://localhost/`, `http://localhost/admin/` |
 | `BASE_PATH` (nginx, web·admin·auth) | `/`·`/`·`/` | `/`·`/admin/`·`/auth/` | `/`·`/admin/`·`/auth/` |
 
 ## 8. 보안 체크
 
 - SCG 가 쿠키 세션이 되므로 **CSRF**: `CookieServerCsrfTokenRepository`(`XSRF-TOKEN` 쿠키 → SPA 가 `X-XSRF-TOKEN` 헤더). GET 은 상태를 바꾸지 않는다
-- 인증 화면 → SAS 로그인·가입은 `GET /csrf` 로 받은 토큰을 넣은 폼 POST(4절). 로그인 실패 제한(아이디별 15분 5회)은 지금 로직을 SAS 인증 단계로 옮긴다
-- redirect URI 는 등록된 정확한 값만(와일드카드 없음). `state`·PKCE 사용
+- 인증 화면 → SAS 로그인·가입은 `GET csrf` 로 받은 토큰을 넣은 폼 POST(4절). auth-service 의 CSRF 토큰은 세션 ① 에 두고 쿠키로 내보내지 않는다(SCG `XSRF-TOKEN` 과 겹침 방지). 로그인 실패 제한(아이디별 15분 5회)은 지금 로직을 SAS 인증 단계로 옮긴다
+- redirect URI·로그아웃 후 주소는 등록된 정확한 값만(와일드카드 없음). `state`·PKCE 사용. `return_to` 는 같은 출처 경로만(7-3)
+- 앞단 프록시는 들어온 `X-Forwarded-Prefix` 를 지우고 `X-Forwarded-Host`·`-Proto`·`-For` 를 덮어쓴다. SCG·auth-service 는 앞단을 거쳐서만 닿는다(7-3)
 - 세션 쿠키: `HttpOnly`, 이름 분리(`GW_SESSION`·`AUTH_SESSION`), 운영은 `Secure`(로컬·compose 는 http 라 끔, 7-3), 호스트별 분리
 - 메시지에 토큰을 싣지 않는 규칙, 서비스 재검증·소유권 검사는 그대로
 - 모바일·외부 앱이 생기면 PKCE public client 로 따로 등록하고 SCG 의 JWT(Bearer) 검증 경로로 받는다(지금 경로를 남겨 둠)
@@ -328,9 +340,9 @@ k8s 는 Envoy `HTTPRoute` 에서 같은 규칙: 경로 매칭 + `URLRewrite`(`Re
 | PR | 범위 |
 |---|---|
 | 5-0 ADR | ADR 0017(이 문서의 결정). 0008·0011 대체 범위 표시 |
-| 5-1 auth-service → SAS | SAS 의존성, Flyway(클라이언트·인가·동의 테이블), 클라이언트 upsert + 시크릿 찾는 순서, 토큰 커스터마이저(`sub`·`roles`), Spring Session Redis ①, 임시 로그인 화면(서버 템플릿, 5-4 에서 교체), 인가 기록 정리 스케줄러. **기존 `/auth/*` API 는 5-3 까지 남겨** Next 화면이 계속 동작하게 한다 |
-| 5-2 SCG BFF | `oauth2Login`(gateway-web·gateway-admin), `TokenRelay`, Redis 세션 ②, CSRF, 로그아웃(OIDC), 호스트별 클라이언트 선택, `return_to` 저장·검사와 성공 후 이동(`WEB_HOME`·`ADMIN_HOME`). Bearer 로 오는 요청의 JWT 검증은 유지. 경로 방식에서 `X-Forwarded-Prefix` 를 받은 auth-service 의 리다이렉트·쿠키 Path 와 경로가 붙은 issuer 를 테스트로 확인 |
-| 5-3 사용자 SPA | `frontend/apps/web`(Vite + React + TS + Tailwind + shadcn, `packages/ui`). Next 화면 옮기기, 데이터는 `/api` 호출. compose Caddy(호스트·경로 두 방식, `CADDY_MODE`)·시크릿 init, Helm `edge.mode`(host 또는 path) 라우트·nginx 이미지(`BASE_PATH` 로 `<base href>` 주입), CI e2e 는 기본 호스트 방식 + 경로 방식 로그인 한 번 끝나면 Next·기존 `/auth/*` API 제거 |
+| 5-1 auth-service → SAS | SAS 의존성, Flyway(클라이언트·인가·동의 테이블), 클라이언트 upsert + 시크릿 찾는 순서, 토큰 커스터마이저(`sub`·`roles`), Spring Session Redis ①, 임시 로그인 화면(서버 템플릿, 5-4 에서 교체), 세션 CSRF + `GET /csrf`(본문으로 토큰), 인가 기록 정리 스케줄러, 클라이언트 upsert 에 `post_logout_redirect_uri` 목록. **경로 방식 확인 테스트**: 경로가 붙은 issuer(`…/auth`)로 discovery·토큰 `iss`, `X-Forwarded-Prefix: /auth` 일 때 `/signin` 리다이렉트·쿠키 `Path`. **기존 `/auth/*` API 는 5-3 까지 남겨** Next 화면이 계속 동작하게 한다 |
+| 5-2 SCG BFF | `oauth2Login`(gateway-web·gateway-admin), `TokenRelay`, Redis 세션 ②, CSRF, 로그아웃(OIDC, `return_to` 로 돌아갈 홈 고르기), 클라이언트 고르기(`auto` → `ADMIN_CLIENT_HOST` 면 gateway-admin, 아니면 gateway-web), `return_to` 저장·검사와 성공 후 이동(`WEB_HOME`·`ADMIN_HOME`). Bearer 로 오는 요청의 JWT 검증은 유지. 테스트: 두 방식의 클라이언트 고르기, 위조한 `X-Forwarded-Host`·`return_to` 거부 |
+| 5-3 사용자 SPA | `frontend/apps/web`(Vite + React + TS + Tailwind + shadcn, `packages/ui`). Next 화면 옮기기, 데이터는 `/api` 호출. compose Caddy(호스트·경로 두 방식, `CADDY_MODE`)·시크릿 init, Helm `edge.mode`(host 또는 path) 라우트·nginx 이미지(시작 스크립트가 `BASE_PATH` 로 `<base href>` 주입), 프록시의 `X-Forwarded-Prefix` 제거, CI e2e 는 기본 호스트 방식 + 경로 방식 로그인 한 번. 끝나면 Next·기존 `/auth/*` API 제거 |
 | 5-4 인증 화면 | `frontend/apps/auth` 로그인·가입. 5-1 임시 로그인 화면 제거 |
 | 5-5 관리자 SPA | `frontend/apps/admin` 분리(장애 주입·상품 관리), `gateway-admin` 로 SSO 확인 |
 | 5-6 기기 관리·정리 | 로그인 기기 목록·개별 로그아웃 다시 구현, 시나리오 문서(SSO·로그아웃·시크릿 교체), PROGRESS·README 갱신, 태그 |
