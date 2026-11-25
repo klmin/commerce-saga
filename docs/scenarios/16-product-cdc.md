@@ -22,7 +22,7 @@
 | 헤더 `__lsn` | 원본 WAL 위치. 같은 상품의 뒤 변경일수록 크다 → 검색 쪽이 외부 버전으로 쓴다(재전달·순서 뒤바뀜 무시) |
 | 헤더 `__source_ts_ms` | 원본 커밋 시각(ms). 색인 지연 지표에 쓴다 |
 | 삭제 | 값이 null 인 tombstone. 지금은 상품을 지우지 않는다(판매 중지 = `on_sale:false` 변경) |
-| DLT | `product.cdc.products.DLT` (검색 소비자가 처리할 수 없는 메시지, 4-2b) |
+| DLT | `product.cdc.products.DLT` (search-service 가 처리할 수 없는 메시지: 본문·키·헤더가 계약과 다름, 문서 거절) |
 
 ## 재현
 
@@ -49,13 +49,13 @@ k8s(kind): `KAFKA_EXEC="kubectl -n commerce exec -i commerce-dual-role-0 --" KAF
 == 16a. 처음 적재: 시드 상품 1 이 키 "1" 로 있다
   ok  상품 1 스냅샷 있음
 == 16b. 가격 변경 → 변경 후 행이 키 = 상품 id 로
-  ok  키 4, 가격 12100, 열 6개만, 헤더 __lsn=…
+  ok  키 4, 가격 12100, 열 6개만, 헤더 __lsn=57798856
 == 16c. 다음 변경은 __lsn 이 더 크다
-  ok  __lsn … → …
+  ok  __lsn 57798856 → 57800016
 시나리오 16 통과
 ```
 
-(출력 형식. `__lsn` 값은 실행마다 다르다. 통과 여부는 CI e2e·k8s 로그)
+(CI e2e scheduler 모드 로그, PR #82. `__lsn` 값은 실행마다 다르다)
 
 ## 한계
 

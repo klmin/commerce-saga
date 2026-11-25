@@ -54,7 +54,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: bootJar
-        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:product-service:bootJar :services:gateway:bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:product-service:bootJar :services:search-service:bootJar :services:gateway:bootJar
 
       # README 의 기동 명령 그대로. postgres-init(서비스 DB·계정), kafka-init(토픽)까지 끝나야 성공한다
       - name: 인프라 기동
@@ -69,10 +69,10 @@ jobs:
       - name: 서비스 기동
         run: |
           mkdir -p logs
-          for svc in auth-service product-service inventory-service point-service payment-service order-service gateway; do
+          for svc in auth-service product-service search-service inventory-service point-service payment-service order-service gateway; do
             nohup java -jar services/$svc/build/libs/$svc-*.jar > logs/$svc.log 2>&1 &
           done
-          for port in 8086 8087 8081 8082 8083 8084 8000; do
+          for port in 8086 8087 8089 8081 8082 8083 8084 8000; do
             url=http://localhost:$port/actuator/health
             for i in $(seq 1 60); do
               curl -sf "$url" | grep -q UP && break
@@ -114,6 +114,10 @@ jobs:
       # products 변경 → product.cdc.products (키 = 상품 id, 변경 후 행, 헤더 __lsn) (ADR 0010)
       - name: 상품 테이블 CDC (시나리오 16)
         run: bash scripts/smoke-product-cdc.sh
+
+      # CDC → search-service → Elasticsearch: 가격 변경·판매 중지 반영, 옛 변경 무시, ES 중단 중 검색만 503 → 재개 후 따라잡음 (ADR 0010)
+      - name: 상품 검색 (시나리오 17)
+        run: bash scripts/smoke-search.sh
 
       # 가입 → auth.events(UserRegistered, outbox) → point-service 가 계정 생성(가입 축하 포인트) → 그 포인트로 주문
       - name: 가입 → 포인트 계정 (시나리오 13)
@@ -202,7 +206,7 @@ jobs:
       - name: Logs
         if: always()
         run: |
-          for svc in inventory-service point-service payment-service order-service notification-service auth-service product-service gateway; do
+          for svc in inventory-service point-service payment-service order-service notification-service auth-service product-service search-service gateway; do
             echo "===== $svc"
             tail -n 150 logs/$svc.log || true
           done

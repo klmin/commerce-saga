@@ -61,7 +61,7 @@ class GatewayRoutingTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         String base = "http://localhost:" + DOWNSTREAM.getAddress().getPort();
-        for (String service : List.of("AUTH", "ORDER", "INVENTORY", "POINT", "PAYMENT", "NOTIFICATION", "PRODUCT")) {
+        for (String service : List.of("AUTH", "ORDER", "INVENTORY", "POINT", "PAYMENT", "NOTIFICATION", "PRODUCT", "SEARCH")) {
             registry.add(service + "_SERVICE_URL", () -> base);
         }
         registry.add("AUTH_JWKS_URI", () -> base + "/.well-known/jwks.json");
@@ -132,6 +132,9 @@ class GatewayRoutingTest {
 
         assertThat(get("/api/products?ids=1,2", null).statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/products");
+
+        assertThat(get("/api/search/products?q=key", null).statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/search/products");
     }
 
     @Test

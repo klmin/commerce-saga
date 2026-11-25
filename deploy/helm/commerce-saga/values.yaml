@@ -32,6 +32,16 @@ redis:
     requests: { cpu: 50m, memory: 32Mi }
     limits: { memory: 128Mi }
 
+# 상품 검색 저장소 (ADR 0010). search-service 만 쓴다. false 면 search-service 도 빼야 한다
+elasticsearch:
+  enabled: true
+  image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+  javaOpts: -Xms512m -Xmx512m
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 768Mi }
+    limits: { memory: 1Gi }
+
 kafka:
   # Strimzi 1.3.1 이 지원하는 마지막 버전. 서비스의 클라이언트(4.4.0)와 호환된다. compose 는 4.4.0
   version: 4.3.2
@@ -108,6 +118,11 @@ services:
   notification-service:
     port: 8085
     db: notification
+  # 상품 검색 (ADR 0010). DB 없음, 저장소는 Elasticsearch. product.cdc.products 를 소비해 색인
+  search-service:
+    port: 8089
+    env:
+      ELASTICSEARCH_URI: http://elasticsearch:9200
   gateway:
     port: 8000
     env:

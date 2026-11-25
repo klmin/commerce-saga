@@ -108,6 +108,25 @@ services:
         done
     restart: "no"
 
+  # 상품 검색 저장소 (후속 4-2b, ADR 0010). search-service 만 쓴다(다른 서비스는 접근하지 않음). 단일 노드, 로컬은 보안 끔
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      # 힙 512MB (컨테이너 전체 약 1GB)
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    # 색인을 남긴다. 소비 오프셋(Kafka 볼륨)과 수명을 맞춰야 재기동 뒤 검색이 비지 않는다 (CDC 스냅샷은 처음 한 번뿐)
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
   # Debezium outbox relay. 브로커와 같은 apache/kafka 이미지 위에 Debezium Postgres 플러그인을 얹는다 (connect/Dockerfile)
   # 서비스마다 커넥터 하나(connect/<서비스>-outbox.json)가 자기 DB 의 outbox 를 읽어 aggregatetype 토픽으로 보낸다
   connect:
@@ -166,7 +185,7 @@ services:
     environment:
       # tail sampling: 오류·느린 trace 를 뺀 나머지 중 남길 비율(%). actuator trace 는 늘 버린다
       TRACE_SAMPLING_PERCENT: ${TRACE_SAMPLING_PERCENT:-100}
-      # 메트릭을 긁을 서비스 8개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
+      # 메트릭을 긁을 서비스 9개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
       METRICS_SERVICE_TARGETS: >-
         [{"__address__":"host.docker.internal:8081","service":"order-service"},
         {"__address__":"host.docker.internal:8082","service":"inventory-service"},
@@ -175,6 +194,7 @@ services:
         {"__address__":"host.docker.internal:8085","service":"notification-service"},
         {"__address__":"host.docker.internal:8086","service":"auth-service"},
         {"__address__":"host.docker.internal:8087","service":"product-service"},
+        {"__address__":"host.docker.internal:8089","service":"search-service"},
         {"__address__":"host.docker.internal:8000","service":"gateway"}]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -272,3 +292,4 @@ services:
 volumes:
   postgres-data:
   kafka-data:
+  elasticsearch-data:
