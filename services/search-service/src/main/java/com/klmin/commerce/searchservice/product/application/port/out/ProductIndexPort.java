@@ -9,8 +9,10 @@ public interface ProductIndexPort {
     boolean save(SearchableProduct product, long version);
 
     /**
-     * @param version null 이면 버전 없이 지운다
-     * @return 지웠으면 true, 없거나 옛 버전이면 false
+     * 검색에서 빼고, 그 뒤에 늦게 온 옛 변경이 되살리지 못하게 버전을 남긴다(삭제 표시).
+     *
+     * @param version null 이면 영구히(가장 큰 버전으로) 막는다
+     * @return 표시했으면 true, 옛 버전이면 false
      */
     boolean delete(long productId, Long version);
 }

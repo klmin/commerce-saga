@@ -8,6 +8,7 @@
 |---|---|
 | 색인 | 별칭 `products` → 실제 색인 `products-v1`. search-service 가 처음 쓸 때 별칭이 없으면 만든다. 매핑 strict |
 | 멱등·순서 | 문서 id = 상품 id, **외부 버전 = 헤더 `__lsn`**(`version_type=external`). 저장된 버전 이하이면 ES 가 409 → 건너뜀. 같은 변경 재전달, 늦게 온 옛 변경 모두 색인을 되돌리지 못한다. `processed_message` 표가 필요 없다 |
+| 삭제 | tombstone 이면 문서를 지우지 않고 **삭제 표시 문서**(`deleted:true`, 같은 외부 버전)로 바꿔 검색에서 뺀다. ES 는 지운 문서의 버전을 `index.gc_deletes` 동안만 기억하므로, 진짜로 지우면 그 뒤 DLT 재처리된 옛 행이 지운 상품을 되살릴 수 있다. 버전 없는 tombstone 은 가장 큰 버전으로 표시(영구) |
 | 한글 | ngram(1~2글자) 분석기. "마우" → "무선 마우스", "키캡" → "한정판 키캡"(키보드는 아님: 모든 글자 조각이 있어야 함). 형태소 분석(nori)은 쓰지 않는다 |
 | 검색 API | `GET /api/search/products` (로그인 없이): `q`, `minPrice`, `maxPrice`, `onSaleOnly`(기본 true), `sort`(relevance·price-asc·price-desc·newest), `page`, `size`(≤100, 앞 10,000건까지) |
 | 장애 | ES 가 멈추면 검색만 503. 상품 목록·상세·주문은 product-service 라 그대로. 색인 소비자는 ES 가 돌아올 때까지 제자리 재시도(ADR 0012) → 돌아오면 멈춘 동안의 변경을 차례로 반영 |

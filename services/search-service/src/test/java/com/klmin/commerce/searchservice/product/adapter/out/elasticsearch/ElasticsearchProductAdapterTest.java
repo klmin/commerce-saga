@@ -77,7 +77,15 @@ class ElasticsearchProductAdapterTest {
 
         assertThat(adapter.delete(9, 50L)).isFalse(); // 옛 삭제는 무시
         assertThat(adapter.delete(9, 102L)).isTrue();
-        assertThat(adapter.delete(9, 103L)).isFalse(); // 이미 없음
+        // 삭제 뒤에 재처리된 옛 행(DLT 재처리 등)은 삭제 표시 문서의 버전에 막혀 되살아나지 않는다
+        assertThat(adapter.save(product(9, "버전 시험", "", 2_000, true, "2026-11-25T00:00:01Z"), 101)).isFalse();
+        refresh("versions");
+        assertThat(adapter.search(new SearchCriteria("버전 시험", null, null, false, null, 0, 20)).items()).isEmpty();
+
+        // 버전 없는 tombstone 은 영구히 막는다
+        assertThat(adapter.save(product(10, "영구 삭제", "", 1_000, true, "2026-11-25T00:00:00Z"), 5)).isTrue();
+        assertThat(adapter.delete(10, null)).isTrue();
+        assertThat(adapter.save(product(10, "영구 삭제", "", 1_000, true, "2026-11-25T00:00:00Z"), 999_999_999L)).isFalse();
     }
 
     @Test

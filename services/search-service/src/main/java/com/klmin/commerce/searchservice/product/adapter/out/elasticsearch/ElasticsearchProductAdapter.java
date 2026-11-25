@@ -16,10 +16,10 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -67,11 +67,15 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
                   "description": { "type": "text", "analyzer": "ngram" },
                   "price": { "type": "long" },
                   "onSale": { "type": "boolean" },
-                  "updatedAt": { "type": "date" }
+                  "updatedAt": { "type": "date" },
+                  "deleted": { "type": "boolean" }
                 }
               }
             }
             """;
+
+    /** 버전 없는 tombstone 의 삭제 표시 버전. LSN 이 닿지 않는 큰 값(ES 외부 버전 상한 아래) */
+    static final long DELETED_FOREVER_VERSION = 9_000_000_000_000_000_000L;
 
     private final RestClient client;
     private final JsonMapper json;
@@ -108,15 +112,23 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
         throw unexpected("색인", response, product.id());
     }
 
+    /**
+     * 문서를 지우지 않고 삭제 표시 문서로 바꾼다(검색에서 제외). ES 가 지운 문서의 버전은 {@code index.gc_deletes} 동안만
+     * 기억하므로, 진짜로 지우면 그 뒤에 재처리된 옛 행(DLT 재처리 등)이 새 문서로 들어와 지운 상품이 되살아난다.
+     * 표시 문서는 버전을 계속 들고 있어 옛 행을 409 로 막는다. 버전 없는 tombstone 은 가장 큰 버전으로 표시해 영구히 막는다
+     * (상품 id 는 다시 쓰이지 않는다)
+     */
     @Override
     public boolean delete(long productId, Long version) {
         ensureIndex();
-        String query = version == null ? "" : "?version=" + version + "&version_type=external";
-        Response response = call(HttpMethod.DELETE, "/" + alias + "/_doc/" + productId + query, null);
-        if (response.status == 200) {
+        long markerVersion = version == null ? DELETED_FOREVER_VERSION : version;
+        Response response = call(HttpMethod.PUT,
+                "/" + alias + "/_doc/" + productId + "?version=" + markerVersion + "&version_type=external",
+                Map.of("id", productId, "deleted", true));
+        if (response.status == 200 || response.status == 201) {
             return true;
         }
-        if (response.status == 404 || response.status == 409) {
+        if (response.status == 409) {
             return false;
         }
         throw unexpected("삭제", response, productId);
@@ -139,7 +151,7 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
                         Instant.parse(s.path("updatedAt").asString())));
             }
             return new SearchPage(items, hits.path("total").path("value").longValue());
-        } catch (RestClientException | IllegalStateException e) {
+        } catch (RestClientException | IllegalStateException | JacksonException e) {
             throw new SearchStoreUnavailableException("검색 저장소 응답 없음", e);
         }
     }
@@ -151,6 +163,8 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
                     "query", c.keyword(), "fields", List.of("name^3", "description"), "operator", "and")));
         }
         List<Object> filter = new ArrayList<>();
+        // 삭제 표시 문서(tombstone)는 늘 뺀다
+        filter.add(Map.of("bool", Map.of("must_not", List.of(Map.of("term", Map.of("deleted", true))))));
         if (c.onSaleOnly()) {
             filter.add(Map.of("term", Map.of("onSale", true)));
         }
@@ -212,15 +226,9 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
         if (body != null) {
             spec.contentType(MediaType.APPLICATION_JSON).body(body);
         }
-        return spec.exchange((request, response) -> {
-            byte[] bytes;
-            try {
-                bytes = response.getBody().readAllBytes();
-            } catch (IOException e) {
-                bytes = new byte[0];
-            }
-            return new Response(response.getStatusCode().value(), new String(bytes, StandardCharsets.UTF_8));
-        });
+        // 본문을 읽다 끊기면(IOException) 그대로 던진다 → RestClient 가 통신 오류(ResourceAccessException)로 바꾼다
+        return spec.exchange((request, response) -> new Response(response.getStatusCode().value(),
+                new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8)));
     }
 
     private RuntimeException unexpected(String what, Response response, long productId) {
