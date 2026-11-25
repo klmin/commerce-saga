@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (후속 4-1c 장바구니: order-service `cart_items`, 장바구니 주문은 주문과 같은 트랜잭션에서 줄 삭제, 화면 `/cart`. 4-1 완료)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(이번 PR), 설계는 4-5절·ADR 0016) 다음 ② 멱등 기록 정리**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-25 (4-4절 ② 멱등 기록 정리: processed_message 30일·Idempotency-Key 7일 지난 행을 1,000건씩 지우는 스케줄러. 머지된 PR #49·#66·#67·#70·#71 반영)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(이번 PR) 다음 ③ 결제 서킷 브레이커**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -48,7 +48,7 @@
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 완료 (K-1 PR #40, K-2 PR #41, K-3 PR #42, 태그 `v0.5-k8s`) |
 | DDD 보강 | 값 객체(서비스마다), 컨텍스트 맵·용어집. 설계는 ADR 0015 | 완료 (값 객체 PR #56~#59, ADR 0015 PR #61) |
-| 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 다음. **4-1 가격 스냅샷을 먼저** 떼어 하고, 검색·ES 는 아래 운영 보강 뒤 (2026-11-25 사용자 결정, 시작 전 설계 메모, 4-4절) |
+| 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 진행 중. **4-1 가격 스냅샷을 먼저** 떼어 하고(4-1a PR #65·4-1b PR #68·4-1c PR #72 완료), 검색·ES 는 아래 운영 보강 뒤 (2026-11-25 사용자 결정, 시작 전 설계 메모, 4-4절) |
 | 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 4-1 다음, 후속 4 나머지 전 (2026-11-25 사용자 결정, 4-4절) |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
@@ -89,12 +89,13 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | 후속 4-1c 장바구니: order-service `cart_items`(V7, (user_id, product_id) PK, 담을 때 가격), `Cart` 애그리거트(담을 때 가격 유지, 50줄), `GET/PUT/DELETE /cart(/items/{id})`(Gateway `/api/cart/**`), 담을 때 지금 가격을 받아 남김(없는·판매 중지 422, 장애 503), 조회는 지금 가격과 비교해 `priceChanged`·장애면 담을 때 가격. 장바구니 주문 `POST /orders` + `fromCart` 는 주문 트랜잭션 안에서 주문한 줄 삭제. 화면 `/cart`(수량 변경·빼기·가격 변경 표시, 주문 폼 재사용), 상품 목록 "담기", 헤더 링크, Playwright 1개, 시나리오 14e |
+| (이번 PR) | 4-4절 ② 멱등 기록 정리: order·inventory·point·payment 에 `IdempotencyCleanupScheduler`(1시간마다, `idempotency.cleanup.*`) → `IdempotencyCleanupService` 가 보존 기간(processed_message 30일 = 토픽 보존 7일 + DLT 재처리 여유, order Idempotency-Key 7일)이 지난 행을 오래된 것부터 1,000건씩(한 번에 최대 100배치) 지운다. `for update skip locked` 라 여러 인스턴스가 겹쳐도 서로 기다리지 않고 결과가 같다. 비즈니스 기록은 지우지 않음. order V8 `order_idempotency_keys(created_at)` 인덱스. 서비스마다 단위·Postgres 통합 테스트. 함께: 머지된 PR 번호(#49·#66·#67·#70·#71)·4-5절 완료 표시·5절 경보 전달 한계 반영(닫은 #69 내용) |
+| #72 | 후속 4-1c 장바구니: order-service `cart_items`(V7, (user_id, product_id) PK, 담을 때 가격), `Cart` 애그리거트(담을 때 가격 유지, 50줄), `GET/PUT/DELETE /cart(/items/{id})`(Gateway `/api/cart/**`), 담을 때 지금 가격을 받아 남김(없는·판매 중지 422, 장애 503), 조회는 지금 가격과 비교해 `priceChanged`·장애면 담을 때 가격. 장바구니 주문 `POST /orders` + `fromCart` 는 주문 트랜잭션 안에서 주문한 줄 삭제. 화면 `/cart`(수량 변경·빼기·가격 변경 표시, 주문 폼 재사용), 상품 목록 "담기", 헤더 링크, Playwright 1개, 시나리오 14e |
 | #68 | 후속 4-1b 서버 가격: order-service `PlaceOrderService`(트랜잭션 없음)가 같은 키 재요청이면 처음 주문 → 줄 검사 → `ProductCatalogPort`(RestClient, 연결·응답 2초, 재시도 없음)로 지금 가격 → 없는·판매 중지 422, 화면 가격과 다르면 409 + `currentPrices`, 같으면 `OrderService.placeOrder`(한 트랜잭션). product 장애 503(원인은 로그만). 409·422·503 에는 Idempotency-Key 를 남기지 않음. 프론트: 상품 목록·주문 폼을 `/api/products` 로, 보인 가격을 hidden 필드로 보내고 409 면 `옛 가격 → 새 가격` 안내 후 다시 누르면 새 가격. 주문 목록·상세의 상품 이름은 `?ids=` 로. 스모크 스크립트 가격을 시드 가격으로, 시나리오 14(`smoke-price-change.sh`, CI e2e). Helm order-service `PRODUCT_SERVICE_URL` |
 | #65 | 후속 4-1a product-service(:8087, `product_db`): 상품 등록·수정·가격 변경·판매 중지(ADMIN, `/admin/products/**`), 가격 변경 이력 `product_price_history`(이전·새 가격, 바꾼 관리자, 시각. 가격 변경과 한 트랜잭션, 행 잠금으로 동시 변경에도 이력이 이어짐), 공개 조회(목록·상세·`?ids=` 여러 건). Flyway 시드 = 프론트 고정 상품 1~5, 새 상품은 1000 부터. Gateway `/api/products/**`(GET, 토큰 없이)·`/api/admin/products/**`, DB 계정, compose 메트릭 대상, Helm, CI(e2e·browser-e2e·k8s·release) 에 추가. 주문·화면은 아직 그대로(4-1b) |
 | #64 | 문서: 후속 4-1 설계(4-5절), [ADR 0016](adr/0016-order-price-sync-query.md) 주문 가격 동기 조회 예외·409·장바구니 위치. 4-4절의 "4-1 은 동기 조회하지 않는다" 문장을 바로잡음 |
 | #63 | 문서: 다음 작업 순서(후속 4-1 가격 스냅샷 → 멱등 기록 정리 → 결제 서킷 브레이커 → 후속 4 나머지)와 결정 메모(4-4절), AGENTS.md 서비스 간 동기 호출 규칙을 "상태 변경은 메시지, 조회는 읽기 모델 우선, 외부 PG 는 동기 + 결과 모름"으로 범위 정리 |
-| #44, #47, #48, #50~#55, #60, #62 | 배포·관측성 보강: GHCR push·EKS ArgoCD GitOps(#44), Debezium 플러그인 다운로드 재시도(#47), trace·로그 resource 속성(#48), K-1 trace 문서(#50), relay 모드 롤링 전환 문서(#51), Alloy tail sampling(#52), docs 만 바뀐 커밋 CodeQL 건너뛰기(#53), [CI/CD 문서](ci-cd.md)(#54), Tempo 메모리 한도(#55), Kafka Connect 힙 512Mi(#60), 메트릭 수집 Alloy 로 통합·컨테이너 메모리 경보(#62) |
+| #44, #47, #48, #50~#55, #60, #62, #66, #67, #70, #71 | 배포·관측성 보강: GHCR push·EKS ArgoCD GitOps(#44), Debezium 플러그인 다운로드 재시도(#47), trace·로그 resource 속성(#48), K-1 trace 문서(#50), relay 모드 롤링 전환 문서(#51), Alloy tail sampling(#52), docs 만 바뀐 커밋 CodeQL 건너뛰기(#53), [CI/CD 문서](ci-cd.md)(#54), Tempo 메모리 한도(#55), Kafka Connect 힙 512Mi(#60), 메트릭 수집 Alloy 로 통합·컨테이너 메모리 경보(#62) |
 | #61 | DDD 후보 2: [ADR 0015](adr/0015-context-map-and-glossary.md) 컨텍스트 맵(OHS·Published Language·Conformist·ACL, 스키마만 공유) + 용어집(포인트 환불/결제 환불, 주문 취소/결제 취소 구분) + 쓰지 않기로 한 것(도메인 이벤트 객체, 이벤트 소싱, JPA Auditing·등록자/수정자 컬럼, 값 객체 공유) |
 | #57~#59 | DDD 후보 1 값 객체 ②~④: inventory `ProductId`·`Quantity`, point `Points`·`UserId`, payment `Money`(PG 포트 `approve(orderId, userId, Money)`). 커맨드 값은 값 객체로 바꾸기 전에 원시 값으로 검사해 실패 응답(바로 바꾸면 예외로 무한 재시도), 값 객체 도입 전에 저장된 잘못된 거절 기록은 복원 때 건너뜀(보상 무한 재시도 방지, 회귀 테스트). payment 의 userId 는 규칙이 없어 감싸지 않음 |
 | #56 | DDD 후보 1 값 객체 ① order-service: `Money`·`Points`·`Quantity`·`UserId`·`ProductId`(record, 생성 때 검증). `Order`·`OrderLine`·`OrderSaga`·`SagaAction`·`SagaCommandPort` 가 사용. 1P = 1원 환산은 `Points.toMoney()` 한 곳. DB 컬럼·메시지 계약·port.in Command·조회 DTO 는 원시 타입 그대로, 어댑터·서비스 입구에서 변환 |
@@ -274,7 +275,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - `PlaceOrderUseCase.placeOrder`가 `PlaceOrderResult(order, created)`를 돌려준다(컨트롤러가 201/200 구분)
 - 시나리오 10 `scripts/smoke-idempotency.sh`(CI 두 모드, smoke-gateway 다음, 사용자 3): 같은 키 두 번, 동시 5번, 다른 본문 422, 두 주문 COMPLETED·포인트 2건분만 차감, 목록 커서·다른 사용자에게 안 보임
 - 테스트: `OrderServiceTest`(키 6개), `OrderQueryAndIdempotencyIntegrationTest`(Postgres, 같은 키 8개 동시 → 주문·Saga·키 각 1행, 목록 커서), `PaymentSummaryPersistenceAdapterTest`, 컨트롤러 테스트, `GatewayRoutingTest`(목록 경로)
-- 한계: 키 보존 기간 정리 작업 없음. 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
+- 한계: 키는 7일 보존 뒤 정리 스케줄러가 지운다(4-4절 ②, 지난 키로 다시 보내면 새 주문). 처음 요청이 처리 중이면 같은 키 요청은 기다렸다가 결과를 받는다(409 즉시 반환 아님)
 
 **A-3-2 가입 → 포인트 계정 (PR #34) 에서 한 것 (결정·확인 사항)**
 - 메시지 계약(추가만): `UserRegistered(userId, registeredAt)`, 토픽 `Topics.AUTH_EVENTS = "auth.events"`(auth-service 소유). 키는 `userId`(주문과 상관없는 사용자 단위 사실이라 orderId 규칙의 예외, AGENTS.md 에 적음). 개인정보·비밀값은 싣지 않는다
@@ -494,9 +495,9 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 
 | PR | 범위 |
 |---|---|
-| 4-1a product-service | 새 서비스(헥사고날, 자기 DB `product_db`). 상품 등록·수정·가격 변경(ADMIN), 가격 변경 이력 `product_price_history`(이전·새 가격, 바꾼 사람 = JWT `sub`, 시각. 가격 변경과 같은 트랜잭션), 판매 중지. 공개 조회: 목록(페이지)·상세·여러 건(`GET /products?ids=`). Flyway 시드 = 지금 프론트 고정 상품 1~5(재고 시드와 같은 id). Gateway `/api/products/**`, compose·Helm·CI 에 서비스 추가. 메시지는 주고받지 않는다(Kafka·outbox 없음) |
-| 4-1b 서버 가격 | order-service `ProductPricePort`(adapter.out, RestClient, 타임아웃 2초, 재시도 없음, 트랜잭션 밖). 화면 가격(`unitPrice`)과 다르면 409 + 줄별 현재 가격, 같으면 서버 가격 스냅샷. 없는·판매 중지 상품 422, product 장애 503. 이때는 `Idempotency-Key` 를 기록하지 않음. 프론트 상품 목록을 API 로, 409 확인 창. 시나리오 문서(가격 변경 뒤 주문) |
-| 4-1c 장바구니 | order-service `cart_items`(user_id, product_id 유니크, 수량, 담을 때 가격). 담기·수량 변경·빼기·조회(현재 가격과 비교해 바뀐 줄 표시, product 장애면 표시 없이 담을 때 가격)·장바구니 주문(주문 생성 + 주문한 줄 삭제 = 한 트랜잭션, 409 는 4-1b 와 같음). 내 장바구니만(JWT `sub`), 최대 50줄. 프론트 장바구니 화면 |
+| 4-1a product-service (완료, PR #65) | 새 서비스(헥사고날, 자기 DB `product_db`). 상품 등록·수정·가격 변경(ADMIN), 가격 변경 이력 `product_price_history`(이전·새 가격, 바꾼 사람 = JWT `sub`, 시각. 가격 변경과 같은 트랜잭션), 판매 중지. 공개 조회: 목록(페이지)·상세·여러 건(`GET /products?ids=`). Flyway 시드 = 지금 프론트 고정 상품 1~5(재고 시드와 같은 id). Gateway `/api/products/**`, compose·Helm·CI 에 서비스 추가. 메시지는 주고받지 않는다(Kafka·outbox 없음) |
+| 4-1b 서버 가격 (완료, PR #68) | order-service `ProductPricePort`(adapter.out, RestClient, 타임아웃 2초, 재시도 없음, 트랜잭션 밖). 화면 가격(`unitPrice`)과 다르면 409 + 줄별 현재 가격, 같으면 서버 가격 스냅샷. 없는·판매 중지 상품 422, product 장애 503. 이때는 `Idempotency-Key` 를 기록하지 않음. 프론트 상품 목록을 API 로, 409 확인 창. 시나리오 문서(가격 변경 뒤 주문) |
+| 4-1c 장바구니 (완료, PR #72) | order-service `cart_items`(user_id, product_id 유니크, 수량, 담을 때 가격). 담기·수량 변경·빼기·조회(현재 가격과 비교해 바뀐 줄 표시, product 장애면 표시 없이 담을 때 가격)·장바구니 주문(주문 생성 + 주문한 줄 삭제 = 한 트랜잭션, 409 는 4-1b 와 같음). 내 장바구니만(JWT `sub`), 최대 50줄. 프론트 장바구니 화면 |
 
 정해서 진행한 것: 타임아웃 2초, 가격이 오르든 내리든 409, 장바구니 50줄, 상품 조회는 로그인 없이 공개(order 는 Gateway 를 거치지 않고 클러스터 안에서 호출, 토큰 전달 없음), 메시지 계약은 바꾸지 않음, `product.events` 는 만들지 않음(소비자가 생기면 추가).
 k8s: product-service 를 Helm 차트에 추가하고 기존 kind CI 로 같이 확인한다. Elasticsearch 는 ④에서 따로.
@@ -505,7 +506,7 @@ k8s: product-service 를 Helm 차트에 추가하고 기존 kind CI 로 같이 �
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
 - 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그와 경보(`SagaCompensationStuck`)
-- `processed_message`·주문 `Idempotency-Key` 보존 기간 정리 작업 없음 (ADR 0006, 토픽 보존 + DLT 재처리 기간보다 길게) → 4-4절 ②에서 한다
+- 멱등 기록 보존: processed_message 30일, Idempotency-Key 7일 뒤 지운다(②). 30일 넘게 지난 메시지를 DLT 에서 재처리하면 중복으로 걸러지지 않고 다시 처리된다(주문별 기록이 한 번 더 막는다, ADR 0006). 7일 지난 키로 다시 보내면 새 주문
 - ~~주문 가격을 클라이언트가 보낸다~~ → 4-1b 에서 서버가 product-service 가격과 비교(다르면 409)하고 서버 가격을 스냅샷한다 (ADR 0016, 시나리오 14). 확인과 주문 트랜잭션 사이에 가격이 또 바뀌면 주문은 확인한 가격으로 들어간다(시나리오 14 설계 표)
 - product-service 가 멈추면 새 주문이 503 (진행 중인 Saga 는 영향 없음, ADR 0016)
 - PG 장애가 길어지면 결제마다 클라이언트 타임아웃(3초)을 기다렸다 `UNKNOWN` 이 되고, 주문은 결제 대기 한도(약 5.5분) 뒤 취소된다. 정합성은 맞지만 빨리 실패하지 못한다 → 4-4절 ③ 서킷 브레이커
@@ -518,7 +519,7 @@ k8s: product-service 를 Helm 차트에 추가하고 기존 kind CI 로 같이 �
 - 분류되지 않은 영구 오류는 파티션을 막는다 (의도). `ConsumerLagHigh` 경보로 잡는다
 - trace: 단계 타임아웃 재전송·결제 보정 후 응답은 원래 trace 에 잇지 못하고 새 trace 로 시작한다(주문 id 검색으로 모임). 이으려면 Saga 행에 처음 traceparent 를 저장 (ADR 0013)
 - 수집기 Alloy 는 한 개(SPOF): 멈추면 메트릭·trace·로그가 같이 빈다. `MetricsPipelineDown` 경보로 알리는 데까지. 여러 개로 늘리려면 clustering(scrape 분산) + trace id 로 나누는 앞단(tail sampling) (ADR 0013 "메트릭도 Alloy 로")
-- 경보 문턱값은 시연용(짧음), 경보 전달(Alertmanager)은 없음. 운영 값은 ADR 0013 표
+- 경보 문턱값은 시연용(짧음). 경보 전달은 Alertmanager → Discord 웹훅 하나(PR #70). 웹훅 URL 을 넣지 않으면 receiver 가 `null` 이라 전달되지 않는다. 운영 값은 ADR 0013 표
 
 ## 6. 작업 방식 (매 PR 동일)
 
