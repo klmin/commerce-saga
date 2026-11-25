@@ -164,7 +164,7 @@ services:
     environment:
       # tail sampling: 오류·느린 trace 를 뺀 나머지 중 남길 비율(%). actuator trace 는 늘 버린다
       TRACE_SAMPLING_PERCENT: ${TRACE_SAMPLING_PERCENT:-100}
-      # 메트릭을 긁을 서비스 7개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
+      # 메트릭을 긁을 서비스 8개. 서비스는 호스트에서 뜨므로 host.docker.internal (리눅스 CI 는 아래 extra_hosts 의 host-gateway)
       METRICS_SERVICE_TARGETS: >-
         [{"__address__":"host.docker.internal:8081","service":"order-service"},
         {"__address__":"host.docker.internal:8082","service":"inventory-service"},
@@ -172,6 +172,7 @@ services:
         {"__address__":"host.docker.internal:8084","service":"payment-service"},
         {"__address__":"host.docker.internal:8085","service":"notification-service"},
         {"__address__":"host.docker.internal:8086","service":"auth-service"},
+        {"__address__":"host.docker.internal:8087","service":"product-service"},
         {"__address__":"host.docker.internal:8000","service":"gateway"}]
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -51,6 +51,13 @@ spring:
               predicates:
                 - Path=/api/stocks/**
               filters: *user-api
+            # 상품 조회는 로그인 없이 (GatewaySecurityConfig). 쓰기는 아래 admin-products 로만 (ADR 0016)
+            - id: products
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8087}
+              predicates:
+                - Path=/api/products,/api/products/**
+                - Method=GET
+              filters: *user-api
             - id: points
               uri: ${POINT_SERVICE_URL:http://localhost:8083}
               predicates:
@@ -71,6 +78,12 @@ spring:
               uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
               predicates:
                 - Path=/api/admin/payment-faults
+              filters: *user-api
+            # 관리자 상품 관리: /api/admin/products/** → product-service /admin/products/** (ADMIN 역할)
+            - id: admin-products
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:8087}
+              predicates:
+                - Path=/api/admin/products,/api/admin/products/**
               filters: *user-api
 
 # 이 주소에서 온 연결만 X-Forwarded-For 를 믿는다 (rate limit 의 IP, ADR 0011). 화면의 BFF(Next 서버) 주소·대역.

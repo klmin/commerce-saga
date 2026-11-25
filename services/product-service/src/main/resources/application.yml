@@ -1,0 +1,54 @@
+server:
+  port: ${SERVER_PORT:8087}
+
+spring:
+  application:
+    name: product-service
+  # access token 검증 (ADR 0008). 조회는 공개, 관리자 API 만 토큰이 필요하다
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8086/.well-known/jwks.json}
+          issuer-uri: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+          authorities-claim-name: roles
+          authority-prefix: ROLE_
+  # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
+  datasource:
+    url: ${PRODUCT_DB_URL:jdbc:postgresql://localhost:5432/product_db}
+    username: ${PRODUCT_DB_USERNAME:product_svc}
+    password: ${PRODUCT_DB_PASSWORD:product_svc}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  # 분산 트레이싱·로그 (ADR 0013). OTLP 로 Alloy 에 보내면 trace 는 Tempo, 로그는 Loki 로 간다
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4328/v1/traces}
+    logging:
+      export:
+        otlp:
+          endpoint: ${OTLP_LOGGING_ENDPOINT:http://localhost:4328/v1/logs}
+  # 로그를 OTLP 로 보낼지 (k8s 처럼 수집기가 없는 곳에서는 끈다)
+  logging:
+    export:
+      enabled: ${OTLP_LOGGING_EXPORT_ENABLED:true}
+  otlp:
+    metrics:
+      export:
+        enabled: false

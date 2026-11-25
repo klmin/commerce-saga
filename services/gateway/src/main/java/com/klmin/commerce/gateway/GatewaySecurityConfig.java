@@ -20,7 +20,7 @@ import java.util.Set;
  * Gateway 의 1차 검증 (ADR 0008). 서비스가 다시 검증하지만, 토큰 없는·위조된 요청은 여기서 401 로 끝내 서비스까지 가지 않는다.
  * <ul>
  *   <li>{@code /auth/**}, JWKS: 토큰 없이 auth-service 로 (로그인 전 요청)</li>
- *   <li>{@code GET /api/stocks/**}: 토큰 없이 (로그인 전 상품 화면)</li>
+ *   <li>{@code GET /api/stocks/**}, {@code GET /api/products/**}: 토큰 없이 (로그인 전 상품 화면)</li>
  *   <li>{@code /api/admin/**}: ADMIN 역할</li>
  *   <li>그 밖의 {@code /api/**}: 유효한 access token. 경로에 없는 것은 모두 거부</li>
  * </ul>
@@ -45,7 +45,7 @@ class GatewaySecurityConfig {
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/auth/**", "/.well-known/jwks.json").permitAll()
                         .pathMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/stocks/**", "/api/products", "/api/products/**").permitAll()
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")
                         .pathMatchers("/api/**").authenticated()
                         .anyExchange().denyAll())

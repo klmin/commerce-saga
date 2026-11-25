@@ -103,17 +103,17 @@ jobs:
       - name: 분산 트레이싱·로그 (시나리오 11)
         run: bash scripts/smoke-tracing.sh
 
-      # alloy 가 서비스 7개와 kafka-exporter 를 긁어 Prometheus 로 보내고 있는지 (경보 규칙이 이 job 들을 본다)
+      # alloy 가 서비스 8개와 kafka-exporter 를 긁어 Prometheus 로 보내고 있는지 (경보 규칙이 이 job 들을 본다)
       - name: 메트릭 대상
         run: |
           up_count() { curl -sf -G http://localhost:9091/api/v1/query --data-urlencode "query=$1" | grep -oE '"value":\[[^]]*"1"\]' | wc -l; }
           for i in $(seq 1 30); do
             s=$(up_count 'up{job="services"}'); k=$(up_count 'up{job="kafka"}')
-            [ "$s" = 7 ] && [ "$k" = 1 ] && break
+            [ "$s" = 8 ] && [ "$k" = 1 ] && break
             sleep 2
           done
-          echo "services up=$s/7, kafka-exporter up=$k/1"
-          [ "$s" = 7 ] && [ "$k" = 1 ]
+          echo "services up=$s/8, kafka-exporter up=$k/1"
+          [ "$s" = 8 ] && [ "$k" = 1 ]
           rules=$(curl -sf http://localhost:9091/api/v1/rules | grep -o '"type":"alerting"' | wc -l)
           echo "경보 규칙 $rules 개"
           [ "$rules" -gt 0 ]
@@ -125,7 +125,7 @@ jobs:
           # Strimzi 는 Deployment 대신 StrimziPodSet 으로 Pod 를 띄운다
           kubectl -n commerce logs -l strimzi.io/kind=KafkaConnect --tail=80 || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
-          for d in auth-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+          for d in auth-service product-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
             echo "===== $d"
             kubectl -n commerce logs deployment/$d --tail=80 || true
           done

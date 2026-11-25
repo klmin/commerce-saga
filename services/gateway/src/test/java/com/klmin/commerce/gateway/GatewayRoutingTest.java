@@ -61,7 +61,7 @@ class GatewayRoutingTest {
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         String base = "http://localhost:" + DOWNSTREAM.getAddress().getPort();
-        for (String service : List.of("AUTH", "ORDER", "INVENTORY", "POINT", "PAYMENT", "NOTIFICATION")) {
+        for (String service : List.of("AUTH", "ORDER", "INVENTORY", "POINT", "PAYMENT", "NOTIFICATION", "PRODUCT")) {
             registry.add(service + "_SERVICE_URL", () -> base);
         }
         registry.add("AUTH_JWKS_URI", () -> base + "/.well-known/jwks.json");
@@ -112,6 +112,11 @@ class GatewayRoutingTest {
         HttpResponse<String> admin = get("/api/admin/payment-faults", token(KEY, "100", List.of("ADMIN", "USER"), 300));
         assertThat(admin.statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/admin/payment-faults");
+
+        assertThat(get("/api/admin/products", token(KEY, "9", List.of("USER"), 300)).statusCode()).isEqualTo(403);
+        assertThat(get("/api/admin/products/1/price-history", token(KEY, "100", List.of("ADMIN", "USER"), 300))
+                .statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/admin/products/1/price-history");
     }
 
     @Test
@@ -122,6 +127,9 @@ class GatewayRoutingTest {
 
         assertThat(get("/api/stocks/1", null).statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/stocks/1");
+
+        assertThat(get("/api/products?ids=1,2", null).statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/products");
     }
 
     @Test
