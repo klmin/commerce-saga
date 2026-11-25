@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (release 가 바뀐 이미지만 배포(PR #96), 배포 전 main CI 대기)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 아직 정하지 않음(후보는 4-4절 "정하고 미룬 것")**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-25 (후속 5 인증 재구성 설계 확정: 4-7절, 구현 전)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)·후속 4 상품 검색·관리 이력(태그 `v0.6-search-audit`)까지 끝났다. 후속 4 다음 작업은 아직 정하지 않았다(후보는 4-4절 "정하고 미룬 것"). 아래는 후속 4 까지의 결정 기록이다: 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 값 객체(PR #56~#59)·ADR 0015(PR #61)까지 끝났다. 이후 순서도 사용자가 정했다(2026-11-25): ① 후속 4-1 가격 스냅샷(서버가 가격을 정함) → ② 멱등 기록 정리 작업 → ③ 결제 서킷 브레이커 → ④ 후속 4 나머지(검색·CDC·ES). 주문 취소 API 는 그 뒤에 정한다. 항목별 내용은 4-4절 "다음 작업 메모". 후속 4(4-1 포함)는 시작 전에 설계 메모(PR 나누기, 가격 스냅샷, CDC·ES 구성)를 이 문서에 적고 사용자 확인을 받는다. 4-1 설계는 사용자가 확인했다(2026-11-25, 4-5절·ADR 0016: 가격은 동기 조회 + 409, 장바구니 추가). 4-1 뒤 ②·③ 은 4-4절 메모대로 진행하고 머지 조건(Codex 지적 없음 + CI 통과)을 지키면 이어서 진행해도 된다(사용자 위임 2026-11-25). JPA Auditing·등록자/수정자 컬럼은 쓰지 않고, 관리자가 상품·가격을 고치는 기능이 생기는 후속 4 에서 도메인 이력으로 다시 본다(사용자 결정 2026-11-25, ADR 0015).** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 는 [ADR 0015](adr/0015-context-map-and-glossary.md)(컨텍스트 맵·용어집·쓰지 않기로 한 패턴)를 먼저 읽는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)·후속 4 상품 검색·관리 이력(태그 `v0.6-search-audit`)까지 끝났다. 후속 4 다음 작업은 후속 5 인증 재구성이다(사용자 결정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 바꾸지 않을 것(서비스 JWT 검증, Kafka·Saga)과 PR 순서가 거기 있다. 아래는 후속 4 까지의 결정 기록이다: 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 값 객체(PR #56~#59)·ADR 0015(PR #61)까지 끝났다. 이후 순서도 사용자가 정했다(2026-11-25): ① 후속 4-1 가격 스냅샷(서버가 가격을 정함) → ② 멱등 기록 정리 작업 → ③ 결제 서킷 브레이커 → ④ 후속 4 나머지(검색·CDC·ES). 주문 취소 API 는 그 뒤에 정한다. 항목별 내용은 4-4절 "다음 작업 메모". 후속 4(4-1 포함)는 시작 전에 설계 메모(PR 나누기, 가격 스냅샷, CDC·ES 구성)를 이 문서에 적고 사용자 확인을 받는다. 4-1 설계는 사용자가 확인했다(2026-11-25, 4-5절·ADR 0016: 가격은 동기 조회 + 409, 장바구니 추가). 4-1 뒤 ②·③ 은 4-4절 메모대로 진행하고 머지 조건(Codex 지적 없음 + CI 통과)을 지키면 이어서 진행해도 된다(사용자 위임 2026-11-25). JPA Auditing·등록자/수정자 컬럼은 쓰지 않고, 관리자가 상품·가격을 고치는 기능이 생기는 후속 4 에서 도메인 이력으로 다시 본다(사용자 결정 2026-11-25, ADR 0015).** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 는 [ADR 0015](adr/0015-context-map-and-glossary.md)(컨텍스트 맵·용어집·쓰지 않기로 한 패턴)를 먼저 읽는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -50,6 +50,7 @@
 | DDD 보강 | 값 객체(서비스마다), 컨텍스트 맵·용어집. 설계는 ADR 0015 | 완료 (값 객체 PR #56~#59, ADR 0015 PR #61) |
 | 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 완료, 태그 `v0.6-search-audit` (4-1 PR #65·#68·#72, 4-2 PR #82·#89·#90, 4-3 PR #91·#94, 설계 4-5·4-6절, ADR 0010·0016) |
 | 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 완료 (PR #74·#76, 4-4절) |
+| 후속 5 | 인증 재구성: auth-service → SAS(OIDC IdP), Gateway → BFF(토큰 릴레이), 화면 → SPA 3개(사용자·관리자·인증). 설계는 4-7절·[인증 재구성 설계](auth-sas-bff-design.md) | 설계 확정(2026-11-25), 구현 전 |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
 
@@ -552,6 +553,28 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | 4-3b 관리자 상품 화면 (완료, PR #94) | 관리자 상품 목록·수정(정보·가격·판매 상태)·상품별 관리 이력, Playwright |
 
 **부담·한계로 적을 것**: ES 메모리(로컬 compose 전체가 약 1GB 늘어남, CI 러너는 여유 있음), 검색 결과는 최종 일관성(수 초 늦을 수 있음), ngram 이라 형태소 검색 아님, 단일 노드라 ES 고가용성 없음.
+
+## 4-7. 후속 5 인증 재구성 설계 메모 (2026-11-25 사용자 결정)
+
+화면을 **사용자·관리자·인증 3개 SPA** 로 나누고, auth-service 를 **Spring Authorization Server(OIDC IdP)** 로, Spring Cloud Gateway 를 **BFF(OAuth2 클라이언트 + 토큰 릴레이)** 로 바꾼다. 서비스(리소스 서버)의 JWT 검증은 그대로다. 흐름·저장소·시크릿·라우팅·PR 나누기는 **[인증 재구성 설계](auth-sas-bff-design.md)** 에 모았다. 시작 전에 그 문서를 읽는다.
+
+**결정 요약**
+- 구성: SPA(토큰 모름) → 같은 출처 `/api/**` → SCG(세션에 토큰 보관, `TokenRelay`) → 서비스(JWKS 검증). 로그인은 SCG `oauth2Login` → SAS(`auth` 호스트), SSO 세션으로 화면 사이 재로그인 없음
+- 저장: 회원·클라이언트·인가 기록은 `auth_db`(JDBC), SSO 세션(auth)과 BFF 세션(gateway)은 Redis 두 개(접두어 분리)
+- 토큰: `sub` = `long userId`, `roles` 클레임 유지, access 15분, refresh 는 SAS 기본 회전(ADR 0008 재사용 탐지는 들고 오지 않음: refresh 가 브라우저에 나가지 않음)
+- 클라이언트 등록: **DCR 아님, 설정 기반 고정 등록**(`gateway-web`, `gateway-admin`). `client-secret` 은 외부 변수가 최우선, 없으면 앱 밖에서 생성(compose init 컨테이너, k8s 스크립트로 Secret, 호스트 로컬은 개발용 파일), 그래도 없으면 두 앱 모두 기동 실패. auth-service 는 시작할 때 DB 에 멱등 upsert(없으면 등록, `matches` 가 다르면 해시 갱신)
+- 라우팅: 호스트 기준(`example.com`·`admin.`·`auth.`). 화면 호스트에서 `/api/**`·`/oauth2/authorization/**`·`/login/oauth2/code/**`·`/logout` 은 SCG, 나머지는 화면. k8s 는 Envoy `HTTPRoute`, compose 는 Caddy + `*.localhost`
+- ADR 0008·0011 의 바뀌는 부분은 5-0 에서 ADR 0017 로 대체 표시(머지된 ADR 본문은 고치지 않음). 브리프에 없던 SAS·Caddy·SPA 전환은 사용자가 정했다(2026-11-25)
+
+| PR | 범위 |
+|---|---|
+| 5-0 | ADR 0017 |
+| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지) |
+| 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃) |
+| 5-3 | 사용자 SPA(`frontend/apps/web` + `packages/ui`), compose Caddy·시크릿 init, Helm 호스트 라우트, e2e. 끝나면 Next·기존 `/auth/*` 제거 |
+| 5-4 | 인증 화면(`frontend/apps/auth`) |
+| 5-5 | 관리자 SPA(`frontend/apps/admin`), SSO 확인 |
+| 5-6 | 로그인 기기 관리 재구현, 시나리오 문서, 태그 |
 
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
