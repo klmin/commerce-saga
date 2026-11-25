@@ -17,6 +17,9 @@ flowchart LR
     client -- "/auth/login" --> gw
     gw --> auth[auth-service\nauth_db · Redis\nJWT 발급 · JWKS]
     gw -- "/products (공개 조회)\n/admin/products" --> product[product-service\nproduct_db\n상품 · 가격 · 가격 이력]
+    product -. "products 테이블 CDC\n(Debezium, ADR 0010)" .-> kafka
+    gw -- "/search (공개)" --> search[search-service\nElasticsearch\n상품 검색]
+    kafka -. product.cdc.products .-> search
 
     subgraph order-service [order-service · 오케스트레이터]
         order[Order API] --> odb[(order_db\norders · order_sagas · outbox\nprocessed_message)]
@@ -61,7 +64,7 @@ flowchart LR
 ## 실행
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Alloy(OTLP 4328)·Tempo·Loki·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380)
+docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, Kafka UI(http://localhost:8989), Alloy(OTLP 4328)·Tempo·Loki·Prometheus(9091)·Grafana(http://localhost:3030), Redis(6380), Elasticsearch(9200)
 ./gradlew :services:inventory-service:bootRun              # 8082   (각각 다른 터미널에서)
 ./gradlew :services:point-service:bootRun                  # 8083
 ./gradlew :services:payment-service:bootRun                # 8084
@@ -69,7 +72,7 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:notification-service:bootRun           # 8085 (선택)
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
 ./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
-./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
+./gradlew :services:search-service:bootRun                 # 8089 상품 검색 (후속 4-2, Elasticsearch 9200 + product-cdc 커넥터 등록)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
 (cd frontend && npm ci && npm run dev)                 # 화면 http://localhost:3500. frontend/README.md
 ```
@@ -120,6 +123,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 14 | [목록에서 본 가격과 주문 때 가격이 다름 → 409 + 지금 가격 → 같은 키로 새 가격 주문(스냅샷), 판매 중지 422, 장바구니 가격 변경 표시·장바구니 주문](docs/scenarios/14-price-change.md) | CI `e2e` |
 | 15 | [PG 장애가 이어지면 서킷 브레이커가 열려 결제 즉시 실패·보상, 복구 후 시험 호출로 닫힘](docs/scenarios/15-pg-circuit-breaker.md) | CI `e2e` |
 | 16 | [상품 테이블 CDC: products 변경이 product.cdc.products 로 (키 = 상품 id, 변경 후 행, 헤더 __lsn)](docs/scenarios/16-product-cdc.md) | CI `e2e`·`k8s` |
+| 17 | [상품 검색: 가격 변경·판매 중지가 몇 초 안에 검색에 반영, 옛 변경 무시, ES 중단 중 검색만 503 → 재개 후 따라잡음](docs/scenarios/17-product-search.md) | CI `e2e`·`k8s` |
 
 ## 설계 결정 (ADR)
 

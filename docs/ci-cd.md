@@ -19,7 +19,7 @@
 | 워크플로 | 체크 이름 | 도는 조건 (PR·main push 공통 경로) | 하는 일 |
 |---|---|---|---|
 | `backend` | backend | `services/` `libs/` `tools/` `build-logic/` `gradle/` `*.gradle.kts` `gradlew` | 바뀐 서비스·도구만 빌드·테스트(Testcontainers 포함). `libs/`·`build-logic/`·Gradle 설정이 바뀌면 전체 |
-| `e2e` | saga (scheduler), saga (debezium) | `services/` `libs/` `tools/` `build-logic/` `infra/` `scripts/` | compose + 서비스 8개를 띄우고 시나리오 스모크. relay 두 모드(libs/outbox 스케줄러, Debezium) matrix |
+| `e2e` | saga (scheduler), saga (debezium) | `services/` `libs/` `tools/` `build-logic/` `infra/` `scripts/` | compose + 서비스 9개를 띄우고 시나리오 스모크. relay 두 모드(libs/outbox 스케줄러, Debezium) matrix |
 | `browser-e2e` | playwright | `frontend/` `services/` `libs/` `build-logic/` `infra/` | 인프라 + 서비스 + Next(production)를 띄우고 Playwright 화면 시나리오 |
 | `frontend` | frontend | `frontend/` | format·lint·typecheck·Vitest·`next build`·Docker 이미지 빌드 확인 |
 | `infra` | compose-up | `infra/` | compose 가 뜨는지, 토픽·Connect 플러그인·replication 권한·서비스 DB 분리(8개)·Redis 확인 |
@@ -41,16 +41,16 @@
 ## 배포 (`release`)
 
 ```
-main 머지 → images (amd64·arm64 러너에서 각각): bootJar → 이미지 10개 GHCR push (<커밋 SHA>-<아키텍처>)
+main 머지 → images (amd64·arm64 러너에서 각각): bootJar → 이미지 11개 GHCR push (<커밋 SHA>-<아키텍처>)
          → manifest: 두 아키텍처를 <커밋 SHA> 하나로 묶고 확인 → release/eks 브랜치를 그 커밋으로 → EKS 의 ArgoCD 가 sync
 ```
 
-- 이미지: 서비스 8개 + `frontend` + `connect`, `ghcr.io/<owner>/commerce-saga/<이름>:<커밋 SHA>`. 테스트는 PR CI 가 이미 돌렸으므로 bootJar 만
+- 이미지: 서비스 9개 + `frontend` + `connect`, `ghcr.io/<owner>/commerce-saga/<이름>:<커밋 SHA>`. 테스트는 PR CI 가 이미 돌렸으므로 bootJar 만
 - 이미지는 linux/amd64 + linux/arm64 멀티 아키텍처. 아키텍처마다 그 아키텍처 러너(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 네이티브로 빌드한다. 노드(x86, Graviton)는 자기 CPU 에 맞는 쪽을 받는다 ([ADR 0014](adr/0014-k8s-deployment.md) 멀티 아키텍처)
 - 두 아키텍처가 모두 묶인 뒤에만 `release/eks` 를 옮긴다. 그래서 이미지가 없는 커밋은 배포되지 않는다
 - EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`). CI 에는 클러스터 권한이 없다
 - 머지가 몰리면 한 번에 하나씩 돈다. 대기 중인 실행은 GitHub 가 최신 것 하나만 남기므로 중간 커밋은 배포되지 않을 수 있다
-- 태그가 커밋이라 서비스 하나만 바뀌어도 이미지 10개를 다시 빌드하고 앱 Pod 를 모두 새 태그로 롤링한다. Postgres·Kafka 등 차트 설정이 그대로인 것은 그대로 둔다
+- 태그가 커밋이라 서비스 하나만 바뀌어도 이미지 11개를 다시 빌드하고 앱 Pod 를 모두 새 태그로 롤링한다. Postgres·Kafka 등 차트 설정이 그대로인 것은 그대로 둔다
 - 로컬·CI 검증용 ArgoCD(`deploy/argocd/root.yaml`)는 `main` 을 본다. 자세한 구성은 [deploy/README.md](../deploy/README.md), 결정은 [ADR 0014](adr/0014-k8s-deployment.md)
 
 **롤백**: 이미지가 남아 있는 옛 커밋으로 브랜치를 되돌린다.

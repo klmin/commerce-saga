@@ -58,6 +58,13 @@ spring:
                 - Path=/api/products,/api/products/**
                 - Method=GET
               filters: *user-api
+            # 상품 검색은 로그인 없이 (GatewaySecurityConfig). /api/search/** → search-service /search/** (ADR 0010)
+            - id: search
+              uri: ${SEARCH_SERVICE_URL:http://localhost:8089}
+              predicates:
+                - Path=/api/search/**
+                - Method=GET
+              filters: *user-api
             - id: points
               uri: ${POINT_SERVICE_URL:http://localhost:8083}
               predicates:

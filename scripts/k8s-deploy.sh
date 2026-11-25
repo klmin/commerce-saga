@@ -25,7 +25,7 @@ if [ -z "${TAG:-}" ]; then
   TAG="dev-$(date +%Y%m%d%H%M%S)"
 fi
 STRIMZI_VERSION=${STRIMZI_VERSION:-1.3.1}
-SERVICES="auth-service product-service order-service inventory-service point-service payment-service notification-service gateway"
+SERVICES="auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway"
 
 cd "$(dirname "$0")/.."
 
@@ -63,6 +63,8 @@ helm upgrade --install "$RELEASE" deploy/helm/commerce-saga -n "$NAMESPACE" \
 kubectl -n "$NAMESPACE" wait kafka/"$RELEASE" --for=condition=Ready --timeout=10m
 kubectl -n "$NAMESPACE" wait kafkatopic --all --for=condition=Ready --timeout=5m
 kubectl -n "$NAMESPACE" rollout status statefulset/postgres --timeout=5m
+# 상품 검색 저장소 (ADR 0010). 이미지가 커서 처음 받을 때 오래 걸린다
+kubectl -n "$NAMESPACE" rollout status statefulset/elasticsearch --timeout=8m
 for d in redis $SERVICES frontend; do
   kubectl -n "$NAMESPACE" rollout status deployment/"$d" --timeout=8m
 done

@@ -39,8 +39,8 @@ jobs:
           plugins=$(curl -sf http://localhost:8088/connector-plugins)
           echo "$plugins"
           echo "$plugins" | grep -q '"class":"io.debezium.connector.postgresql.PostgresConnector"'
-          # outbox 를 Debezium 으로 내보내는 서비스 (커넥터 5개)
-          for s in order inventory point payment auth; do
+          # Debezium 이 WAL 을 읽는 서비스 (outbox 5개 + 상품 테이블 CDC, ADR 0010)
+          for s in order inventory point payment auth product; do
             r=$(docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD=postgres postgres psql -U postgres -tAc "select rolreplication from pg_roles where rolname = '${s}_svc'")
             [ "$r" = "t" ] || { echo "${s}_svc 에 replication 권한 없음"; exit 1; }
           done
