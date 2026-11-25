@@ -1,0 +1,13 @@
+package com.klmin.commerce.productservice.product.domain;
+
+import java.util.Objects;
+
+/** 관리 이력에 남기는 상품의 그 시점 값 (바꾼 전·후) */
+public record ProductSnapshot(String name, String description, Money price, boolean onSale) {
+
+    public ProductSnapshot {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(description, "description");
+        Objects.requireNonNull(price, "price");
+    }
+}

@@ -3,6 +3,9 @@ package com.klmin.commerce.productservice.product.adapter.in.web;
 import com.klmin.commerce.productservice.common.config.SecurityConfig;
 import com.klmin.commerce.productservice.product.application.ProductNotFoundException;
 import com.klmin.commerce.productservice.product.application.port.in.ChangePriceCommand;
+import com.klmin.commerce.productservice.product.application.port.in.ChangeSaleStatusCommand;
+import com.klmin.commerce.productservice.product.application.port.in.ProductAuditPageResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductAuditResult;
 import com.klmin.commerce.productservice.product.application.port.in.GetProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import com.klmin.commerce.productservice.product.application.port.in.ManageProductUseCase;
@@ -99,6 +102,43 @@ class ProductControllerTest {
                 .andExpect(status().isOk());
 
         verify(manageProductUseCase).changePrice(new ChangePriceCommand(1, 35_000, 1000));
+    }
+
+    @Test
+    void changeSaleStatus_recordsAdminFromToken() throws Exception {
+        given(manageProductUseCase.changeSaleStatus(any())).willReturn(KEYBOARD);
+
+        mvc.perform(put("/admin/products/1/sale")
+                        .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"onSale\":false}"))
+                .andExpect(status().isOk());
+
+        verify(manageProductUseCase).changeSaleStatus(new ChangeSaleStatusCommand(1, false, 1000));
+    }
+
+    @Test
+    void auditLog_adminOnly() throws Exception {
+        given(getProductUseCase.auditLog(1, 0, 20)).willReturn(new ProductAuditPageResult(List.of(
+                new ProductAuditResult("PRICE_CHANGED",
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true),
+                        1000, Instant.parse("2026-11-25T00:00:00Z")),
+                new ProductAuditResult("REGISTERED", null,
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
+                        1000, Instant.parse("2026-11-24T00:00:00Z"))), false));
+
+        mvc.perform(get("/admin/products/1/audit-log").with(jwt().jwt(j -> j.subject("7"))))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/admin/products/1/audit-log")
+                        .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].action").value("PRICE_CHANGED"))
+                .andExpect(jsonPath("$.items[0].before.price").value(39_000))
+                .andExpect(jsonPath("$.items[0].after.price").value(35_000))
+                .andExpect(jsonPath("$.items[0].changedBy").value(1000))
+                .andExpect(jsonPath("$.items[1].before").isEmpty())
+                .andExpect(jsonPath("$.hasNext").value(false));
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.klmin.commerce.productservice.product.application.ProductNotFoundExce
 import com.klmin.commerce.productservice.product.application.port.in.GetProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import com.klmin.commerce.productservice.product.application.port.in.PriceChangeResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductAuditPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
 import com.klmin.commerce.productservice.product.application.port.out.LoadProductPort;
@@ -56,5 +57,16 @@ class ProductQueryService implements GetProductUseCase {
             throw new ProductNotFoundException(productId);
         }
         return loadProductPort.priceHistory(productId);
+    }
+
+    @Override
+    public ProductAuditPageResult auditLog(long productId, int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new DomainValidationException("page must be >= 0 and size between 1 and " + MAX_PAGE_SIZE);
+        }
+        if (!loadProductPort.exists(productId)) {
+            throw new ProductNotFoundException(productId);
+        }
+        return loadProductPort.auditLog(productId, page, size);
     }
 }

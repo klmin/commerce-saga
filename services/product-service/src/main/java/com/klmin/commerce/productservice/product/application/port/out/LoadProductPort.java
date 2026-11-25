@@ -2,6 +2,7 @@ package com.klmin.commerce.productservice.product.application.port.out;
 
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import com.klmin.commerce.productservice.product.application.port.in.PriceChangeResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductAuditPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
 
@@ -21,4 +22,7 @@ public interface LoadProductPort {
     boolean exists(long productId);
 
     List<PriceChangeResult> priceHistory(long productId);
+
+    /** 관리 이력, 최근 변경부터 */
+    ProductAuditPageResult auditLog(long productId, int page, int size);
 }

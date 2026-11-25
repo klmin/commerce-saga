@@ -2,6 +2,8 @@ package com.klmin.commerce.productservice.product.adapter.out.persistence;
 
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import com.klmin.commerce.productservice.product.application.port.in.PriceChangeResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductAuditPageResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductAuditResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
 import com.klmin.commerce.productservice.product.application.port.out.LoadProductPort;
@@ -18,11 +20,34 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
 
     private final ProductJpaRepository productRepository;
     private final PriceHistoryJpaRepository priceHistoryRepository;
+    private final ProductAuditLogJpaRepository auditLogRepository;
 
     ProductQueryPersistenceAdapter(ProductJpaRepository productRepository,
-                                   PriceHistoryJpaRepository priceHistoryRepository) {
+                                   PriceHistoryJpaRepository priceHistoryRepository,
+                                   ProductAuditLogJpaRepository auditLogRepository) {
         this.productRepository = productRepository;
         this.priceHistoryRepository = priceHistoryRepository;
+        this.auditLogRepository = auditLogRepository;
+    }
+
+    @Override
+    public ProductAuditPageResult auditLog(long productId, int page, int size) {
+        Slice<ProductAuditLogJpaEntity> slice =
+                auditLogRepository.findByProductIdOrderByChangedAtDescIdDesc(productId, PageRequest.of(page, size));
+        return new ProductAuditPageResult(slice.getContent().stream().map(e -> new ProductAuditResult(
+                e.getAction(),
+                snapshot(e.getBeforeName(), e.getBeforeDescription(), e.getBeforePrice(), e.getBeforeOnSale()),
+                snapshot(e.getAfterName(), e.getAfterDescription(), e.getAfterPrice(), e.getAfterOnSale()),
+                e.getChangedBy(), e.getChangedAt())).toList(), slice.hasNext());
+    }
+
+    /** 값이 하나도 없으면(등록의 before) null */
+    private static ProductAuditResult.Snapshot snapshot(String name, String description, Long price,
+                                                        Boolean onSale) {
+        if (name == null && description == null && price == null && onSale == null) {
+            return null;
+        }
+        return new ProductAuditResult.Snapshot(name, description, price, onSale);
     }
 
     @Override

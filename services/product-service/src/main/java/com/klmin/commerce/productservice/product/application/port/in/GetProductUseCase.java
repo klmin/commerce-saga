@@ -19,4 +19,7 @@ public interface GetProductUseCase {
 
     /** 최근 변경부터 */
     List<PriceChangeResult> priceHistory(long productId);
+
+    /** 관리 이력 (최근 변경부터, 페이지). 없는 상품이면 404 */
+    ProductAuditPageResult auditLog(long productId, int page, int size);
 }

@@ -45,10 +45,20 @@ public final class Product {
         return new Product(Objects.requireNonNull(id, "id"), name, description, price, onSale, createdAt, updatedAt);
     }
 
+    /** 이름·설명 수정. 같은 값이면 아무것도 바꾸지 않는다 */
     public void describe(String name, String description, Instant now) {
-        this.name = validName(name);
-        this.description = validDescription(description);
-        this.updatedAt = now;
+        String newName = validName(name);
+        String newDescription = validDescription(description);
+        if (!newName.equals(this.name) || !newDescription.equals(this.description)) {
+            this.name = newName;
+            this.description = newDescription;
+            this.updatedAt = now;
+        }
+    }
+
+    /** 관리 이력에 남길 지금 값 */
+    public ProductSnapshot snapshot() {
+        return new ProductSnapshot(name, description, price, onSale);
     }
 
     /** 가격 변경. 같은 가격이면 아무것도 바꾸지 않고 이력도 남기지 않는다 */

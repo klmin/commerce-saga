@@ -28,7 +28,7 @@ import java.util.List;
 
 /**
  * 관리자 상품 관리 (ADMIN 역할, SecurityConfig). Gateway 의 /api/admin/products/** 가 여기로 온다.
- * 가격을 바꾸면 이력에 바꾼 사람(JWT sub)과 시각이 남는다.
+ * 바꾸면 관리 이력(가격은 가격 이력에도)에 바꾼 사람(JWT sub)·시각·전후 값이 남는다.
  */
 @RestController
 @RequestMapping("/admin/products")
@@ -51,17 +51,18 @@ class AdminProductController {
     }
 
     @PostMapping
-    ResponseEntity<ProductResponse> register(@Valid @RequestBody ProductRequests.Register request) {
+    ResponseEntity<ProductResponse> register(@CurrentUserId long adminId,
+                                             @Valid @RequestBody ProductRequests.Register request) {
         ProductResult result = manageProductUseCase.register(
-                new RegisterProductCommand(request.name(), request.description(), request.price()));
+                new RegisterProductCommand(request.name(), request.description(), request.price(), adminId));
         return ResponseEntity.created(URI.create("/products/" + result.id())).body(ProductResponse.from(result));
     }
 
     @PutMapping("/{productId}")
-    ProductResponse describe(@PathVariable @Positive long productId,
+    ProductResponse describe(@CurrentUserId long adminId, @PathVariable @Positive long productId,
                              @Valid @RequestBody ProductRequests.Describe request) {
         return ProductResponse.from(manageProductUseCase.describe(
-                new DescribeProductCommand(productId, request.name(), request.description())));
+                new DescribeProductCommand(productId, request.name(), request.description(), adminId)));
     }
 
     @PutMapping("/{productId}/price")
@@ -72,10 +73,19 @@ class AdminProductController {
     }
 
     @PutMapping("/{productId}/sale")
-    ProductResponse changeSaleStatus(@PathVariable @Positive long productId,
+    ProductResponse changeSaleStatus(@CurrentUserId long adminId, @PathVariable @Positive long productId,
                                      @Valid @RequestBody ProductRequests.ChangeSaleStatus request) {
         return ProductResponse.from(manageProductUseCase.changeSaleStatus(
-                new ChangeSaleStatusCommand(productId, request.onSale())));
+                new ChangeSaleStatusCommand(productId, request.onSale(), adminId)));
+    }
+
+    /** 관리 이력: 등록·정보 수정·가격·판매 상태, 누가·언제·전후 값 (최근부터) */
+    @GetMapping("/{productId}/audit-log")
+    ProductAuditPageResponse auditLog(
+            @PathVariable @Positive long productId,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(GetProductUseCase.MAX_PAGE_SIZE) int size) {
+        return ProductAuditPageResponse.from(getProductUseCase.auditLog(productId, page, size));
     }
 
     /** 가격 변경 이력 (최근부터) */
