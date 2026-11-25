@@ -1,6 +1,6 @@
 name: release
 
-# 후속 3 K-4: main 에 머지되면 마지막 배포 이후 바뀐 이미지만 GHCR 에 올리고,
+# 후속 3 K-4: main 에 머지되면 마지막 배포 이후 main CI 가 통과했는지 확인하고(scripts/release-ci-gate.sh), 바뀐 이미지만 GHCR 에 올리고,
 # 다 올라가면 release/eks 브랜치에 release 커밋(그 main 커밋 + release-tags.yaml)을 얹는다.
 # EKS 의 ArgoCD 는 release/eks 를 보고(deploy/argocd/eks/root.yaml), release-tags.yaml 의 이미지별 태그를 쓴다.
 # → 바뀐 서비스만 태그가 바뀌어 그 Deployment 만 롤링된다. 이미지가 아직 없는 커밋은 배포되지 않는다.
@@ -43,8 +43,33 @@ env:
   SERVICES: auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway
 
 jobs:
+  # 마지막 배포 이후 main 커밋들의 CI 가 모두 끝나고 통과해야 배포한다. 실패·취소가 있으면 여기서 멈춘다(이미지도 만들지 않음).
+  # 판정 방법은 scripts/release-ci-gate.sh. CI 를 다시 돌려 통과시켰으면 이 실행을 다시 돌린다(Re-run failed jobs)
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # 마지막 배포 커밋 이후의 main 커밋을 센다
+
+      - name: main CI 기다리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          # 배포 전에 통과해야 하는 워크플로 (push: main 으로 도는 CI)
+          WORKFLOWS: '["backend","frontend","e2e","browser-e2e","infra","k8s","codeql"]'
+        run: |
+          set -euo pipefail
+          PREV_RELEASE=$(git rev-parse -q --verify refs/remotes/origin/release/eks || true) bash scripts/release-ci-gate.sh
+
   # 마지막 배포 이후 바뀐 이미지와 release-tags.yaml
   plan:
+    needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

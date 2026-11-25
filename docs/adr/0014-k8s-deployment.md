@@ -92,6 +92,18 @@ K-4 는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나라, 서비스 하�
   - 서비스마다 Application(ApplicationSet): 서비스별 sync·롤백이 되지만 차트·values 를 서비스별로 나눠야 한다. 지금은 한 차트로 충분하다
 - 감수한 것: `release/eks` 의 최신 커밋이 main 커밋이 아니라 봇 커밋이다(어느 main 커밋인지는 메시지 `release: <커밋>` 과 `releasedCommit`). 로컬·CI 의 kind 검증은 `image.tags` 없이 공통 태그로 돌아 이미지별 태그 경로는 렌더링(`helm template`)으로만 확인한다
 
+## 배포 전 main CI 대기 (2026-11-25, 바뀐 서비스만 배포 다음)
+
+release 는 main CI 와 동시에 돌고 main CI 는 다음 머지에 취소됐다(concurrency). 배포 전 검증이 PR CI 하나뿐이라, squash 머지로 PR 이 main 최신이 아니었던 경우 합친 결과가 검증 없이 배포될 수 있었다.
+
+- 결정: **release 첫 잡(`ci`)이 main CI 통과를 기다린다**(`scripts/release-ci-gate.sh`). 실패·취소가 있으면 이미지를 만들지 않고 멈춘다
+- **판정 범위는 마지막 배포 이후의 main 커밋 전부**이고, 워크플로마다 가장 새 커밋의 실행을 본다. CI 가 경로 필터로 돌아서 이번 커밋만 보면 앞 커밋에서 깨진 워크플로가 이번 커밋에 없을 수 있다(바뀐 서비스만 배포와 같은 이유로 "마지막 배포 커밋" 기준). 뒤 커밋에서 같은 워크플로가 통과하면 그 코드가 앞 변경을 포함하므로 앞 실패를 대신한다
+- **main 의 CI 는 취소하지 않는다**: concurrency 그룹을 PR 은 브랜치, 그 밖은 실행 id 로 나눈다. 그룹이 같으면 `cancel-in-progress: false` 여도 대기 중인 실행이 다음 실행에 밀려 취소된다
+- 고르지 않은 것
+  - 필수 status check + "브랜치 최신 상태 요구": 머지 전에 막을 수 있지만 경로 필터를 job 안 판단으로 바꿔야 하고 PR 마다 rebase 가 필요하다. 지금은 배포만 막는다
+  - `workflow_run` 으로 release 를 CI 완료 뒤에 시작: CI 워크플로가 여럿이고 경로로 일부만 돌아 "다 끝났다"를 알려면 결국 같은 조회가 필요하다
+- 감수한 것: 배포가 main CI 시간(10~15분)만큼 늦어지고, 대기하는 동안 러너 하나를 쓴다. main CI 가 깨지면 고칠 때까지 다른 서비스 배포도 멈춘다. 일시 실패는 CI 와 release 를 다시 돌려야 한다
+
 ## 관측성 추가 결정 (2026-11-24, ADR 0013 로그·수집기 다음)
 
 - 차트 `templates/observability.yaml` 에 compose 와 같은 구성을 둔다: alloy(수집기: trace·로그 → tempo·loki, 메트릭을 긁어 → prometheus), prometheus(저장·경보 규칙), grafana(데이터 소스·대시보드). `observability.enabled` 기본 true. 메트릭 수집을 Alloy 로 옮긴 것은 2026-11-25 (ADR 0013 "메트릭도 Alloy 로")
