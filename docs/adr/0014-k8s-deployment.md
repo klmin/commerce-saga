@@ -28,7 +28,7 @@
 - **Postgres·Redis 는 오퍼레이터 없이** 차트 안의 StatefulSet·Deployment 로 둔다(compose 와 같은 단일 인스턴스). 새 오퍼레이터는 Strimzi 하나로 끝낸다. 운영이면 관리형 DB·오퍼레이터(CloudNativePG 등)로 바꿀 자리다
 - Postgres 초기화 SQL 은 `infra/postgres/init` 의 사본을 차트에 둔다(Helm 은 차트 밖 파일을 못 읽는다). CI 가 두 파일이 같은지 검사한다
 - 서비스 trace·로그는 차트 안 alloy 로 보낸다(아래 "관측성"). 관측성을 끄면 내보내지 않는다(`TRACING_SAMPLING_PROBABILITY=0`, `OTLP_LOGGING_EXPORT_ENABLED=false`)
-- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1 에 `Recreate` 전략이다. RollingUpdate 면 재배포 중 키가 다른 옛·새 Pod 가 함께 응답해, 방금 받은 토큰이 다른 Pod 의 JWKS 로 검증돼 401 이 될 수 있다. 여럿이면 키를 Secret 으로 넣는다
+- auth-service 는 서명 키를 주지 않으면 임시 키라(ADR 0008) replicas 1 에 `Recreate` 전략으로 시작했다. RollingUpdate 면 재배포 중 키가 다른 옛·새 Pod 가 함께 응답해, 방금 받은 토큰이 다른 Pod 의 JWKS 로 검증돼 401 이 될 수 있다 → 아래 "auth-service 서명 키" 에서 Secret 으로 고정하고 RollingUpdate 로 바꿨다
 
 ### Kafka: Strimzi `Kafka` + `KafkaNodePool`(KRaft) + `KafkaTopic`, 버전 4.3.2
 
@@ -94,3 +94,17 @@
 - QEMU 에뮬레이션(buildx `--platform` 하나로)은 설정이 짧지만 arm64 쪽 `npm ci`·`next build` 가 몇 배 느리다. 네이티브 러너는 공개 저장소면 무료
 - Dockerfile 은 그대로다. jar 는 아키텍처와 무관하고, 베이스(`eclipse-temurin:25-jre`, `node:26-alpine`, Strimzi Kafka)와 EKS 가 받는 공개 이미지(Postgres·Redis·Strimzi·관측성·Envoy Gateway)가 모두 arm64 를 제공한다(2026-11-24 `imagetools inspect` 로 확인)
 - 감수한 것: 아키텍처별 태그(`-amd64`, `-arm64`)가 GHCR 에 같이 남는다. bootJar 를 러너마다 한 번씩 빌드한다. CI 의 kind 검증은 amd64 러너에서만 돈다(arm64 이미지는 빌드까지만 확인)
+
+## auth-service 서명 키 (2026-11-25)
+
+임시 키 + `Recreate` 는 배포 때마다 auth-service 가 약 1분 비어(`ServiceDown` 경보) 이전 access token 이 모두 무효였다. 키를 Secret 하나로 고정한다.
+
+- **앱은 읽기만 한다.** Secret(`authJwtKey.secretName`, 기본 `auth-jwt-key`)의 `private.pem`(RSA 2048, PKCS#8 PEM)을 `/etc/auth-jwt` 에 읽기 전용으로 마운트하고 `AUTH_JWT_PRIVATE_KEY_LOCATION=file:/etc/auth-jwt/private.pem`, `kid` 는 `AUTH_JWT_KEY_ID` 로 받는다. 키를 만드는 일은 앱 밖이다
+- **로컬 k8s(kind·docker-desktop + Argo CD)는 hook Job 이 한 번 만든다**(`templates/auth-jwt-key.yaml`). Helm hook `pre-install,pre-upgrade` 이고 Argo CD 는 이를 PreSync 로 돌린다(Argo CD 문서 "Helm Hooks"). Secret 이 있으면 건드리지 않고, 없을 때만 만든다(동시 실행으로 AlreadyExists 면 성공). 권한은 그 namespace 의 secrets get·create 뿐
+- **Secret 은 차트 매니페스트에 넣지 않는다.** 차트에 두면 Argo CD 가 sync 마다 덮어쓰거나 prune 해 키가 바뀐다. Job 이 만든 Secret 에는 Argo CD 추적 표시가 없어 Argo CD 가 관리하지 않는다(일부러). Helm `lookup` + `randAlphaNum` 같은 방식은 Argo CD 가 `helm template` 으로 렌더해 lookup 이 늘 비므로 쓸 수 없다
+- **EKS 등은 외부 비밀 저장소가 같은 이름의 Secret 을 채운다**(External Secrets 등). 그때는 `authJwtKey.generate=false` 로 Job 을 끈다. 앱 쪽 설정은 같다
+- **Secret 을 지우면** 다음 sync 의 Job 이 새 키를 만들고, auth-service 가 다시 뜰 때(재배포·재시작) 새 키로 서명한다. 그 전 access token 은 검증되지 않아 401 → 화면은 refresh 로 새 토큰을 받는다. 키를 바꾸면서 옛 토큰을 살리려면 ADR 0008 의 `auth.jwt.retired-keys` 를 쓴다
+- auth-service 를 `RollingUpdate`(`maxUnavailable: 0`, `maxSurge: 1`)로 바꿨다. 옛·새 Pod 가 같은 키라 함께 응답해도 된다. replicas 도 늘릴 수 있다
+- Job 이미지: `alpine/openssl:3.5.8`(키 생성, initContainer) + `alpine/kubectl:1.36.1`(Secret 생성). 둘 다 sh 가 있는 alpine 기반, amd64·arm64. bitnami 이미지는 2025년 배포 정책 변경으로 쓰지 않는다. 비 root(65534)·읽기 전용 루트·capability 없음, 키는 메모리 emptyDir 에만 둔다
+- 감수한 것: PreSync hook 이라 sync 마다 Job 이 한 번 돈다(수 초). Job 이 실패하면(이미지 pull 실패 등) 그 sync 전체가 실패한다. 키 자동 교체는 없다
+
