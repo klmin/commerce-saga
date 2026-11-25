@@ -33,6 +33,7 @@ class PlaceOrderServiceTest {
     private final InMemoryCart cart = new InMemoryCart();
     private final PlaceOrderService service = new PlaceOrderService(
             new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(), keys, cart,
+                    new InMemorySagaOutcomes(),
                     Clock.fixed(Instant.parse("2026-11-25T00:00:00Z"), ZoneOffset.UTC)),
             catalog);
 

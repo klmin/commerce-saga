@@ -52,8 +52,9 @@ class OrderServiceTest {
     private final Recording sent = new Recording();
     private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
     private final InMemoryIdempotencyKeys keys = new InMemoryIdempotencyKeys();
+    private final InMemorySagaOutcomes outcomes = new InMemorySagaOutcomes();
     private final OrderService service =
-            new OrderService(orders, orders, sagas, sent, sent, processed, keys, new InMemoryCart(),
+            new OrderService(orders, orders, sagas, sent, sent, processed, keys, new InMemoryCart(), outcomes,
                     Clock.fixed(NOW, ZoneOffset.UTC));
 
     /** 합계 2,500 */
@@ -172,6 +173,21 @@ class OrderServiceTest {
                 "completed:" + order.id());
         assertThat(orders.store.get(order.id()).status()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.COMPLETED);
+        assertThat(outcomes.recorded).extracting(InMemorySagaOutcomes.Outcome::result)
+                .containsExactly(SagaState.COMPLETED);
+    }
+
+    @Test
+    void lateReplyAfterFinish_doesNotRecordOutcomeAgain() {
+        Order order = place(1L, 0L);
+        reply(order, STOCK_RESERVED);
+        reply(order, PAYMENT_APPROVED);
+
+        // 다른 messageId 로 늦게 온 같은 응답: Saga 는 이미 끝나 Ignore
+        reply(order, PAYMENT_APPROVED);
+
+        assertThat(outcomes.recorded).extracting(InMemorySagaOutcomes.Outcome::result)
+                .containsExactly(SagaState.COMPLETED);
     }
 
     @Test
@@ -191,6 +207,8 @@ class OrderServiceTest {
         Order saved = orders.store.get(order.id());
         assertThat(saved.status()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(saved.cancelReason()).isEqualTo("why");
+        assertThat(outcomes.recorded).extracting(InMemorySagaOutcomes.Outcome::result)
+                .containsExactly(SagaState.CANCELLED);
     }
 
     @Test
