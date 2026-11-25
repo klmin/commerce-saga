@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.savedrequest.DefaultSavedRequest;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.savedrequest.SavedRequest;
@@ -70,11 +71,23 @@ class SignUpFormController {
         contextRepository.saveContext(context, request, response);
 
         SavedRequest saved = requestCache.getRequest(request, response);
-        if (saved != null) {
-            requestCache.removeRequest(request, response);
-            response.sendRedirect(saved.getRedirectUrl());
-        } else {
-            response.sendRedirect(webHome);
+        requestCache.removeRequest(request, response);
+        response.sendRedirect(savedAuthorizeRequest(saved, request).orElse(webHome));
+    }
+
+    /**
+     * 저장된 요청이 SAS 인가 요청({@code <context>/oauth2/authorize})일 때만 그 경로로 돌아간다. 같은 출처의 상대 경로만 쓰고
+     * 저장된 요청의 호스트는 쓰지 않는다(요청 헤더에서 온 값이라 다른 사이트로 보내지 않게)
+     */
+    static java.util.Optional<String> savedAuthorizeRequest(SavedRequest saved, HttpServletRequest request) {
+        if (!(saved instanceof DefaultSavedRequest original)) {
+            return java.util.Optional.empty();
         }
+        String path = request.getContextPath() + "/oauth2/authorize";
+        if (!path.equals(original.getRequestURI())) {
+            return java.util.Optional.empty();
+        }
+        String query = original.getQueryString();
+        return java.util.Optional.of(query == null ? path : path + "?" + query);
     }
 }

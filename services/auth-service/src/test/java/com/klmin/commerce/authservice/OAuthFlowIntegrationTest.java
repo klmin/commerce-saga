@@ -192,7 +192,7 @@ class OAuthFlowIntegrationTest {
 
         MvcResult signedUp = browser.perform(post("/signup").param("loginId", newLoginId).param("password", "password1")
                 .param("_csrf", csrf));
-        assertThat(location(signedUp)).startsWith("http://localhost/oauth2/authorize");
+        assertThat(location(signedUp)).startsWith("/oauth2/authorize?");
         Long newUserId = jdbc.sql("select id from users where login_id = ?").param(newLoginId).query(Long.class).single();
         assertThat(jdbc.sql("select count(*) from outbox where aggregateid = ?").param(Long.toString(newUserId))
                 .query(Long.class).single()).isEqualTo(1);
