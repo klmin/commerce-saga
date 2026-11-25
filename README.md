@@ -79,7 +79,7 @@ TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/
   -d '{"loginId":"user1","password":"local-dev-pass"}' | sed -nE 's/.*"accessToken":"([^"]+)".*/\1/p')   # 개발용 시드 사용자 1
 curl -X POST localhost:8000/api/orders -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":1000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
+  -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":39000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
 curl localhost:8000/api/orders/<orderId> -H "Authorization: Bearer $TOKEN"        # PENDING -> COMPLETED
 curl localhost:8000/api/orders/<orderId>/saga -H "Authorization: Bearer $TOKEN"   # Saga 단계 타임라인 (본인 주문만)
 curl localhost:8000/api/orders?size=20 -H "Authorization: Bearer $TOKEN"          # 내 주문 목록 (최신순, 다음 쪽은 before=<마지막 orderId>). 결제는 /api/payments
@@ -117,6 +117,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
 | 13 | [가입 → auth.events(UserRegistered, outbox) → 포인트 계정 하나·가입 축하 1,000P → 그 포인트로 주문](docs/scenarios/13-signup-point-account.md) | 통과 (CI `e2e`) |
+| 14 | [목록에서 본 가격과 주문 때 가격이 다름 → 409 + 지금 가격 → 같은 키로 새 가격 주문(스냅샷), 판매 중지 422](docs/scenarios/14-price-change.md) | CI `e2e` |
 
 ## 설계 결정 (ADR)
 

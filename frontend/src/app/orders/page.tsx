@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { myOrders, ORDERS_PAGE_SIZE } from "@/lib/api/orders";
+import { productNames } from "@/lib/api/products";
 import { formatTime, orderTitle } from "@/lib/orders/format";
 import { won } from "@/lib/products";
 
@@ -31,6 +32,9 @@ async function OrderList({ searchParams }: Pick<PageProps<"/orders">, "searchPar
       </div>
     );
   }
+  const names = await productNames(
+    orders.map((o) => o.lines[0]?.productId ?? 0).filter((id) => id > 0),
+  );
   const last = orders.at(-1);
   return (
     <div className="flex flex-col gap-4">
@@ -42,7 +46,7 @@ async function OrderList({ searchParams }: Pick<PageProps<"/orders">, "searchPar
               className="flex items-center gap-4 py-3 hover:bg-muted/50"
             >
               <div className="flex flex-1 flex-col">
-                <span className="font-medium">{orderTitle(o)}</span>
+                <span className="font-medium">{orderTitle(o, names)}</span>
                 <span className="text-sm text-muted-foreground">
                   {formatTime(o.createdAt)} · {won(o.totalAmount)}
                   {o.pointAmount > 0 && ` (포인트 ${o.pointAmount.toLocaleString("ko-KR")}P)`}

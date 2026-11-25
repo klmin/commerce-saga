@@ -1,4 +1,4 @@
-import { PRODUCTS } from "@/lib/products";
+import type { Product } from "@/lib/products";
 
 // 백엔드(order-service) 규칙과 같다. 백엔드가 최종 검사하고, 여기서는 왕복 없이 바로 알려 주려고 한 번 더 본다
 export const MAX_QUANTITY = 1_000;
@@ -15,8 +15,14 @@ export type OrderInput = {
   pointAmount: number;
 };
 
-export function orderTotal(quantities: Record<number, number>): number {
-  return PRODUCTS.reduce((sum, p) => sum + p.price * (quantities[p.id] ?? 0), 0);
+/** 화면에 보인 상품 (id·이름·화면 가격) */
+export type ShownProduct = Pick<Product, "id" | "name" | "price">;
+
+export function orderTotal(
+  quantities: Record<number, number>,
+  products: readonly Pick<Product, "id" | "price">[],
+): number {
+  return products.reduce((sum, p) => sum + p.price * (quantities[p.id] ?? 0), 0);
 }
 
 function wholeNumber(raw: unknown): number | undefined {
@@ -30,14 +36,19 @@ function wholeNumber(raw: unknown): number | undefined {
   return Number(text);
 }
 
-/** 폼 값 → 주문 요청. 가격은 고정 상품 목록의 값이다 (클라이언트가 보낸 가격은 쓰지 않는다) */
-export function toOrderInput(raw: {
-  quantities: Record<number, unknown>;
-  pointAmount: unknown;
-}): { input: OrderInput; values: OrderFormValues } | { error: string; values: OrderFormValues } {
+/**
+ * 폼 값 → 주문 요청. unitPrice 는 사용자가 화면에서 본 가격이다. 서버가 지금 가격과 비교해 다르면 409 (ADR 0016)
+ */
+export function toOrderInput(
+  raw: {
+    quantities: Record<number, unknown>;
+    pointAmount: unknown;
+  },
+  products: readonly ShownProduct[],
+): { input: OrderInput; values: OrderFormValues } | { error: string; values: OrderFormValues } {
   const quantities: Record<number, number> = {};
   let invalid: string | undefined;
-  for (const p of PRODUCTS) {
+  for (const p of products) {
     const q = wholeNumber(raw.quantities[p.id]);
     if (q === undefined || q > MAX_QUANTITY) {
       invalid ??= `${p.name} 수량은 0~${MAX_QUANTITY} 사이 정수로 입력해 주세요.`;
@@ -54,15 +65,17 @@ export function toOrderInput(raw: {
   if (point === undefined) {
     return { error: "사용할 포인트는 0 이상 정수로 입력해 주세요.", values };
   }
-  const lines = PRODUCTS.filter((p) => quantities[p.id] > 0).map((p) => ({
-    productId: p.id,
-    quantity: quantities[p.id],
-    unitPrice: p.price,
-  }));
+  const lines = products
+    .filter((p) => quantities[p.id] > 0)
+    .map((p) => ({
+      productId: p.id,
+      quantity: quantities[p.id],
+      unitPrice: p.price,
+    }));
   if (lines.length === 0) {
     return { error: "주문할 상품의 수량을 입력해 주세요.", values };
   }
-  if (point > orderTotal(quantities)) {
+  if (point > orderTotal(quantities, products)) {
     return { error: "사용할 포인트가 주문 금액보다 많습니다.", values };
   }
   return { input: { lines, pointAmount: point }, values };

@@ -52,6 +52,13 @@ prometheus.scrape "loki" {
   forward_to      = [prometheus.remote_write.default.receiver]
 }
 
+prometheus.scrape "alertmanager" {
+  targets         = [{"__address__" = "alertmanager:9093"}]
+  job_name        = "alertmanager"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
 prometheus.scrape "prometheus" {
   targets         = [{"__address__" = "prometheus:9090"}]
   job_name        = "prometheus"

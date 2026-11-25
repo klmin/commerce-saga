@@ -48,6 +48,12 @@ outbox:
 # 멈춘 Saga 정리 (ADR 0007). 단계마다 step-timeout 동안 응답이 없으면 같은 커맨드를 다시 보내고,
 # 재고 예약·포인트 차감은 max-resends, 결제는 max-payment-resends 번 넘게 응답이 없으면 역순 보상한다
 # (결제는 결제 취소부터, 늦은 승인은 결제 서비스가 환불). 보상 단계는 포기하지 않는다
+# 주문 때 상품 가격 확인 (ADR 0016). Gateway 를 거치지 않는 클러스터 안 주소, 타임아웃이면 주문을 만들지 않고 503
+order:
+  product-catalog:
+    base-url: ${PRODUCT_SERVICE_URL:http://localhost:8087}
+    timeout: ${PRODUCT_CATALOG_TIMEOUT:2s}
+
 saga:
   timeout:
     enabled: ${SAGA_TIMEOUT_ENABLED:true}

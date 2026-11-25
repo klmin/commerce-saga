@@ -26,6 +26,8 @@ COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
 ORDERS=${ORDERS:-5}
 USER_ID=${USER_ID:-3}
 PRODUCT_ID=${PRODUCT_ID:-2}
+# 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
+UNIT_PRICE=${UNIT_PRICE:-$(case $PRODUCT_ID in 1) echo 39000;; 2) echo 25000;; 3) echo 18000;; 4) echo 12000;; *) echo 45000;; esac)}
 POINT_AMOUNT=${POINT_AMOUNT:-100}
 OUTAGE_SECONDS=${OUTAGE_SECONDS:-15}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
@@ -94,7 +96,7 @@ echo "  ok  커넥터 STOPPED, order_outbox_slot active=f"
 
 order_ids=""
 for i in $(seq 1 "$ORDERS"); do
-  body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":1000}],\"pointAmount\":$POINT_AMOUNT}"
+  body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
   id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" | field orderId)
   order_ids="$order_ids $id"
 done

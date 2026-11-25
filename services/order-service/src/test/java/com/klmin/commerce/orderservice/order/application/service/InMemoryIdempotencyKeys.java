@@ -18,4 +18,9 @@ class InMemoryIdempotencyKeys implements OrderIdempotencyPort {
         KeyRecord existing = store.putIfAbsent(userId + "/" + key, new KeyRecord(orderId, requestHash));
         return Optional.ofNullable(existing);
     }
+
+    @Override
+    public Optional<KeyRecord> find(long userId, String key) {
+        return Optional.ofNullable(store.get(userId + "/" + key));
+    }
 }

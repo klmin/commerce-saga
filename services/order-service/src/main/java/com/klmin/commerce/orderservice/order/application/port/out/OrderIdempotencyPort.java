@@ -17,6 +17,9 @@ public interface OrderIdempotencyPort {
      */
     Optional<KeyRecord> claim(long userId, String key, String requestHash, UUID orderId, Instant now);
 
+    /** 이미 선점된 키의 기록 (선점하지 않고 읽기만) */
+    Optional<KeyRecord> find(long userId, String key);
+
     record KeyRecord(UUID orderId, String requestHash) {
     }
 }

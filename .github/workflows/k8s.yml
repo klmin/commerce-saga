@@ -28,7 +28,7 @@ jobs:
       - name: 초기화 SQL 사본 확인
         run: diff infra/postgres/init/01-create-service-databases.sql deploy/helm/commerce-saga/files/01-create-service-databases.sql
 
-      # 관측성 설정(alloy·tempo·loki·경보 규칙·Grafana)도 infra/ 의 사본이다. 로컬과 클러스터가 같은 설정을 쓴다
+      # 관측성 설정(alloy·tempo·loki·경보 규칙·Alertmanager·Grafana)도 infra/ 의 사본이다. 로컬과 클러스터가 같은 설정을 쓴다
       - name: 관측성 설정 사본 확인
         run: |
           d=deploy/helm/commerce-saga/files/observability
@@ -37,6 +37,8 @@ jobs:
           diff infra/loki/loki.yaml $d/loki.yaml
           diff infra/prometheus/prometheus.yml $d/prometheus.yml
           diff infra/prometheus/rules/commerce.yml $d/commerce.yml
+          diff infra/alertmanager/alertmanager.yml $d/alertmanager.yml
+          diff infra/alertmanager/entrypoint.sh $d/alertmanager-entrypoint.sh
           diff infra/grafana/provisioning/datasources/datasources.yaml $d/datasources.yaml
           diff infra/grafana/provisioning/dashboards/dashboards.yaml $d/dashboards.yaml
           diff infra/grafana/dashboards/commerce-saga.json $d/commerce-saga.json

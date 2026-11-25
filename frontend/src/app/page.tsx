@@ -3,7 +3,8 @@ import { Suspense } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PRODUCTS, won } from "@/lib/products";
+import { listProducts } from "@/lib/api/products";
+import { won } from "@/lib/products";
 
 import { pointBalanceOrUndefined, stocksByProduct } from "./shop-data";
 
@@ -27,10 +28,11 @@ async function PointBalance() {
 }
 
 async function ProductList() {
-  const stocks = await stocksByProduct();
+  const products = await listProducts();
+  const stocks = await stocksByProduct(products);
   return (
     <ul className="flex flex-col divide-y">
-      {PRODUCTS.map((p) => {
+      {products.map((p) => {
         const stock = stocks[p.id];
         return (
           <li key={p.id} className="flex items-center gap-4 py-3">
@@ -70,8 +72,9 @@ export default function Home() {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
-            품절 상품도 주문할 수 있습니다. 재고 예약 단계에서 실패하고 주문이 취소되는 과정을 주문
-            상세에서 볼 수 있습니다.
+            가격은 주문할 때 다시 확인합니다. 그사이 가격이 바뀌면 바뀐 가격을 보여 드리고 확인을
+            받습니다. 품절 상품도 주문할 수 있습니다. 재고 예약 단계에서 실패하고 주문이 취소되는
+            과정을 주문 상세에서 볼 수 있습니다.
           </p>
           <Suspense fallback={loading}>
             <ProductList />

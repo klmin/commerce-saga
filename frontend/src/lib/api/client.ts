@@ -5,17 +5,21 @@ import { connection } from "next/server";
 import { serverEnv } from "@/lib/env";
 
 // 백엔드 오류 응답 (RFC 9457 Problem Details)
-type ProblemDetail = {
+export type ProblemDetail = {
   title?: string;
   status?: number;
   detail?: string;
   errors?: { field: string; message: string }[];
+  /** 주문 가격이 바뀌었을 때(409) 요청한 상품의 지금 가격 (ADR 0016) */
+  currentPrices?: { productId: number; price: number }[];
 };
 
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** 응답 본문 (Problem Details 가 아니면 없음) */
+    readonly problem?: ProblemDetail,
   ) {
     super(message);
     this.name = "ApiError";
@@ -25,8 +29,9 @@ export class ApiError extends Error {
 // 인증 호출(lib/auth/backend.ts)도 같은 형식으로 오류를 읽는다
 export async function toApiError(res: Response): Promise<ApiError> {
   let message = `요청에 실패했습니다 (${res.status})`;
+  let problem: ProblemDetail | undefined;
   try {
-    const problem = (await res.json()) as ProblemDetail;
+    problem = (await res.json()) as ProblemDetail;
     message = problem.detail ?? problem.title ?? message;
     if (problem.errors?.length) {
       message += ` (${problem.errors.map((e) => `${e.field}: ${e.message}`).join(", ")})`;
@@ -34,7 +39,7 @@ export async function toApiError(res: Response): Promise<ApiError> {
   } catch {
     // JSON이 아니면 기본 메시지 사용
   }
-  return new ApiError(res.status, message);
+  return new ApiError(res.status, message, problem);
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {

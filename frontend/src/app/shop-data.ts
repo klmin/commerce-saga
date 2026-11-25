@@ -6,13 +6,15 @@ import { ApiError } from "@/lib/api/client";
 import { myPoints } from "@/lib/api/points";
 import { getStock } from "@/lib/api/stocks";
 import { logError } from "@/lib/log";
-import { PRODUCTS } from "@/lib/products";
+import type { Product } from "@/lib/products";
 
 /** 상품 id → 주문 가능한 재고. 한 상품을 못 읽어도 나머지는 보여 준다 (그 상품은 "확인 불가") */
-export async function stocksByProduct(): Promise<Record<number, number | undefined>> {
-  const results = await Promise.allSettled(PRODUCTS.map((p) => getStock(p.id)));
+export async function stocksByProduct(
+  products: readonly Pick<Product, "id">[],
+): Promise<Record<number, number | undefined>> {
+  const results = await Promise.allSettled(products.map((p) => getStock(p.id)));
   return Object.fromEntries(
-    PRODUCTS.map((p, i) => {
+    products.map((p, i) => {
       const r = results[i];
       if (r.status === "fulfilled") {
         return [p.id, r.value.available];

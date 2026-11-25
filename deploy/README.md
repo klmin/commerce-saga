@@ -2,6 +2,7 @@
 
 로컬 개발은 지금처럼 `infra/docker-compose.yml` + `java -jar` 로 한다. 이 디렉터리는 같은 구성을 k8s 에 올리는 방법이다.
 클러스터를 상시 띄우지 않고, PR 마다 CI(`.github/workflows/k8s.yml`)가 kind 에 올려 스모크를 돈다.
+운영 환경에서 구성 요소별로 무엇을 더 해야 안정적인지(이중화·저장소·경보)는 [docs/k8s-operations.md](../docs/k8s-operations.md).
 
 | 경로 | 내용 |
 |---|---|
@@ -45,9 +46,22 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 
 ## 관측성 (Grafana·Tempo·Loki·Prometheus)
 
-차트가 alloy·tempo·loki·prometheus·kafka-exporter·grafana 를 같이 올린다(`observability.enabled`, 기본 true, ADR 0014 "관측성"). 밖으로는 열지 않으니 `scripts/k8s-port-forward.sh` 로 연결해서 Grafana http://localhost:3030 → Explore(Tempo, span 의 Related logs → Loki) 또는 대시보드 commerce-saga 를 본다. 설정 파일은 `files/observability` 에 있는 `infra/` 의 사본이라, 바꿀 때는 `infra/` 를 고치고 복사한다(CI 가 diff 로 확인)
+차트가 alloy·tempo·loki·prometheus·alertmanager·kafka-exporter·grafana 를 같이 올린다(`observability.enabled`, 기본 true, ADR 0014 "관측성"). 밖으로는 열지 않으니 `scripts/k8s-port-forward.sh` 로 연결해서 Grafana http://localhost:3030 → Explore(Tempo, span 의 Related logs → Loki) 또는 대시보드 commerce-saga 를 본다. 설정 파일은 `files/observability` 에 있는 `infra/` 의 사본이라, 바꿀 때는 `infra/` 를 고치고 복사한다(CI 가 diff 로 확인)
 
 메트릭은 alloy 가 모두 긁어 Prometheus 로 보낸다(ADR 0013 "메트릭도 Alloy 로"). 서비스·kafka-exporter 에 더해 tempo·loki·prometheus·alloy 자신과, k8s 에서는 이 namespace 컨테이너의 메모리·limit·CPU(노드 kubelet, `kubernetes.alloy`)도 들어온다. 그래서 Prometheus 의 `/targets` 는 비어 있고, 수집 상태는 `up{job="services"}` 같은 쿼리나 `kubectl -n commerce port-forward svc/alloy 12346:12345` 뒤 Alloy UI 로 본다. 컨테이너가 limit 에 가까우면 `ContainerMemoryNearLimit`, alloy 가 멈추면 `MetricsPipelineDown` 경보가 뜬다. alloy 는 한 개라 멈추면 메트릭·trace·로그가 같이 빈다(SPOF, 여러 개로 늘리는 방법은 ADR 0013)
+
+### 경보 알림 (Alertmanager → Discord)
+
+Prometheus 가 firing 경보를 alertmanager 로 보내고, alertmanager 가 심각도별로 묶어 Discord 웹훅으로 보낸다(ADR 0013 "경보 전달"). critical 은 바로·30분마다 다시, warning 은 2분 모았다가 보내고, 풀리면 `[RESOLVED]` 를 보낸다. 웹훅 URL 은 비밀값이라 차트·Git 에 넣지 않고 Secret 으로 만든다. Secret 이 없으면 null receiver 로 떠서 경보는 alertmanager UI 에서만 보인다
+
+```bash
+# Discord 채널 → 설정 → 연동 → 웹후크 → URL 복사
+kubectl -n commerce create secret generic alertmanager-discord --from-literal=webhook-url='https://discord.com/api/webhooks/…'
+kubectl -n commerce rollout restart deploy/alertmanager      # URL 은 기동 때 읽는다
+kubectl -n commerce logs deploy/alertmanager | head -1       # "Discord 웹훅으로 보낸다"
+```
+
+Secret 이름·키는 `observability.alertmanager.discordWebhookSecret` 으로 바꾼다. ArgoCD 는 이 Secret 을 관리하지 않으므로(차트에 없음) 직접 만든 것이 sync 로 지워지지 않는다. 테스트 경보는 `scripts/k8s-port-forward.sh` 뒤 `curl -X POST localhost:9095/api/v2/alerts -H 'Content-Type: application/json' -d '[{"labels":{"alertname":"Test","severity":"critical"},"annotations":{"summary":"테스트"}}]'`. compose 는 `DISCORD_WEBHOOK_URL` 을 셸에서 export 하거나 `infra/.env` 에 두고 `docker compose -f infra/docker-compose.yml up -d alertmanager`
 
 서비스의 trace·로그에는 `service.name`(= `spring.application.name`) 말고도 OTel 표준 resource 속성이 붙는다: `service.namespace`, `service.version`(이미지 태그), `deployment.environment.name`(`observability.environment`, 기본 `local`, EKS 는 `eks`), `service.instance.id`·`k8s.pod.name`·`k8s.node.name`·`k8s.namespace.name`. 파드 값은 Downward API 로 넣은 `OTEL_RESOURCE_ATTRIBUTES` 를 Spring Boot 가 읽는다(`templates/services.yaml`). replica 가 여럿이어도 어느 파드·노드의 trace·로그인지 보인다
 
@@ -100,7 +114,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 9개, `release/eks` 브랜치가 생긴다
 2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 9개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
 3. 클러스터 준비 확인
-   - 노드가 **amd64**(x86). Graviton(arm64)이면 release 워크플로를 멀티 아키텍처로 바꿔야 한다
+   - 노드는 amd64(x86)·arm64(Graviton) 둘 다 된다. 이미지가 멀티 아키텍처라 노드가 자기 CPU 에 맞는 쪽을 받는다
    - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
    - 노드 여유: 요청 합계 CPU 약 1.5 코어, 메모리 약 5Gi (서비스 7개 JVM + Kafka + Connect + Postgres)
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
