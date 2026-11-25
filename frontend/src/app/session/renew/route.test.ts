@@ -44,6 +44,18 @@ describe("GET /session/renew", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("RSC 요청이면 쿠키를 바꾸지 않고 RSC 가 아닌 응답 (라우터가 문서 이동으로 다시 오게)", () => {
+    const request = req("?next=%2Fcart");
+    request.headers.set("RSC", "1");
+
+    const res = GET(request);
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("content-type")).toBeNull();
+    expect(res.cookies.getAll()).toEqual([]);
+  });
+
   it("next 가 없거나 사이트 밖·renew 자신이면 / 로 (open redirect 방지)", () => {
     for (const search of [
       "",

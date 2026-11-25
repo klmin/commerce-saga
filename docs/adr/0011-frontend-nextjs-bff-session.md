@@ -45,7 +45,7 @@ Next 16 에서 Middleware 는 Proxy(`src/proxy.ts`, Node.js 런타임)로 이름
 - 둘 다 없으면 보호된 화면은 `/login?next=…`. `next` 는 사이트 안 경로만 허용(open redirect 방지). URL 파서가 탭·줄바꿈을 지우고 역슬래시를 `/` 로 읽어 `/	/evil.example` 이 외부 주소가 되므로, 제어문자·공백·역슬래시를 거부하고 파싱한 결과의 origin 까지 본 뒤 그 경로만 돌려준다(PR #35 Codex 리뷰)
 - **같은 refresh token 의 동시 요청은 한 번으로 묶는다**(single-flight, 프로세스 안 `Map`). 결과를 10초 남겨, 첫 응답의 새 쿠키가 닿기 전에 옛 쿠키로 온 요청도 같은 새 토큰을 받는다. 그러지 않으면 백엔드가 이미 회전된 토큰의 재사용으로 보고 그 기기 세션을 버린다(ADR 0008). 여러 Next 인스턴스 사이는 백엔드의 동시 refresh 유예(20초)가 받는다
 - access 쿠키를 토큰보다 30초 일찍 없애서, 만료 직전 토큰으로 백엔드를 부르다 401 이 나는 일을 줄인다
-- access 쿠키가 있는데 백엔드가 401(auth-service 재시작·서명 키 교체로 서명이 틀림)이면 바로 로그인 화면으로 보내지 않고 refresh 를 한 번 시도한다. 서버 컴포넌트는 쿠키를 못 바꾸므로 `/session/renew?next=<지금 경로>`(route handler)로 보내 access 쿠키만 지우고 `next` 로 돌아가면, 다음 요청에서 proxy 가 위 refresh 경로를 탄다. 지금 경로는 proxy 가 요청 헤더 `x-cs-request-path` 로 넘기고 `next` 는 위와 같은 규칙으로 검사한다. renew 는 30초짜리 httpOnly 쿠키 `cs_renewed` 를 남겨, refresh 뒤에도 401(계정 삭제 등)이면 renew 를 반복하지 않고 `/login` 으로 보낸다
+- access 쿠키가 있는데 백엔드가 401(auth-service 재시작·서명 키 교체로 서명이 틀림)이면 바로 로그인 화면으로 보내지 않고 refresh 를 한 번 시도한다. 서버 컴포넌트는 쿠키를 못 바꾸므로 `/session/renew?next=<지금 경로>`(route handler)로 보내 access 쿠키만 지우고 `next` 로 돌아가면, 다음 요청에서 proxy 가 위 refresh 경로를 탄다. 지금 경로는 proxy 가 요청 헤더 `x-cs-request-path` 로 넘기고 `next` 는 위와 같은 규칙으로 검사한다. renew 는 30초짜리 httpOnly 쿠키 `cs_renewed` 를 남겨, refresh 뒤에도 401(계정 삭제 등)이면 renew 를 반복하지 않고 `/login` 으로 보낸다(로그인하면 표식을 지운다). renew 는 RSC 요청에는 쿠키를 바꾸지 않고 204 를 줘 브라우저가 문서 이동으로 다시 오게 한다: Server Action 의 redirect 를 Next 서버가 미리 따라갈 때는 그 응답의 Set-Cookie 가 브라우저에 가지 않아, 그냥 redirect 하면 renew 주소에 멈춘다(브라우저로 확인)
 - 로컬 확인: refresh 성공 → 새 쿠키 2개 / 10초 안 옛 토큰 재요청 → 같은 결과 / 유예 지난 뒤 옛 토큰 → 쿠키 삭제 + `/login?next=%2Forders`, auth-service 로그에 "재사용, 그 기기 세션 폐기"
 
 ### Gateway rate limit: BFF 가 넘긴 브라우저 IP 로
