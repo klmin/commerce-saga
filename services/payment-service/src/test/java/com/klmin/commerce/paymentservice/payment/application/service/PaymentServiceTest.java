@@ -41,13 +41,26 @@ class PaymentServiceTest {
             new PaymentRecorder(payments, replies, processed, Clock.fixed(NOW, ZoneOffset.UTC)), gateway, gateway, payments,
             processed, attempts);
 
-    /** PG 승인 시도 기록 (주문 id 집합) */
+    /** PG 승인 호출 예약 (주문별 예약 수, 봉인) */
     static class InMemoryAttempts implements com.klmin.commerce.paymentservice.payment.application.port.out.PgApproveAttemptPort {
-        final java.util.Set<UUID> orderIds = new java.util.HashSet<>();
+        final java.util.Map<UUID, Integer> calls = new java.util.HashMap<>();
+        final java.util.Set<UUID> sealed = new java.util.HashSet<>();
 
         @Override
-        public boolean recordAttempt(UUID orderId) {
-            return !orderIds.add(orderId);
+        public java.util.OptionalInt claim(UUID orderId) {
+            if (sealed.contains(orderId)) {
+                return java.util.OptionalInt.empty();
+            }
+            return java.util.OptionalInt.of(calls.merge(orderId, 1, Integer::sum));
+        }
+
+        @Override
+        public boolean sealIfOnlyClaim(UUID orderId) {
+            if (calls.getOrDefault(orderId, 0) == 1 && !sealed.contains(orderId)) {
+                sealed.add(orderId);
+                return true;
+            }
+            return false;
         }
     }
 
@@ -77,26 +90,44 @@ class PaymentServiceTest {
     }
 
     @Test
-    void pay_circuitOpen_afterEarlierAttempt_recordsUnknownWithoutReply() {
-        // 이전 시도가 PG 에 닿았을 수 있다(예: 타임아웃 뒤 UNKNOWN 기록이 실패해 같은 메시지가 재전달됨)
+    void pay_circuitOpen_afterOtherClaim_recordsUnknownWithoutReply() {
+        // 다른 처리(재전달 전 시도, Saga 재전송, 다른 인스턴스의 동시 처리)가 PG 에 닿았을 수 있다
         UUID orderId = UUID.randomUUID();
-        attempts.orderIds.add(orderId);
+        attempts.claim(orderId);
         gateway.circuitOpen = true;
 
         service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
         assertThat(gateway.calls).isZero();
+        assertThat(attempts.sealed).doesNotContain(orderId);
         assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(replies.log).isEmpty();
     }
 
     @Test
-    void pay_recordsAttemptBeforeCallingPg() {
+    void pay_circuitOpen_seals_soLaterProcessingNeverCallsPg() {
+        UUID orderId = UUID.randomUUID();
+        gateway.circuitOpen = true;
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        assertThat(attempts.sealed).contains(orderId);
+
+        // 회로가 닫힌 다른 처리(다른 인스턴스·Saga 재전송)가 와도 PG 를 부르지 않고 같은 거절
+        gateway.circuitOpen = false;
+        payments.store.remove(orderId); // 앞선 처리의 기록이 아직 커밋되지 않은 경우
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
+        assertThat(payments.store.get(orderId).reason()).isEqualTo(PaymentService.CIRCUIT_OPEN_REASON);
+    }
+
+    @Test
+    void pay_claimsBeforeCallingPg() {
         UUID orderId = UUID.randomUUID();
 
         service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
 
-        assertThat(attempts.orderIds).contains(orderId);
+        assertThat(attempts.calls).containsEntry(orderId, 1);
     }
 
     @Test
