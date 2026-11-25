@@ -569,7 +569,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 
 | PR | 범위 |
 |---|---|
-| 5-0 | ADR 0017 |
+| 5-0 | [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md) (결정·대체 범위, ADR 0008 일부·0011 대체 표시) |
 | 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지) |
 | 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃) |
 | 5-3 | 사용자 SPA(`frontend/apps/web` + `packages/ui`), compose Caddy·시크릿 init, Helm 호스트 라우트, e2e. 끝나면 Next·기존 `/auth/*` 제거 |
