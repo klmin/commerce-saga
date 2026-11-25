@@ -89,7 +89,7 @@
 
 ## 멀티 아키텍처 이미지 (2026-11-24, K-4 다음)
 
-- 이미지 9개를 linux/amd64 + linux/arm64 로 낸다. EKS 노드가 Graviton(arm64, 같은 성능에 더 싸다)이어도, 개발자가 Apple Silicon 에서 받아도 같은 `<이름>:<커밋>` 을 쓴다
+- 이미지 10개(서비스 8 + 화면 + Connect)를 linux/amd64 + linux/arm64 로 낸다. EKS 노드가 Graviton(arm64, 같은 성능에 더 싸다)이어도, 개발자가 Apple Silicon 에서 받아도 같은 `<이름>:<커밋>` 을 쓴다
 - **아키텍처별 네이티브 러너**(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 각각 `<커밋>-amd64`·`<커밋>-arm64` 로 빌드·push 하고, `manifest` 잡이 `docker buildx imagetools create` 로 `<커밋>` 하나에 묶는다. 두 아키텍처가 다 들어갔는지 확인한 뒤에만 `release/eks` 를 옮긴다
 - QEMU 에뮬레이션(buildx `--platform` 하나로)은 설정이 짧지만 arm64 쪽 `npm ci`·`next build` 가 몇 배 느리다. 네이티브 러너는 공개 저장소면 무료
 - Dockerfile 은 그대로다. jar 는 아키텍처와 무관하고, 베이스(`eclipse-temurin:25-jre`, `node:26-alpine`, Strimzi Kafka)와 EKS 가 받는 공개 이미지(Postgres·Redis·Strimzi·관측성·Envoy Gateway)가 모두 arm64 를 제공한다(2026-11-24 `imagetools inspect` 로 확인)
