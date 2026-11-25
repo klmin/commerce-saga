@@ -49,12 +49,28 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 
 ## 4. 흐름
 
-**첫 로그인 (사용자 화면)**
-1. SPA 가 `/api/**` 를 불렀는데 BFF 세션이 없다 → SCG 가 `401` (SPA 는 로그인 버튼 또는 자동으로 `/oauth2/authorization/gateway-web` 로 이동). 화면 문서 요청이면 SCG 가 바로 리다이렉트
-2. SCG → `auth.example.com/oauth2/authorize?client_id=gateway-web&redirect_uri=…&state&code_challenge(PKCE)`
-3. SSO 세션 ① 이 없으므로 SAS 가 로그인 화면(인증 화면)으로 보낸다
-4. 인증 화면이 **폼 전체 POST** 로 `auth.example.com/login` (CSRF 토큰 포함, `fetch` 가 아님) → 성공하면 세션 ① 생성 → 저장해 둔 authorize 요청으로 돌아감
-5. SAS 가 인가 코드를 `example.com/login/oauth2/code/gateway-web` 로 보냄 → SCG 가 **client_id + client_secret** 으로 토큰 교환 → 세션 ② 에 저장 → 원래 화면으로
+**첫 로그인 (사용자 화면)**: 호스트는 바뀌지만 각 경로가 어디로 가는지는 7절 라우팅 표 그대로다.
+
+```
+① example.com/oauth2/authorization/gateway-web     → SCG          (화면 호스트의 SCG 경로)
+     302 ↓
+② auth.example.com/oauth2/authorize?client_id=…     → auth-service (SAS)
+     SSO 세션 ① 없음 → 302 ↓
+③ auth.example.com/signin                           → 인증 화면    (로그인 폼)
+     폼 POST ↓
+④ auth.example.com/login                            → auth-service (자격 확인, 세션 ① 생성)
+     302 ↓ (저장해 둔 ②로)
+⑤ auth.example.com/oauth2/authorize                 → SAS 가 인가 코드 발급
+     302 ↓
+⑥ example.com/login/oauth2/code/gateway-web?code=…  → SCG          (client_id + client_secret 으로 토큰 교환, 세션 ② 생성)
+     302 ↓
+⑦ example.com/                                      → 사용자 SPA
+```
+
+1. SPA 가 `/api/**` 를 불렀는데 BFF 세션이 없으면 SCG 는 `401` 을 준다(API 요청에 리다이렉트를 주지 않는다). SPA 는 로그인 버튼이나 자동으로 ① 로 **페이지 이동**한다
+2. SAS 의 로그인 화면은 `/signin`(인증 화면), 로그인 처리는 `POST /login`(auth-service)으로 **경로를 나눈다**: `formLogin().loginPage("/signin").loginProcessingUrl("/login").failureUrl("/signin?error")`. 같은 `/login` 을 메서드로 나누는 라우팅은 하지 않는다
+3. 인증 화면은 정적 파일이라 CSRF 토큰을 만들 수 없다 → 화면을 열 때 `GET /csrf`(auth-service)로 토큰을 받고(`CookieCsrfTokenRepository` 가 `XSRF-TOKEN` 쿠키도 줌), 로그인은 **`<form method="post" action="/login">` + 숨은 필드 `_csrf`** 로 보낸다. `fetch` 로 보내면 302 를 브라우저가 화면 이동으로 따라가지 않아 ⑤ 로 이어지지 않는다
+4. 실패하면 `/signin?error` 로 돌아오고 화면이 오류 문구를 보인다. 로그인 실패 제한(아이디별 15분 5회)은 ④ 단계에서
 
 **SSO (관리자 화면으로 이동)**: 2와 같은데 3에서 세션 ① 이 이미 있으므로 **로그인 화면 없이** 바로 인가 코드가 온다. 관리자 화면은 클라이언트 `gateway-admin`, 세션 ② 도 `admin.example.com` 쿠키로 따로다.
 
@@ -64,11 +80,11 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 
 **로그아웃**: SCG 세션 ② 삭제 → OIDC RP-initiated logout 으로 SAS 의 세션 ① 과 그 사용자의 인가 기록 정리 → 화면으로. "이 화면만 로그아웃"이 아니라 SSO 전체 로그아웃이 기본.
 
-**가입**: 인증 화면 → `auth.example.com` 가입 API → 회원 + `UserRegistered` outbox(지금 그대로, point 가 포인트 계정 생성) → 바로 로그인 처리(세션 ①) → 저장된 authorize 요청이 있으면 이어서 화면으로.
+**가입**: 인증 화면 `/register` → **폼 POST** `/signup`(auth-service, `_csrf` 포함) → 회원 + `UserRegistered` outbox(지금 그대로, point 가 포인트 계정 생성) → 바로 로그인 처리(세션 ①) → 저장된 authorize 요청이 있으면 ⑤ 부터 이어서 화면으로, 없으면 사용자 화면으로. 중복 아이디 등 실패는 `/register?error=…` 로 돌아온다.
 
 ## 5. 토큰 내용
 
-- `iss`: auth 공개 주소(`https://auth.example.com`, 로컬 `http://auth.localhost`). 서비스·SCG 는 `issuer` 문자열로 검사하고 공개키는 **내부 주소**의 `jwk-set-uri` 로 받는다(컨테이너 안에서 공개 주소가 자기 자신을 가리키는 문제 회피)
+- `iss`: `AUTH_ISSUER`(auth 공개 주소, 환경별 값은 7-3). 서비스·SCG 는 `issuer` 문자열로 검사하고 공개키는 **내부 주소** `AUTH_INTERNAL_URL` 의 JWKS 로 받는다(컨테이너 안에서 공개 주소가 자기 자신을 가리키는 문제 회피)
 - `sub`: 지금처럼 `long userId` (SAS `OAuth2TokenCustomizer`). 서비스의 `@CurrentUserId long` 그대로
 - `roles`: 지금 클레임 그대로. 역할 변경은 토큰 갱신 때 반영(지금과 같음)
 - access 15분 유지. refresh 는 SAS 기본 회전(`reuseRefreshTokens=false`)
@@ -103,35 +119,108 @@ ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 
 
 ## 7. 도메인과 라우팅
 
-**호스트로 나눈다** (경로 + `basePath` 는 경로 예약·쿠키 섞임·앱 사이 링크 문제가 있어 쓰지 않음).
+**운영은 호스트로 나눈다** (경로 + `basePath` 는 경로 예약·쿠키 섞임·앱 사이 링크 문제가 있어 쓰지 않음). 로컬·compose·k8s 세 환경이 **같은 코드, 다른 설정값**으로 돈다. 주소는 코드에 박지 않는다.
 
-| 환경 | 사용자 | 관리자 | 인증 | 앞단 |
-|---|---|---|---|---|
-| k8s | `example.com` | `admin.example.com` | `auth.example.com` | Envoy Gateway `HTTPRoute` 호스트별. 사용자·관리자 호스트는 아래 **SCG 경로** → SCG, 나머지 → 그 화면. `auth` 호스트는 `/oauth2/**`·`/login`(POST)·`/.well-known/**`·`/connect/logout`·가입 API → auth-service, 나머지 → 인증 화면 |
-| compose | `localhost` | `admin.localhost` | `auth.localhost` | **Caddy** 하나(80), 규칙은 k8s 와 같다. `*.localhost` 는 크롬·엣지·파이어폭스가 hosts 수정 없이 127.0.0.1 로 연결 |
+### 7-1. 어떤 경로가 어디로 가나 (모든 환경 공통)
 
-**사용자·관리자 호스트에서 SCG 로 보내는 경로** (빠지면 로그인이 SCG 에 닿지 않아 BFF 세션이 만들어지지 않는다)
+**사용자·관리자 화면 쪽** (빠지면 로그인이 SCG 에 닿지 않아 BFF 세션이 만들어지지 않는다)
 
-| 경로 | 용도 |
-|---|---|
-| `/api/**` | API 호출 (토큰 릴레이) |
-| `/oauth2/authorization/**` | 로그인 시작 (SCG 가 SAS 로 리다이렉트) |
-| `/login/oauth2/code/**` | 인가 코드 콜백 (SCG 가 토큰 교환 후 세션 ② 생성) |
-| `/logout` | 로그아웃 (세션 ② 삭제 → SAS OIDC 로그아웃) |
+| 경로 | 보낼 곳 | 용도 |
+|---|---|---|
+| `/api/**` | SCG | API 호출 (토큰 릴레이) |
+| `/oauth2/authorization/**` | SCG | 로그인 시작 (SAS 로 리다이렉트) |
+| `/login/oauth2/code/**` | SCG | 인가 코드 콜백 (토큰 교환, 세션 ② 생성) |
+| `/logout` | SCG | 로그아웃 (세션 ② 삭제 → SAS OIDC 로그아웃) |
+| 그 외 | 그 화면(SPA) | 화면·정적 파일. 모르는 경로는 `index.html`(SPA fallback) |
 
-화면 라우터는 이 경로들을 쓰지 않는다(경로 예약). Envoy·Caddy 규칙은 이 표를 한 곳(Helm values·Caddyfile)에 두고 같이 바꾼다.
-| 호스트 개발 | `localhost:5173` | `localhost:5174` | `localhost:5175` | 화면 dev 서버의 프록시로 `/api` → SCG. 화면을 넘나드는 로그인 흐름은 compose(Caddy)로 확인 |
+**인증 쪽**
+
+| 경로 | 보낼 곳 | 용도 |
+|---|---|---|
+| `/oauth2/**`, `/.well-known/**`, `/userinfo`, `/connect/logout` | auth-service | SAS 표준 엔드포인트 |
+| `/login` | auth-service | 로그인 폼 POST 처리 |
+| `/signup` | auth-service | 가입 폼 POST 처리 |
+| `/csrf` | auth-service | 인증 화면이 CSRF 토큰을 받음 |
+| 그 외 (`/signin`, `/register`, 정적 파일) | 인증 화면(SPA) | 로그인·가입 화면. SPA fallback |
+
+화면 라우터는 위 서버 경로를 쓰지 않는다(경로 예약). 이 두 표가 원본이고, Caddyfile·Helm values·Vite 프록시는 이 표를 그대로 옮긴다(바꿀 때 같이 바꾼다).
+
+### 7-2. 환경별 구성
+
+| | **로컬 개발** (호스트에서 실행) | **compose** (docker 로 전체 실행·e2e) | **k8s** (kind·EKS) |
+|---|---|---|---|
+| 사용자 | `http://localhost:5173` | `http://localhost` | `https://example.com` |
+| 관리자 | `http://localhost:5174` | `http://admin.localhost` | `https://admin.example.com` |
+| 인증 | `http://localhost:5175` | `http://auth.localhost` | `https://auth.example.com` |
+| 7-1 을 누가 나누나 | 각 화면 **Vite dev 서버의 `server.proxy`** | **Caddy** 컨테이너 하나(80) | **Envoy Gateway `HTTPRoute`**(호스트별) |
+| SCG·auth-service | 호스트에서 실행(`localhost:8000`, `:8086`) | 컨테이너(`gateway:8000`, `auth-service:8086`) | Service |
+| 화면 정적 파일 | Vite dev 서버 | nginx 컨테이너(화면마다) | nginx Deployment(화면마다). S3 + CloudFront 는 나중 선택지 |
+| 도메인 | 없음(포트로 구분) | 없음(`*.localhost`: 크롬·엣지·파이어폭스는 hosts 수정 없이 127.0.0.1) | 실제 도메인 |
+
+- **Caddy 는 compose 에서만** 쓴다. 로컬 개발에서는 띄우지 않아도 된다(Vite 프록시가 같은 일을 함)
+- compose 로 백엔드만 띄우고 화면은 호스트에서 고치고 싶으면, Caddyfile 의 화면 대상만 `host.docker.internal:5173` 으로 바꾼다(핫 리로드 + 운영과 같은 주소)
+- 80 포트를 못 쓰면 `:8080` 으로 열고 아래 설정값의 주소에도 포트를 똑같이 넣는다
+- 관리자 호스트에는 접근 제한(IP 허용 목록 등)을 걸 수 있게 둔다(k8s)
+
+```caddyfile
+# infra/caddy/Caddyfile (compose)
+(scg) {
+    @scg path /api/* /oauth2/authorization/* /login/oauth2/code/* /logout
+    handle @scg { reverse_proxy gateway:8000 }
+}
+http://localhost       { import scg; handle { reverse_proxy web:80 } }
+http://admin.localhost { import scg; handle { reverse_proxy admin:80 } }
+http://auth.localhost {
+    @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
+    handle @sas { reverse_proxy auth-service:8086 }
+    handle      { reverse_proxy auth-front:80 }
+}
+```
+
+```ts
+// frontend/apps/web/vite.config.ts (로컬 개발). admin 은 같은 목록, auth 는 7-1 인증 쪽 목록을 :8086 으로
+const scg = { target: "http://localhost:8000", changeOrigin: false };
+server: { port: 5173, proxy: { "/api": scg, "/oauth2/authorization": scg, "/login/oauth2/code": scg, "/logout": scg } }
+```
+`changeOrigin: false` 로 원래 `Host`(`localhost:5173`)를 넘겨야 SCG 가 redirect URI 를 화면 주소로 만든다.
+
+### 7-3. 설정값 (주소는 모두 여기로)
+
+| 설정 | 로컬 개발 (`local` 프로파일 기본값) | compose | k8s |
+|---|---|---|---|
+| `AUTH_ISSUER` (공개, 토큰 `iss`, 브라우저가 가는 SAS 주소) | `http://localhost:5175` | `http://auth.localhost` | `https://auth.example.com` |
+| `AUTH_INTERNAL_URL` (SCG·서비스가 직접 부르는 SAS 주소) | `http://localhost:8086` | `http://auth-service:8086` | `http://auth-service:8086` |
+| `WEB_REDIRECT_URI` | `http://localhost:5173/login/oauth2/code/gateway-web` | `http://localhost/login/oauth2/code/gateway-web` | `https://example.com/login/oauth2/code/gateway-web` |
+| `ADMIN_REDIRECT_URI` | `http://localhost:5174/login/oauth2/code/gateway-admin` | `http://admin.localhost/login/oauth2/code/gateway-admin` | `https://admin.example.com/login/oauth2/code/gateway-admin` |
+| 로그아웃 후 돌아갈 주소 | 화면 주소(위 사용자·관리자) | 〃 | 〃 |
+| 쿠키 `Secure` | false(http) | false(http, `*.localhost`) | true |
+
+- auth-service 는 시작할 때 클라이언트를 upsert 하며 **redirect URI 도 이 설정값으로 갱신**한다(6절). 환경을 바꿔도 DB 를 손대지 않는다
+- **공개 주소와 내부 주소를 나눈다.** 컨테이너 안에서 `auth.localhost` 는 자기 자신을 가리키므로, SCG 는 `issuer-uri` 자동 탐색(discovery)을 쓰지 않고 주소를 하나씩 준다
+
+```yaml
+# SCG
+spring.security.oauth2.client.provider.commerce:
+  authorization-uri: ${AUTH_ISSUER}/oauth2/authorize         # 브라우저 → 공개
+  token-uri:         ${AUTH_INTERNAL_URL}/oauth2/token        # SCG → 내부
+  jwk-set-uri:       ${AUTH_INTERNAL_URL}/oauth2/jwks
+  user-info-uri:     ${AUTH_INTERNAL_URL}/userinfo
+  user-name-attribute: sub
+# SAS: AuthorizationServerSettings.issuer = ${AUTH_ISSUER}
+# 서비스·SCG 리소스 서버: issuer = ${AUTH_ISSUER} (문자열 검사), jwk-set-uri = ${AUTH_INTERNAL_URL}/oauth2/jwks
+```
+
+- **SCG·auth-service 가 원래 호스트를 알게 한다**: 둘 다 `server.forward-headers-strategy=framework`(auth-service 는 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). Caddy·Envoy·Vite 프록시가 넘긴 `Host`·`X-Forwarded-*` 로 redirect URI(`{baseUrl}/login/oauth2/code/{registrationId}`)를 만들고, 호스트에 맞는 클라이언트(`gateway-web`/`gateway-admin`)를 고른다
+- **세션 쿠키 이름을 나눈다**: SCG `GW_SESSION`, auth-service `AUTH_SESSION`(모든 환경 공통). 로컬 개발은 포트만 다른 `localhost` 라 쿠키가 포트를 구분하지 않아 같은 이름이면 서로 덮어쓴다. `SameSite` 는 포트를 보지 않아 `Lax` 로 동작한다
 
 - SPA 는 같은 출처의 `/api` 만 부른다 → CORS 없음, 세션 쿠키 `SameSite=Lax`
-- 화면 정적 파일은 k8s 안 nginx 컨테이너로 서빙(지금 kind·EKS 구성 유지). S3 + CloudFront 는 나중 선택지
-- 관리자 호스트에는 접근 제한(IP 허용 목록 등)을 걸 수 있게 둔다
 
 ## 8. 보안 체크
 
 - SCG 가 쿠키 세션이 되므로 **CSRF**: `CookieServerCsrfTokenRepository`(`XSRF-TOKEN` 쿠키 → SPA 가 `X-XSRF-TOKEN` 헤더). GET 은 상태를 바꾸지 않는다
-- 인증 화면 → SAS 로그인은 폼 POST + CSRF(SAS 쪽 Spring Security). 로그인 실패 제한(아이디별 15분 5회)은 지금 로직을 SAS 인증 단계로 옮긴다
+- 인증 화면 → SAS 로그인·가입은 `GET /csrf` 로 받은 토큰을 넣은 폼 POST(4절). 로그인 실패 제한(아이디별 15분 5회)은 지금 로직을 SAS 인증 단계로 옮긴다
 - redirect URI 는 등록된 정확한 값만(와일드카드 없음). `state`·PKCE 사용
-- 세션 쿠키: `HttpOnly`, `Secure`(로컬 `*.localhost` 는 http 여도 동작), 호스트별 분리
+- 세션 쿠키: `HttpOnly`, 이름 분리(`GW_SESSION`·`AUTH_SESSION`), 운영은 `Secure`(로컬·compose 는 http 라 끔, 7-3), 호스트별 분리
 - 메시지에 토큰을 싣지 않는 규칙, 서비스 재검증·소유권 검사는 그대로
 - 모바일·외부 앱이 생기면 PKCE public client 로 따로 등록하고 SCG 의 JWT(Bearer) 검증 경로로 받는다(지금 경로를 남겨 둠)
 
