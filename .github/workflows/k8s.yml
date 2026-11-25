@@ -204,6 +204,12 @@ jobs:
           helm lint deploy/argocd/apps
           # EKS 값(K-4)도 렌더링되는지
           helm lint deploy/argocd/apps -f deploy/argocd/apps/values-eks.yaml
+          # EKS release 커밋처럼 release-tags.yaml(이미지별 태그)을 얹어도 렌더링되고, 그 이미지만 태그가 바뀌는지
+          printf 'commerceValues:\n  image:\n    tags:\n      order-service: per-image-tag\n' > "$RUNNER_TEMP/release-tags.yaml"
+          helm lint deploy/argocd/apps -f deploy/argocd/apps/values-eks.yaml -f "$RUNNER_TEMP/release-tags.yaml"
+          out=$(helm template commerce deploy/helm/commerce-saga --set image.tag=common --set image.tags.order-service=per-image-tag)
+          echo "$out" | grep -q 'image: commerce-saga/order-service:per-image-tag'
+          echo "$out" | grep -q 'image: commerce-saga/inventory-service:common'
 
       - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:

@@ -100,14 +100,16 @@ kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-syst
 
 ```
 PR → CI(backend·e2e·k8s 등) → main 머지
-  → release 워크플로: bootJar → 이미지 10개 GHCR push (amd64·arm64, 태그 = 커밋 해시) → release/eks 브랜치를 그 커밋으로
-  → EKS 의 ArgoCD: release/eks 가 움직이면 sync, 이미지 태그 = 그 커밋 해시 → 롤링 배포
+  → release 워크플로: 마지막 배포 이후 바뀐 이미지만 bootJar → GHCR push (amd64·arm64, 태그 = 이번 커밋 해시)
+                     → release/eks 에 release 커밋 (그 main 커밋 + release-tags.yaml: 이미지별 태그)
+  → EKS 의 ArgoCD: release/eks 가 움직이면 sync → 태그가 바뀐 Deployment 만 롤링 배포
 ```
 
 | 파일 | 내용 |
 |---|---|
-| `.github/workflows/release.yml` | main push(문서만 바뀐 커밋 제외)·수동 실행. `ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시>` |
-| `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `$ARGOCD_APP_REVISION` 을 자식의 revision·이미지 태그로 넘긴다 |
+| `.github/workflows/release.yml` | main push(문서만 바뀐 커밋 제외)·수동 실행(`all`: 전부 다시 빌드). `ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시>` |
+| `scripts/release-plan.sh` | release 가 부른다. 마지막 배포 커밋과 비교해 바뀐 이미지를 고르고 `release-tags.yaml` 을 만든다 ([docs/ci-cd.md](../docs/ci-cd.md) "배포") |
+| `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` + `release-tags.yaml`(release/eks 에만 있음)을 값으로 쓴다 |
 | `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |
 | `scripts/eks-argocd.sh` | 처음 한 번: ArgoCD 설치 → root apply → Synced·Healthy 대기 → 화면 주소 출력 |
 
@@ -121,12 +123,12 @@ PR → CI(backend·e2e·k8s 등) → main 머지
    - 노드 여유: 요청 합계 CPU 약 1.6 코어, 메모리 약 5.5Gi (서비스 8개 JVM + Kafka + Connect + Postgres)
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
 
-그 뒤로는 머지만 하면 된다. 롤백은 `git push origin <옛 커밋>:refs/heads/release/eks --force` (그 커밋의 이미지가 GHCR 에 있다).
+그 뒤로는 머지만 하면 된다. 바뀐 서비스만 새 이미지로 롤링된다. 롤백은 `git log --first-parent origin/release/eks` 에서 옛 release 커밋을 골라 `git push origin <옛 release 커밋>:refs/heads/release/eks --force` (그 커밋의 이미지가 GHCR 에 있다).
 
 ### 결정 (K-4)
 
 - **레지스트리는 GHCR**: 저장소와 같은 곳, Actions 의 기본 `GITHUB_TOKEN` 으로 push. AWS IAM·OIDC 설정이 없다. public 패키지라 pull secret 도 없다
-- **태그를 Git 에 커밋하지 않는다**: main 은 PR 로만 바뀌어(ruleset) 봇 커밋이 어렵다. 대신 배포 브랜치 `release/eks` 를 이미지가 다 올라간 뒤에만 옮기고, ArgoCD 가 sync 하는 커밋 해시를 태그로 쓴다. Git 의 `release/eks` 가 곧 "지금 배포된 것"이다
+- **태그는 main 이 아니라 배포 브랜치에 커밋한다**: main 은 PR 로만 바뀌어(ruleset) 봇 커밋이 어렵다. 대신 release 워크플로가 이미지가 다 올라간 뒤에만 `release/eks` 에 release 커밋(main 커밋 + 이미지별 태그 `release-tags.yaml`)을 얹는다. Git 의 `release/eks` 가 곧 "지금 배포된 것"이다. 처음(K-4)에는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나였는데, 서비스 하나만 바뀌어도 전부 롤링돼서 이미지별 태그로 바꿨다 (ADR 0014 "바뀐 서비스만 배포")
 - **개발용 시드 사용자 없음**: `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`. 공개된 admin 비밀번호로 누구나 관리자(결제 장애 주입)가 되지 않게. 사용자는 회원가입, 관리자 역할은 DB 에서 따로 준다
 - **http 로 먼저**: TLS(도메인·ACM/cert-manager)를 붙이기 전이라 `COOKIE_SECURE`·`AUTH_COOKIE_SECURE` 를 `false` 로 둔다. https 를 붙이면 지운다
 - DB·Redis·Kafka 는 kind 와 같이 클러스터 안 단일 인스턴스(EBS PVC). 운영이면 RDS(logical replication)·ElastiCache·MSK 로 바꿀 자리

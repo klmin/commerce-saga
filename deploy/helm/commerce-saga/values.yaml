@@ -7,6 +7,9 @@ image:
   registry: ""
   repositoryPrefix: commerce-saga
   tag: dev
+  # 이미지별 태그 { <이름>: <태그> }. 있으면 tag 대신 쓴다. EKS 는 release 워크플로가 release/eks 에 넣는 release-tags.yaml 로 채운다
+  # (바뀐 이미지만 새 커밋 태그, 나머지는 이전 태그 그대로 → 그 Deployment 만 롤링). 비우면 모두 tag
+  tags: {}
   pullPolicy: IfNotPresent
 
 # Postgres·Kafka PVC 의 StorageClass. 비우면 클러스터 기본 (kind 는 standard, EKS 는 EBS CSI 의 gp3 등)

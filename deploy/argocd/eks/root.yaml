@@ -2,11 +2,12 @@
 #   kubectl apply -n argocd -f deploy/argocd/eks/root.yaml
 #
 # kind·CI 용 deploy/argocd/root.yaml 과 다른 점
-# - release/eks 브랜치를 본다. release 워크플로가 GHCR 에 이미지 9개를 다 올린 뒤에만 이 브랜치를 옮긴다
-# - 이미지 태그 = ArgoCD 가 지금 sync 하는 커밋 해시($ARGOCD_APP_REVISION). release 워크플로가 같은 해시로 태그를 붙인다
-#   → 태그를 Git 에 따로 커밋하지 않아도 "Git 커밋 = 배포된 이미지" 가 된다
+# - release/eks 브랜치를 본다. release 워크플로가 바뀐 이미지를 GHCR 에 다 올린 뒤에만 이 브랜치를 옮긴다
+# - 이미지 태그 = release/eks 에만 있는 release-tags.yaml (release 워크플로가 쓴다). 이미지마다 마지막으로 바뀐 main 커밋 해시라
+#   바뀐 서비스만 태그가 달라지고 그 Deployment 만 롤링된다 (docs/ci-cd.md "배포")
+#   release-tags.yaml 이 없는 커밋(이 방식 이전의 release/eks)은 모든 이미지가 그 커밋 해시($ARGOCD_APP_REVISION)다
 # - 자식 Application 도 같은 커밋 해시를 본다(브랜치가 sync 도중 움직여도 매니페스트와 이미지가 어긋나지 않는다)
-# - 값은 deploy/argocd/apps/values-eks.yaml (GHCR, LoadBalancer 등)
+# - 값은 deploy/argocd/apps/values-eks.yaml (GHCR, LoadBalancer 등) 위에 release-tags.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -21,10 +22,14 @@ spec:
     helm:
       valueFiles:
         - values-eks.yaml
+        - release-tags.yaml
+      # main 에는 release-tags.yaml 이 없다 (release/eks 에만)
+      ignoreMissingValueFiles: true
       parameters:
         - name: revision
           value: $ARGOCD_APP_REVISION
           forceString: true
+        # release-tags.yaml 에 없는 이미지의 태그 (이 방식 이전 커밋용)
         - name: imageTag
           value: $ARGOCD_APP_REVISION
           forceString: true

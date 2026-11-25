@@ -1,5 +1,5 @@
 # EKS 값 (후속 3 K-4). deploy/argocd/eks/root.yaml 이 values.yaml 위에 덮는다.
-# revision·imageTag 는 root 가 커밋 해시로 넣는다
+# revision 은 root 가 커밋 해시로, 이미지별 태그는 release/eks 의 release-tags.yaml 이 넣는다 (release 워크플로가 쓴다)
 
 commerceValues:
   image:

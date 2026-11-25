@@ -97,7 +97,7 @@ spec:
             # OTel 표준 resource 속성. Spring Boot 가 읽어 trace·로그에 함께 붙인다. service.name 은 spring.application.name 그대로
             # $(VAR) 는 k8s 가 위에서 정한 환경변수로 바꾼다
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: {{ printf "service.namespace=commerce-saga,service.version=%s,deployment.environment.name=%s,service.instance.id=$(POD_NAME),k8s.pod.name=$(POD_NAME),k8s.node.name=$(NODE_NAME),k8s.namespace.name=$(POD_NAMESPACE)" $root.Values.image.tag $root.Values.observability.environment | quote }}
+              value: {{ printf "service.namespace=commerce-saga,service.version=%s,deployment.environment.name=%s,service.instance.id=$(POD_NAME),k8s.pod.name=$(POD_NAME),k8s.node.name=$(NODE_NAME),k8s.namespace.name=$(POD_NAMESPACE)" (include "commerce.imageTag" (dict "name" $name "root" $root)) $root.Values.observability.environment | quote }}
             - name: TRACING_SAMPLING_PROBABILITY
               value: {{ $root.Values.observability.tracingSampling | quote }}
             - name: OTLP_TRACING_ENDPOINT

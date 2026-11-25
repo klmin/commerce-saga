@@ -41,23 +41,41 @@
 ## 배포 (`release`)
 
 ```
-main 머지 → images (amd64·arm64 러너에서 각각): bootJar → 이미지 11개 GHCR push (<커밋 SHA>-<아키텍처>)
-         → manifest: 두 아키텍처를 <커밋 SHA> 하나로 묶고 확인 → release/eks 브랜치를 그 커밋으로 → EKS 의 ArgoCD 가 sync
+main 머지 → plan: 마지막 배포 이후 바뀐 이미지 고르기 (scripts/release-plan.sh) → release-tags.yaml
+         → images (amd64·arm64 러너에서 각각, 바뀐 것만): bootJar → GHCR push (<커밋 SHA>-<아키텍처>)
+         → manifest: 두 아키텍처를 <커밋 SHA> 하나로 묶고, release-tags.yaml 의 이미지가 모두 있는지 확인
+                     → release/eks 에 release 커밋(그 main 커밋 + release-tags.yaml) → EKS 의 ArgoCD 가 sync
 ```
 
 - 이미지: 서비스 9개 + `frontend` + `connect`, `ghcr.io/<owner>/commerce-saga/<이름>:<커밋 SHA>`. 테스트는 PR CI 가 이미 돌렸으므로 bootJar 만
-- 이미지는 linux/amd64 + linux/arm64 멀티 아키텍처. 아키텍처마다 그 아키텍처 러너(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 네이티브로 빌드한다. 노드(x86, Graviton)는 자기 CPU 에 맞는 쪽을 받는다 ([ADR 0014](adr/0014-k8s-deployment.md) 멀티 아키텍처)
-- 두 아키텍처가 모두 묶인 뒤에만 `release/eks` 를 옮긴다. 그래서 이미지가 없는 커밋은 배포되지 않는다
-- EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`). CI 에는 클러스터 권한이 없다
-- 머지가 몰리면 한 번에 하나씩 돈다. 대기 중인 실행은 GitHub 가 최신 것 하나만 남기므로 중간 커밋은 배포되지 않을 수 있다
-- 태그가 커밋이라 서비스 하나만 바뀌어도 이미지 11개를 다시 빌드하고 앱 Pod 를 모두 새 태그로 롤링한다. Postgres·Kafka 등 차트 설정이 그대로인 것은 그대로 둔다
-- 로컬·CI 검증용 ArgoCD(`deploy/argocd/root.yaml`)는 `main` 을 본다. 자세한 구성은 [deploy/README.md](../deploy/README.md), 결정은 [ADR 0014](adr/0014-k8s-deployment.md)
+- **바뀐 이미지만 빌드·배포한다** ([ADR 0014](adr/0014-k8s-deployment.md) "바뀐 서비스만 배포"). `plan` 이 **마지막으로 배포된 main 커밋**(release/eks 의 `release-tags.yaml` 에 적힌 `releasedCommit`) → 이번 커밋 사이에 바뀐 경로로 고른다
 
-**롤백**: 이미지가 남아 있는 옛 커밋으로 브랜치를 되돌린다.
+  | 바뀐 경로 | 다시 빌드하는 이미지 |
+  |---|---|
+  | `services/<이름>/` | 그 서비스 |
+  | `libs/`, `build-logic/`, `gradle/`, `settings.gradle.kts`, `gradlew`, `deploy/docker/service.Dockerfile` | 백엔드 9개 전부 |
+  | `frontend/` | frontend |
+  | `deploy/docker/connect.Dockerfile` | connect |
+  | `release.yml`, `scripts/release-plan.sh` | 전부 |
+  | 그 밖(차트 `deploy/` 등) | 없음. release 커밋만 만들어 ArgoCD 가 차트 변경을 sync |
+
+- 바뀐 이미지의 태그 = 이번 main 커밋 해시, 나머지는 이전 태그 그대로. 차트는 이미지별 태그(`image.tags.<이름>`)를 쓰므로 **태그가 바뀐 Deployment 만 롤링**된다. 차트 설정(env 등)이 바뀐 서비스는 이미지와 상관없이 롤링된다
+- 직전 커밋이 아니라 마지막 배포 커밋과 비교하므로, 머지가 몰려 중간 실행이 건너뛰어지거나 release 가 실패해도 다음 실행이 그 사이 변경을 모두 잡는다. Actions 수동 실행에서 `all` 을 켜면 전부 다시 빌드한다
+- 이미지는 linux/amd64 + linux/arm64 멀티 아키텍처. 아키텍처마다 그 아키텍처 러너(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 네이티브로 빌드한다. 노드(x86, Graviton)는 자기 CPU 에 맞는 쪽을 받는다 ([ADR 0014](adr/0014-k8s-deployment.md) 멀티 아키텍처)
+- `release-tags.yaml` 의 모든 이미지가 두 아키텍처로 GHCR 에 있는지 확인한 뒤에만 `release/eks` 를 옮긴다. 그래서 이미지가 없는 커밋은 배포되지 않는다
+- release 커밋은 부모가 (이전 release 커밋, 이번 main 커밋)이라 `release/eks` 는 force push 없이 앞으로만 간다. `git log --first-parent origin/release/eks` 가 배포 이력이다
+- EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`, valueFiles 에 `release-tags.yaml`). CI 에는 클러스터 권한이 없다
+- 머지가 몰리면 한 번에 하나씩 돈다. 대기 중인 실행은 GitHub 가 최신 것 하나만 남긴다(건너뛴 커밋의 변경은 다음 실행에 포함된다)
+- 로컬·CI 검증용 ArgoCD(`deploy/argocd/root.yaml`)는 `main` 을 보고 `image.tags` 없이 공통 태그를 쓴다. 자세한 구성은 [deploy/README.md](../deploy/README.md), 결정은 [ADR 0014](adr/0014-k8s-deployment.md)
+
+**롤백**: 옛 release 커밋으로 브랜치를 되돌린다. 그 커밋의 `release-tags.yaml` 이 가리키는 이미지가 GHCR 에 남아 있다.
 
 ```bash
-git push origin <옛 커밋>:refs/heads/release/eks --force
+git log --first-parent --oneline origin/release/eks     # release 커밋 목록
+git push origin <옛 release 커밋>:refs/heads/release/eks --force
 ```
+
+되돌린 뒤 다음 release 는 그 옛 release 커밋을 기준으로 비교한다(되돌린 사이의 변경도 다시 빌드한다).
 
 ## 알림 (`notify` → Discord)
 

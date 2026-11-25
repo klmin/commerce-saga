@@ -76,7 +76,21 @@
 - **레지스트리는 GHCR(public)**: `GITHUB_TOKEN` 으로 push, AWS 쪽 설정(ECR·IAM OIDC) 없음, 노드는 인증 없이 pull
 - **개발용 시드 사용자를 넣지 않는다**: 인터넷에 열리므로 EKS 값에서 `AUTH_FLYWAY_LOCATIONS` 를 `classpath:db/migration` 만으로 둔다(저장소에 공개된 admin 비밀번호로 결제 장애 주입이 가능해지는 것을 막음). 가입자 id 를 1000 부터 시작하는 구문은 시드에만 있었으므로 auth-service `V3__user_id_starts_at_1000` 으로 옮겨, 시드 없이도 가입자가 point-service 의 시연용 계정(1~4)을 물려받지 않게 한다
 - **이미지 태그 = 커밋 해시 = ArgoCD 가 sync 하는 revision**: EKS root(`deploy/argocd/eks/root.yaml`)가 `$ARGOCD_APP_REVISION` 을 자식의 `revision`·`imageTag` 로 넘긴다. main 은 ruleset 으로 PR 만 받아 태그를 Git 에 커밋하는 봇이 어렵고, ArgoCD Image Updater 는 root 의 selfHeal 과 부딪친다. 브랜치를 이미지 push 뒤에만 옮기므로 이미지 없는 커밋이 배포되지 않는다
-- 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만(→ 아래 "멀티 아키텍처"에서 arm64 추가)
+- 감수한 것: 서비스 하나만 바뀌어도 9개를 다시 빌드하고 모두 새 태그로 롤링한다(태그 = 커밋. → 아래 "바뀐 서비스만 배포"에서 이미지별 태그로 바꿈). http(TLS 전)라 Secure 쿠키를 임시로 끈다. 이미지는 amd64 만(→ 아래 "멀티 아키텍처"에서 arm64 추가)
+
+## 바뀐 서비스만 배포 (2026-11-25, K-4 다음)
+
+K-4 는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나라, 서비스 하나만 바뀌어도 이미지 11개를 다시 빌드하고 앱 Pod 10개를 모두 롤링했다. 컨슈머 전부가 재시작해 Kafka 리밸런스가 연달아 일어나고, 바꾸지 않은 서비스까지 재시작해 장애 범위가 넓어진다.
+
+- 결정: **이미지별 태그를 배포 브랜치에 커밋한다.** release 워크플로가 마지막 배포 이후 바뀐 이미지만 빌드하고(태그 = 이번 main 커밋 해시, 나머지는 이전 태그), `release/eks` 에 release 커밋(그 main 커밋의 파일 + `deploy/argocd/apps/release-tags.yaml`)을 얹는다. EKS root 가 이 파일을 valueFiles 로 읽고, 차트가 `image.tags.<이름>` 을 공통 `image.tag` 보다 먼저 쓴다. 태그가 그대로인 Deployment 는 ArgoCD 비교에서 차이가 없어 롤링되지 않는다
+- **비교 기준은 마지막 배포 커밋**(`release-tags.yaml` 의 `releasedCommit`)이다. 직전 커밋과 비교하면 release 의 `concurrency` 로 중간 실행이 건너뛰어지거나 실행이 실패했을 때 그 변경을 놓친다. 마지막 배포 커밋은 성공했을 때만 바뀌므로 다음 실행이 빠진 것을 모두 잡는다
+- **바뀐 것 판단은 경로로**(`scripts/release-plan.sh`): 서비스 폴더 → 그 서비스, 공유 모듈·빌드 설정·서비스 Dockerfile → 백엔드 전부, `frontend/` → frontend, Connect Dockerfile → connect. 서비스끼리 코드 의존이 없다는 규칙(AGENTS.md)이 있어 이 매핑이 성립한다
+- **release 커밋의 부모는 (이전 release 커밋, main 커밋)**: `release/eks` 가 force push 없이 앞으로만 가고 `git log --first-parent` 가 배포 이력이 된다. 롤백은 옛 release 커밋으로 브랜치를 되돌린다
+- 고르지 않은 것
+  - 내용 해시 태그(이미지 입력 파일의 tree 해시): 상태 없이 멱등이지만 태그로 어느 커밋인지 알기 어렵다. 우리는 마지막 배포 커밋이 이미 `release/eks` 에 있어 커밋 해시 태그 + 경로 비교로 같은 결과를 낸다
+  - ArgoCD Image Updater: 컴포넌트가 하나 늘고, root 의 selfHeal·app-of-apps 와 값 덮어쓰기가 얽힌다
+  - 서비스마다 Application(ApplicationSet): 서비스별 sync·롤백이 되지만 차트·values 를 서비스별로 나눠야 한다. 지금은 한 차트로 충분하다
+- 감수한 것: `release/eks` 의 최신 커밋이 main 커밋이 아니라 봇 커밋이다(어느 main 커밋인지는 메시지 `release: <커밋>` 과 `releasedCommit`). 로컬·CI 의 kind 검증은 `image.tags` 없이 공통 태그로 돌아 이미지별 태그 경로는 렌더링(`helm template`)으로만 확인한다
 
 ## 관측성 추가 결정 (2026-11-24, ADR 0013 로그·수집기 다음)
 
