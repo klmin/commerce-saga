@@ -131,12 +131,11 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0006 멱등 컨슈머: 메시지 ID 기록 + 주문별 기록, 두 겹](docs/adr/0006-idempotent-consumer.md)
 - [0007 Saga 타임아웃과 결제 타임아웃 보정: 재전송 후 포기하면 역순 보상, 결제는 PG 조회로 확정하고 늦은 승인은 자동 환불](docs/adr/0007-saga-timeout.md)
 - [0008 인증: 자체 auth-service 가 JWT(RS256 + JWKS) 발급, refresh token 은 회전(RTR)하고 재사용하면 그 기기 세션 폐기](docs/adr/0008-auth-self-issued-jwt.md)
+- [0010 상품 검색 CQRS: Debezium 테이블 CDC → search-service → Elasticsearch, 외부 버전(LSN)으로 멱등·순서](docs/adr/0010-product-search-cqrs-table-cdc.md)
 - [0011 프론트엔드: Next.js + Tailwind + shadcn/ui, Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다(BFF), refresh 는 proxy.ts](docs/adr/0011-frontend-nextjs-bff-session.md)
 - [0012 실패 처리: 일시 오류는 제자리 재시도, 영구 오류는 DLT + 재처리 도구 (retry 토픽 미사용)](docs/adr/0012-retry-in-place-and-dlt.md)
 - [0013 관측성: Saga 한 건을 trace 하나로(outbox 를 거쳐도 trace 문맥을 잇는다), 정합성이 깨지기 전에 경보](docs/adr/0013-observability.md)
 - [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, GitOps 는 ArgoCD, edge 는 Gateway API, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
-- [0015 컨텍스트 맵과 용어집, 쓰지 않기로 한 DDD 전술 패턴(도메인 이벤트 객체·이벤트 소싱·JPA Auditing)](docs/adr/0015-context-map-and-glossary.md)
-- [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
 - [0015 컨텍스트 맵과 용어집, 쓰지 않기로 한 DDD 전술 패턴(도메인 이벤트 객체·이벤트 소싱·JPA Auditing)](docs/adr/0015-context-map-and-glossary.md)
 - [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
 
