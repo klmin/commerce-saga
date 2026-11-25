@@ -2,7 +2,7 @@
 
 Next.js 16 (App Router, Cache Components) / React 19 / TypeScript / Tailwind 4 / shadcn/ui. 설계는 [ADR 0011](../docs/adr/0011-frontend-nextjs-bff-session.md).
 
-브라우저는 Next 만 본다. Next 서버가 로그인 토큰을 httpOnly 쿠키(`cs_access`, `cs_refresh`)로 들고 Gateway(`BACKEND_URL`, 기본 http://localhost:8000)를 부른다. access token 이 만료되면 `src/proxy.ts` 가 화면 요청 전에 refresh 한다.
+브라우저는 Next 만 본다. Next 서버가 로그인 토큰을 httpOnly 쿠키(`cs_access`, `cs_refresh`)로 들고 Gateway(`BACKEND_URL`, 기본 http://localhost:8000)를 부른다. access token 이 만료되면 `src/proxy.ts` 가 화면 요청 전에 refresh 한다. access 쿠키가 있어도 백엔드가 401 이면(서명 키 교체 등) `/session/renew` 가 access 쿠키를 지워 refresh 를 한 번 시도하게 하고, 그 뒤에도 401 이면 로그인 화면으로 보낸다(`src/lib/auth/renew.ts`).
 
 ## 실행
 

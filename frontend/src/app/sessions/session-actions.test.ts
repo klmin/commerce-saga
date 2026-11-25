@@ -14,7 +14,12 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/backend", () => backend);
 vi.mock("@/lib/auth/server-session", () => session);
 vi.mock("@/lib/log", () => ({ logError: vi.fn() }));
-vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+// proxy 가 넘기는 지금 경로. 방금 renew 했는지는 cs_renewed 쿠키로 본다
+const renewed = vi.hoisted(() => ({ value: false }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-cs-request-path": "/sessions" }),
+  cookies: async () => ({ has: (name: string) => name === "cs_renewed" && renewed.value }),
+}));
 vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 
 const { logoutAllAction, revokeSessionAction } = await import("./session-actions");
@@ -29,6 +34,7 @@ function form(sessionId: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  renewed.value = false;
   session.accessToken.mockResolvedValue("at");
 });
 
@@ -45,7 +51,7 @@ describe("revokeSessionAction", () => {
     expect(backend.revokeSession).not.toHaveBeenCalled();
   });
 
-  it("이미 없는 세션(404)은 목록만, 그 밖의 실패는 오류 표시, 401 은 로그인으로", async () => {
+  it("이미 없는 세션(404)은 목록만, 그 밖의 실패는 오류 표시, 401 은 refresh 를 한 번 시도하러", async () => {
     backend.revokeSession.mockRejectedValueOnce(new ApiError(404, "not found"));
     await expect(revokeSessionAction(form(SESSION))).rejects.toThrow("NEXT_REDIRECT:/sessions");
 
@@ -54,6 +60,13 @@ describe("revokeSessionAction", () => {
       "NEXT_REDIRECT:/sessions?error=failed",
     );
 
+    backend.revokeSession.mockRejectedValueOnce(new ApiError(401, "expired"));
+    await expect(revokeSessionAction(form(SESSION))).rejects.toThrow(
+      "NEXT_REDIRECT:/session/renew?next=%2Fsessions",
+    );
+
+    // 방금 renew 했는데도 401 이면 로그인으로
+    renewed.value = true;
     backend.revokeSession.mockRejectedValueOnce(new ApiError(401, "expired"));
     await expect(revokeSessionAction(form(SESSION))).rejects.toThrow(
       "NEXT_REDIRECT:/login?next=%2Fsessions",

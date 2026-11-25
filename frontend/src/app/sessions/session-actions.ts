@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/client";
 import * as auth from "@/lib/auth/backend";
 import { clientInfoFrom } from "@/lib/auth/client";
 import { accessToken, clearSession } from "@/lib/auth/server-session";
+import { redirectAfterUnauthorized, redirectToLogin } from "@/lib/auth/unauthorized";
 import { logError } from "@/lib/log";
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -14,7 +15,7 @@ const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 async function requireAccessToken(): Promise<string> {
   const token = await accessToken();
   if (!token) {
-    redirect("/login?next=%2Fsessions");
+    return redirectToLogin();
   }
   return token;
 }
@@ -34,7 +35,7 @@ export async function revokeSessionAction(formData: FormData): Promise<void> {
     await auth.revokeSession(token, sessionId, clientInfoFrom(await headers()));
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) {
-      redirect("/login?next=%2Fsessions");
+      return redirectAfterUnauthorized();
     }
     if (!(e instanceof ApiError && e.status === 404)) {
       logError("revokeSessionAction failed", e);
