@@ -29,6 +29,10 @@
   "transforms.unwrap.add.headers": "lsn,source.ts_ms",
   "transforms.key.type": "org.apache.kafka.connect.transforms.ExtractField$Key",
   "transforms.key.field": "id",
+  "transforms.key.predicate": "isProducts",
+  "predicates": "isProducts",
+  "predicates.isProducts.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+  "predicates.isProducts.pattern": "product-cdc\\.public\\.products",
   "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
   "transforms.route.regex": "product-cdc\\.public\\.products",
   "transforms.route.replacement": "product.cdc.products"

@@ -149,6 +149,11 @@ spec:
     transforms.unwrap.add.headers: lsn,source.ts_ms
     transforms.key.type: org.apache.kafka.connect.transforms.ExtractField$Key
     transforms.key.field: id
+    # heartbeat 등 다른 토픽의 레코드는 키에 id 가 없다 → 상품 테이블 토픽에만 적용 (아니면 태스크가 FAILED)
+    transforms.key.predicate: isProducts
+    predicates: isProducts
+    predicates.isProducts.type: org.apache.kafka.connect.transforms.predicates.TopicNameMatches
+    predicates.isProducts.pattern: '{{ $connector }}\.public\.products'
     transforms.route.type: org.apache.kafka.connect.transforms.RegexRouter
     transforms.route.regex: '{{ $connector }}\.public\.products'
     transforms.route.replacement: product.cdc.products
