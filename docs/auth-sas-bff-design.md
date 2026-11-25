@@ -197,18 +197,31 @@ server: { port: 5173, proxy: { "/api": scg, "/oauth2/authorization": scg, "/logi
 
 - auth-service 는 시작할 때 클라이언트를 upsert 하며 **redirect URI 도 이 설정값으로 갱신**한다(6절). 환경을 바꿔도 DB 를 손대지 않는다
 - **공개 주소와 내부 주소를 나눈다.** 컨테이너 안에서 `auth.localhost` 는 자기 자신을 가리키므로, SCG 는 `issuer-uri` 자동 탐색(discovery)을 쓰지 않고 주소를 하나씩 준다
+- discovery 를 끄면 discovery 문서에서 오던 값이 빠진다. 특히 **OIDC 로그아웃 주소(`end_session_endpoint`)가 없으면 RP-initiated logout 이 SAS 로 가지 않고 SCG 로컬 로그아웃만 된다** → SAS 세션 ① 이 남아 다음 로그인이 화면 없이 바로 통과한다. Spring Boot 속성(`spring.security.oauth2.client.provider.*`)에는 이 메타데이터 자리가 없으므로 **`ReactiveClientRegistrationRepository` 를 코드로** 만든다
 
-```yaml
-# SCG
-spring.security.oauth2.client.provider.commerce:
-  authorization-uri: ${AUTH_ISSUER}/oauth2/authorize         # 브라우저 → 공개
-  token-uri:         ${AUTH_INTERNAL_URL}/oauth2/token        # SCG → 내부
-  jwk-set-uri:       ${AUTH_INTERNAL_URL}/oauth2/jwks
-  user-info-uri:     ${AUTH_INTERNAL_URL}/userinfo
-  user-name-attribute: sub
-# SAS: AuthorizationServerSettings.issuer = ${AUTH_ISSUER}
-# 서비스·SCG 리소스 서버: issuer = ${AUTH_ISSUER} (문자열 검사), jwk-set-uri = ${AUTH_INTERNAL_URL}/oauth2/jwks
+```java
+// SCG: 클라이언트 등록을 코드로 (gateway-admin 도 같은 모양, redirect URI 만 다름)
+ClientRegistration.withRegistrationId("gateway-web")
+    .clientId("gateway-web").clientSecret(secret)               // 6절 시크릿 순서
+    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+    .redirectUri("{baseUrl}/login/oauth2/code/{registrationId}") // forward headers 로 화면 호스트가 들어감
+    .scope("openid")
+    .issuerUri(AUTH_ISSUER)                                      // ID 토큰 iss 검사 기준 (공개 주소)
+    .authorizationUri(AUTH_ISSUER + "/oauth2/authorize")         // 브라우저 → 공개
+    .tokenUri(AUTH_INTERNAL_URL + "/oauth2/token")                // SCG → 내부
+    .jwkSetUri(AUTH_INTERNAL_URL + "/oauth2/jwks")
+    .userInfoUri(AUTH_INTERNAL_URL + "/userinfo")
+    .userNameAttributeName("sub")
+    .providerConfigurationMetadata(Map.of(
+        "end_session_endpoint", AUTH_ISSUER + "/connect/logout")) // 브라우저가 가므로 공개 주소
+    .build();
+// 로그아웃: OidcClientInitiatedServerLogoutSuccessHandler, post_logout_redirect_uri = {baseUrl}/ (SAS 클라이언트 등록에도 같은 값)
+// SAS: AuthorizationServerSettings.issuer = ${AUTH_ISSUER}, OIDC 로그아웃 엔드포인트 켬
+// 서비스·SCG 리소스 서버: issuer = ${AUTH_ISSUER} (문자열 검사), jwk-set-uri = ${AUTH_INTERNAL_URL}/oauth2/jwks
 ```
+
+- 확인(5-2 테스트·시나리오): 로그아웃 뒤 다시 로그인하면 **로그인 화면이 나와야** 한다(SAS 세션 ① 이 끝났는지)
 
 - **SCG·auth-service 가 원래 호스트를 알게 한다**: 둘 다 `server.forward-headers-strategy=framework`(auth-service 는 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). Caddy·Envoy·Vite 프록시가 넘긴 `Host`·`X-Forwarded-*` 로 redirect URI(`{baseUrl}/login/oauth2/code/{registrationId}`)를 만들고, 호스트에 맞는 클라이언트(`gateway-web`/`gateway-admin`)를 고른다
 - **세션 쿠키 이름을 나눈다**: SCG `GW_SESSION`, auth-service `AUTH_SESSION`(모든 환경 공통). 로컬 개발은 포트만 다른 `localhost` 라 쿠키가 포트를 구분하지 않아 같은 이름이면 서로 덮어쓴다. `SameSite` 는 포트를 보지 않아 `Lax` 로 동작한다
