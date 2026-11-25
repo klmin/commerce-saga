@@ -26,6 +26,11 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
   const name = `e2e 이력 상품 ${Date.now().toString(36)}`;
   const register = page.getByRole("form", { name: "상품 등록" });
   await register.getByLabel("상품 이름").fill(name);
+  // 저장이 실패해도 입력한 값은 남는다 (가격만 고쳐 다시 등록)
+  await register.getByLabel("가격 (원)").fill("0");
+  await register.getByRole("button", { name: "등록" }).click();
+  await expect(register.getByRole("alert")).toContainText("가격은 1원부터");
+  await expect(register.getByLabel("상품 이름")).toHaveValue(name);
   await register.getByLabel("가격 (원)").fill("50,000");
   await register.getByRole("button", { name: "등록" }).click();
   await expect(page).toHaveURL(/\/admin\/products\/\d+$/);

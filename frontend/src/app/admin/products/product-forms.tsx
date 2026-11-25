@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useActionState, useId } from "react";
+import { type FormEvent, type ReactNode, startTransition, useActionState, useId } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +27,27 @@ function ActionForm({
   children: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
+
+  // React 는 form action 이 끝나면 비제어 입력을 초기값으로 되돌린다 → 저장이 실패하면 입력한 값이 사라진다.
+  // 붙은 뒤에는 onSubmit 이 직접 불러 초기화를 피한다(결제 장애 폼과 같은 방식). 성공하면 등록은 이동하고,
+  // 수정 폼은 다시 그린 새 값으로 key 가 바뀌어 다시 마운트된다
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) {
+      return;
+    }
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
+
   return (
-    <form action={formAction} aria-label={label} className="flex flex-col gap-3">
+    <form
+      // 하이드레이션 전 제출도 Server Action 으로
+      action={formAction}
+      onSubmit={onSubmit}
+      aria-label={label}
+      className="flex flex-col gap-3"
+    >
       {children}
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
