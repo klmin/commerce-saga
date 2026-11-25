@@ -90,6 +90,7 @@ flowchart LR
 | PR | 내용 |
 |---|---|
 | (이번 PR) | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". 다음 PR 은 release 가 main CI 결과를 기다리게(main CI 취소 안 함) |
+| #HOT | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
 | #95 | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
 | #93 | 문서: 배포 환경 가이드 `docs/deployment-environments.md`(로컬·compose·k8s·ArgoCD·EKS, Helm·values·Application 매핑) |
 | #94 | 후속 4-3b 관리자 상품 화면: `/admin/products`(판매 중지 포함 목록·페이지, 상품 등록) → `/admin/products/{id}`(이름·설명·가격·판매 상태 변경, 관리 이력 최근부터: 변경 종류·시각·관리자 id·바뀐 값만 전 → 후, 옮겨 온 옛 가격 이력은 가격만). 서버 액션이 저장 뒤 `refresh()` 로 다시 그림, 입력은 값이 바뀌면 key 로 다시 마운트. 관리자가 아니면 404. 입력 검사·이력 표시 `lib/admin/product-input.ts`(Vitest), Playwright `e2e/admin-products.spec.ts`(등록 → 가격·설명·판매 중지 → 이력 4건 순서·전후 값, 같은 가격 요청은 이력 없음, 일반 사용자 404) |
@@ -491,7 +492,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 | ④ | 후속 4 나머지 (완료, PR #82~#94) | 상품 검색(테이블 CDC + Elasticsearch), 상품·가격 관리 이력 | 설계 확정(2026-11-25): 4-6절·ADR 0010 |
 
 **정하고 미룬 것 (지금은 하지 않음)**
-- 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 인기 상품 한 행에 주문이 몰리는 경우만 문제라, 처리량 측정(k6 등) 뒤에 조건부 UPDATE·재고 버킷·Redis 선점을 검토한다
+- 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 측정(시나리오 18, 2026-11-25): 인기 상품 하나는 약 150건/s 에서 막히고 인스턴스를 3개로 늘려도 그대로(락 대기 83~88%), 상품이 나뉘면 158 → 258건/s. 이 규모에는 충분해 바꾸지 않는다. 더 필요해지면 먼저 조건부 UPDATE 를 트랜잭션 끝으로 옮겨 락 쥐는 시간을 줄이고 같은 스크립트로 다시 잰다. 재고 버킷·Redis 선점은 하지 않음
 - 주문 취소 API(내 주문·주문 상세 화면): Saga 진행 중 취소는 취소 요청을 기록하고 다음 응답에서 보상으로 돌린다. 완료된 주문 취소는 결제 환불 → 포인트 환불 → 재고 복구의 별도 취소 Saga. 순서는 ④ 뒤에 정한다
 - PG 장애 대처 중 PG 이중화(다른 PG 로 우회)·결제 컨슈머 일시정지는 설명만 한다(가짜 PG 하나로는 보여 주기 어렵고, 결제는 빨리 실패시키는 쪽이 흔하다)
 - 주문 진행 표시는 폴링(1초) 유지. SSE·웹소켓은 연결 관리 비용에 비해 이득이 작다
