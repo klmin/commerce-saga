@@ -110,7 +110,7 @@ jobs:
         run: bash scripts/smoke-idempotency.sh
 
       # 스케줄러가 아니라 Debezium 이 발행했다는 증거 (e2e 워크플로의 debezium 모드 확인과 같음):
-      # 커넥터 5개 Ready, outbox 는 넣고 바로 지워져 비어 있고, 서비스 DB 마다 replication slot 이 살아 있다
+      # 커넥터 6개(outbox 5 + 상품 테이블 CDC 1) Ready, outbox 는 넣고 바로 지워져 비어 있고, slot 이 살아 있다
       - name: Debezium relay 확인 (커넥터 Ready, outbox 비어 있음, slot)
         run: |
           kubectl -n commerce get kafkaconnector
@@ -122,7 +122,13 @@ jobs:
           done
           kubectl -n commerce exec statefulset/postgres -- psql -U postgres -tAc "select slot_name, database, active from pg_replication_slots"
           active=$(kubectl -n commerce exec statefulset/postgres -- psql -U postgres -tAc "select count(*) from pg_replication_slots where active")
-          [ "$active" = "5" ] || { echo "활성 slot 이 $active 개 (기대 5)"; exit 1; }
+          [ "$active" = "6" ] || { echo "활성 slot 이 $active 개 (기대 6)"; exit 1; }
+
+      - name: 상품 테이블 CDC (시나리오 16)
+        env:
+          KAFKA_EXEC: kubectl -n commerce exec -i commerce-dual-role-0 --
+          KAFKA_BOOTSTRAP: localhost:9092
+        run: bash scripts/smoke-product-cdc.sh
 
       - name: 화면이 Gateway 를 거쳐 뜨는지
         run: |

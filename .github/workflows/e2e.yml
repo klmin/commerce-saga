@@ -86,6 +86,11 @@ jobs:
         if: matrix.relay == 'debezium'
         run: bash scripts/register-connectors.sh
 
+      # 검색용 products 테이블 CDC(ADR 0010)는 relay 모드와 상관없이 필요하다 (debezium 모드는 위에서 같이 등록)
+      - name: 상품 테이블 CDC 커넥터 등록
+        if: matrix.relay == 'scheduler'
+        run: CONNECTORS=product-cdc bash scripts/register-connectors.sh
+
       # 가입·로그인·refresh 회전·재사용 탐지·로그아웃·로그인 잠금
       - name: 인증, refresh token 재사용 탐지 (시나리오 9)
         run: GRACE_WAIT=3 bash scripts/smoke-auth.sh
@@ -105,6 +110,10 @@ jobs:
       # 관리자가 가격 변경 → 옛 가격 주문 409 + 지금 가격 → 같은 키로 새 가격 주문(스냅샷) → 판매 중지 422 (ADR 0016)
       - name: 주문 가격 확인·가격 변경 이력 (시나리오 14)
         run: bash scripts/smoke-price-change.sh
+
+      # products 변경 → product.cdc.products (키 = 상품 id, 변경 후 행, 헤더 __lsn) (ADR 0010)
+      - name: 상품 테이블 CDC (시나리오 16)
+        run: bash scripts/smoke-product-cdc.sh
 
       # 가입 → auth.events(UserRegistered, outbox) → point-service 가 계정 생성(가입 축하 포인트) → 그 포인트로 주문
       - name: 가입 → 포인트 계정 (시나리오 13)

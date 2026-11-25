@@ -40,7 +40,7 @@ select 'create database auth_db owner auth_svc'
 where not exists (select from pg_database where datname = 'auth_db')\gexec
 revoke all on database auth_db from public;
 
--- 상품·가격 (후속 4-1, ADR 0016). 메시지를 주고받지 않아 outbox·replication 권한이 없다
+-- 상품·가격 (후속 4-1, ADR 0016). outbox 는 없고, 검색용 테이블 CDC(products, ADR 0010) 때문에 아래에서 replication 권한을 준다
 select 'create role product_svc with login password ''product_svc'''
 where not exists (select from pg_roles where rolname = 'product_svc')\gexec
 select 'create database product_db owner product_svc'
@@ -55,3 +55,5 @@ alter role inventory_svc with replication;
 alter role point_svc with replication;
 alter role payment_svc with replication;
 alter role auth_svc with replication;
+-- product 는 outbox 가 아니라 products 테이블을 검색용으로 복제한다 (ADR 0010). 테이블 소유자라 publication 도 만들 수 있다
+alter role product_svc with replication;

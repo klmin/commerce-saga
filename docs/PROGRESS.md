@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (후속 4 나머지 설계 확정: 상품 검색 = Debezium 테이블 CDC → search-service → Elasticsearch, 상품 관리 이력. 4-6절·ADR 0010)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. 다음 ④ 후속 4 나머지(설계 확정: 4-6절·ADR 0010, 4-2a 기반부터)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-25 (후속 4-2a 상품 테이블 CDC: products → Debezium → product.cdc.products, 시나리오 16)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(설계 확정: 4-6절·ADR 0010) 진행 중: 4-2a 상품 테이블 CDC(이번 PR) 다음 4-2b search-service**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -89,7 +89,8 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | 문서: 후속 4 나머지 설계 메모(4-6절, 사용자 확인)·[ADR 0010](adr/0010-product-search-cqrs-table-cdc.md) 상품 검색 CQRS(테이블 CDC → search-service → ES). README ADR 목록 중복 줄 정리 |
+| (이번 PR) | 후속 4-2a 상품 테이블 CDC: Debezium `product-cdc` 커넥터(compose `infra/connect/product-cdc.json`, Helm `KafkaConnector`, `values.services.product-service.cdc`)가 `products` 의 열 6개만(`column.include.list`) 변경 후 행(`ExtractNewRecordState`)으로 `product.cdc.products`(키 = 상품 id `ExtractField$Key`, 헤더 `__lsn`·`__source_ts_ms`, RegexRouter)에 보낸다. `product_svc` replication 권한(초기화 SQL 두 사본), 토픽·DLT·heartbeat 토픽(compose kafka-init, Helm topics). relay 가 스케줄러 모드여도 등록(e2e scheduler 모드에 등록 단계). 토픽 계약 문서(열은 추가만), AGENTS.md 토픽·키 규칙에 CDC 추가. 시나리오 16(`smoke-product-cdc.sh`, CI e2e 두 모드·k8s kind, k8s 활성 slot 6). ES 는 search-service 와 함께 4-2b 로 옮김(쓰는 쪽과 같이 들어가야 확인할 수 있음) |
+| #81 | 문서: 후속 4 나머지 설계 메모(4-6절, 사용자 확인)·[ADR 0010](adr/0010-product-search-cqrs-table-cdc.md) 상품 검색 CQRS(테이블 CDC → search-service → ES). README ADR 목록 중복 줄 정리 |
 | #76 | 4-4절 ③ 결제 서킷 브레이커: payment-service `CircuitBreakingPaymentGateway`(`@Primary`, Resilience4j 코어 2.3.0) 가 PG 승인만 감싼다. 최근 20건 중 10건 이상·실패(타임아웃·오류) 50% 이상이면 열림 → PG 를 부르지 않고 `PaymentGatewayUnavailableException` → 결제 서비스가 확정 실패(DECLINED, "PG unavailable (circuit open)")로 바로 응답 → Saga 즉시 보상. 30초 뒤 반열림 시험 3건(타임아웃이면 지금처럼 UNKNOWN + 보정). 처리마다 PG 를 부르기 전 `pg_approve_attempts`(V7)에 호출을 예약(calls + 1, 커밋)한다. 회로가 이번 호출을 막았을 때 예약이 이 처리 하나뿐이면 봉인(이후 어떤 처리도 PG 를 부르지 않음)하고 거절 확정, 아니면(재전달·Saga 재전송·다른 인스턴스 동시 처리) 거절 대신 UNKNOWN → 조회로 확정. 예약과 봉인은 같은 행의 조건부 갱신이라 겹치지 않음. 거절은 실패로 세지 않음. 조회·환불은 회로 밖(보정이 계속 돌아야 돈이 맞음). 지표 `payment_pg_circuit_state`. 라이브러리: Resilience4j 는 Spring Cloud CircuitBreaker 기본 구현이고 상태 머신(카운트 창·반열림 시험 수)이 검증돼 있어 직접 만들지 않음, Spring 통합 없이 코어만(설정은 우리 properties). 시나리오 15(`smoke-pg-circuit.sh`, CI e2e 마지막) |
 | #74 | 4-4절 ② 멱등 기록 정리: order·inventory·point·payment 에 `IdempotencyCleanupScheduler`(1시간마다, `idempotency.cleanup.*`) → `IdempotencyCleanupService` 가 보존 기간(processed_message 30일 = 토픽 보존 7일 + DLT 재처리 여유, order Idempotency-Key 7일)이 지난 행을 오래된 것부터 1,000건씩(한 번에 최대 100배치) 지운다. `for update skip locked` 라 여러 인스턴스가 겹쳐도 서로 기다리지 않고 결과가 같다. 비즈니스 기록은 지우지 않음. order V8 `order_idempotency_keys(created_at)` 인덱스. 서비스마다 단위·Postgres 통합 테스트. 함께: 머지된 PR 번호(#49·#66·#67·#70·#71)·4-5절 완료 표시·5절 경보 전달 한계 반영(닫은 #69 내용) |
 | #72 | 후속 4-1c 장바구니: order-service `cart_items`(V7, (user_id, product_id) PK, 담을 때 가격), `Cart` 애그리거트(담을 때 가격 유지, 50줄), `GET/PUT/DELETE /cart(/items/{id})`(Gateway `/api/cart/**`), 담을 때 지금 가격을 받아 남김(없는·판매 중지 422, 장애 503), 조회는 지금 가격과 비교해 `priceChanged`·장애면 담을 때 가격. 장바구니 주문 `POST /orders` + `fromCart` 는 주문 트랜잭션 안에서 주문한 줄 삭제. 화면 `/cart`(수량 변경·빼기·가격 변경 표시, 주문 폼 재사용), 상품 목록 "담기", 헤더 링크, Playwright 1개, 시나리오 14e |
@@ -535,8 +536,8 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 
 | PR | 범위 |
 |---|---|
-| 4-2a 기반 | ADR 0010, ES 를 compose·Helm·CI 에 추가, product_db 테이블 CDC 커넥터(compose 등록 스크립트·Strimzi `KafkaConnector`), 토픽 `product.cdc.products`, product_svc 에 publication·복제 권한. AGENTS.md 키 규칙에 상품 id |
-| 4-2b search-service | 새 서비스(헥사고날, DB 없음, ES 가 저장소): CDC 소비 → 외부 버전으로 색인, 검색 API, Gateway `/api/search/**`, 색인 지연 지표. 시나리오 16(가격 변경·판매 중지가 몇 초 안에 검색에 반영, ES 중단 중 검색 503·상품 목록·주문 정상, 복구 뒤 따라잡음, 같은 변경 재전달 무시) |
+| 4-2a 기반 (이번 PR) | product_db 테이블 CDC 커넥터(compose 등록 스크립트·Strimzi `KafkaConnector`), 토픽 `product.cdc.products`, product_svc 에 replication 권한. AGENTS.md 키 규칙에 상품 id. ADR 0010 은 설계 PR(#81)에서. ES 는 4-2b 로(쓰는 search-service 와 같이 들어가야 확인할 수 있음) |
+| 4-2b search-service | ES 를 compose·Helm·CI 에 추가. 새 서비스(헥사고날, DB 없음, ES 가 저장소): CDC 소비 → 외부 버전으로 색인, 검색 API, Gateway `/api/search/**`, 색인 지연 지표. 시나리오 16(가격 변경·판매 중지가 몇 초 안에 검색에 반영, ES 중단 중 검색 503·상품 목록·주문 정상, 복구 뒤 따라잡음, 같은 변경 재전달 무시) |
 | 4-2c 화면 | 상품 목록에 검색창·필터·정렬, 결과에서 바로 담기·주문(가격은 주문 때 다시 확인) |
 | 4-3 관리 이력 | `product_audit_log` + 관리자 화면(상품별 변경 이력) |
 
