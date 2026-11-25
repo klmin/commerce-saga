@@ -48,7 +48,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * access token 은 JWKS 로 받은 공개키로 서명을 검증한다 (Gateway·서비스가 할 일과 같다).
  */
 // outbox relay 는 켜 두되 돌지 않게 (Kafka 없이 outbox 행을 확인한다)
-@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h"})
+// 로컬 개발용 키 파일(사용자 홈)을 만들지 않게 임시 키로
+@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h", "auth.jwt.dev-key-file="})
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @Testcontainers(disabledWithoutDocker = true)

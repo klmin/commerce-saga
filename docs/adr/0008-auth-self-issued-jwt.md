@@ -44,7 +44,12 @@ auth-service 는 화면 없이 API 만 둔다 (`auth_db` + Redis). 다른 서비
 - **요청마다 auth-service 를 부르지 않는다.** 서명과 만료만 보면 된다. 대가로 이미 나간 access token 은 끊을 수 없어 수명을 짧게(15분) 둔다. 즉시 차단이 필요해지면 사용자별 토큰 버전을 Gateway 에서 확인하는 방식을 검토한다
 - 사용자 id 는 `bigint` 그대로 `sub` 에 넣는다. 서비스 테이블·메시지의 `userId: long` 과 맞추기 위해서다. 외부에 노출할 일이 생기면 `public_id uuid` 컬럼을 더한다
 - 권한은 **역할(roles)만** 쓴다 (`users` ↔ `user_roles`). OAuth `scope` 는 외부 앱에 권한 일부를 위임할 때의 개념이라 앱 하나에는 의미가 없다. Gateway 는 경로별 역할(`/api/admin/**` = ADMIN), 서비스는 `@PreAuthorize` + 소유권 검사 (A-2)
-- 키 교체: 새 키로 서명하고, 이전 키는 `auth.jwt.retired-keys` 로 JWKS 에 남겨 그 키로 서명된 토큰이 끝날 때(최대 15분)까지 검증되게 한다. 키를 지정하지 않으면 기동 때 임시 키를 만든다(로컬 개발용, 재시작하면 이전 토큰 무효)
+- 키 교체: 새 키로 서명하고, 이전 키는 `auth.jwt.retired-keys` 로 JWKS 에 남겨 그 키로 서명된 토큰이 끝날 때(최대 15분)까지 검증되게 한다
+- 서명 키는 앱 밖에서 넣는다. 앱은 읽기만 하고 다음 순서로 고른다 (2026-11-25 보완)
+  1. 주입받은 키 `auth.jwt.private-key-location` + `key-id`: k8s·운영. k8s 는 Secret 을 파일로 마운트한다(Secret 을 만드는 쪽은 ADR 0014)
+  2. 로컬 개발용 키 파일 `auth.jwt.dev-key-file`(기본 `~/.commerce-saga/auth-jwt-dev.pem`): 있으면 쓰고 없으면 만들어 저장한다. kid 는 공개키 지문(RFC 7638)이라 따로 저장하지 않는다. 호스트에서 띄우는 로컬 개발에서 재시작해도 이전 토큰이 검증되게 하려는 것이다. 쓰기 가능한 로컬 디스크와 인스턴스 하나가 전제라 k8s 는 이 값을 비운다
+  3. 둘 다 비면 기동할 때마다 임시 키 (테스트용, 재시작하면 이전 토큰 무효)
+  - 개인키를 DB 에 두지 않는다. DB 덤프·복제본·백업·CDC(WAL) 로 퍼지고, DB 하나가 털리면 모든 사용자의 토큰을 위조할 수 있다
 
 ### refresh token: opaque `familyId.secret`, 회전(RTR), 재사용하면 그 family 폐기
 
