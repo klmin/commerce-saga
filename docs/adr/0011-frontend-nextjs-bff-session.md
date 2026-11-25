@@ -1,6 +1,6 @@
 # ADR 0011. 프론트엔드: Next.js(App Router) + Tailwind + shadcn/ui, Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다
 
-- 상태: 채택 (후속 2 F-1)
+- 상태: 대체됨 → [ADR 0017](0017-auth-sas-gateway-bff-spa.md) (후속 5: Next 서버 BFF → Gateway BFF + Vite SPA. Tailwind·shadcn/ui·zod 검증은 유지). 처음 채택: 후속 2 F-1
 - 날짜: 2026-11-23
 
 ## 배경
