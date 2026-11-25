@@ -15,7 +15,7 @@
 #   2. 리스너 한 건 처리 시간: /actuator/prometheus 의 spring_kafka_listener 타이머(측정 전후 차이)의 평균
 #   3. 락 대기: 처리 중 pg_stat_activity 를 0.05초마다 훑어 재고 행 락(wait_event_type = Lock)을 기다리던 연결 수
 #
-# 측정용 상품(9001~)은 재고를 넉넉히 넣었다가 끝나면 예약 기록과 함께 지운다. 응답(inventory.reply)은
+# 측정용 상품(9001~)은 재고 행이 없는 id 만 쓴다(이미 있으면 중단). 넉넉히 넣었다가 끝나면(실패해도) 이번 실행이 만든 행과 예약 기록만 지운다. 응답(inventory.reply)은
 # order-service 가 "Saga 없는 주문의 응답"으로 무시한다. 검증(PASS/FAIL)이 아니라 측정용
 set -euo pipefail
 # Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 Windows 경로로 바꾸지 않게
@@ -41,8 +41,15 @@ stop_sampler() {
   wait "$sampler_pid" 2> /dev/null || true
   sampler_pid=
 }
+created_stocks=
 cleanup() {
   stop_sampler || true
+  # 이번 실행의 예약·멱등 기록과, 이번 실행이 만든 측정용 재고 행만 지운다 (실패·중단해도)
+  psql_q "
+    delete from stock_reservation_lines where order_id::text like '$PREFIX%';
+    delete from stock_reservations where order_id::text like '$PREFIX%';
+    delete from processed_message where message_id::text like 'ffffffff-$RUN%';
+    ${created_stocks:+delete from stocks where product_id in ($created_stocks);}" > /dev/null || true
   rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -58,10 +65,16 @@ listener() { # -> "count sum" (리스너 타이머 누적, 성공한 처리만. 
 read -r -a products <<< "$PRODUCTS"
 echo "== 18. 재고 예약 경합 측정 (N=$N, products=${products[*]}, run=$RUN)"
 
-# 측정용 재고 (끝나도 모자라지 않게)
+# 측정용 재고 (끝나도 모자라지 않게). 이미 있는 재고 행(시드 상품 1~5 등)은 덮어쓰거나 지우지 않도록 중단한다
+ids=$(IFS=,; echo "${products[*]}")
+existing=$(psql_q "select string_agg(product_id::text, ',') from stocks where product_id in ($ids)")
+if [ -n "$existing" ]; then
+  echo "FAIL: 재고 행이 이미 있는 상품($existing)은 측정에 쓰지 않는다. 없는 상품 id(9001~ 등)를 PRODUCTS 로 준다" >&2
+  exit 1
+fi
 values=$(for p in "${products[@]}"; do printf "(%d, 100000000, 0, now())," "$p"; done)
-psql_q "insert into stocks (product_id, available, reserved, updated_at) values ${values%,}
-        on conflict (product_id) do update set available = 100000000, reserved = 0, updated_at = now()" > /dev/null
+psql_q "insert into stocks (product_id, available, reserved, updated_at) values ${values%,}" > /dev/null
+created_stocks=$ids
 
 # ReserveStock N 건 (키 = orderId, 헤더 id = 메시지 id, type). 상품은 차례로 돌려 고르게 나눈다
 for i in $(seq 1 "$N"); do
@@ -118,10 +131,4 @@ echo "  리스너 한 건 평균 $(calc "($s1 - $s0) * 1000 / ($c1 - $c0)") ms (
 grep -o 'S [0-9]*' "$tmp/samples" | awk '{print $2}' > "$tmp/s"
 awk '{ n++; if ($1 > 0) w++; t += $1; if ($1 > m) m = $1 }
      END { printf "  락 대기: 샘플 %d개 중 %d개(%.0f%%)에서 대기 연결 있음, 평균 %.2f, 최대 %d\n", n, w, n ? w * 100 / n : 0, n ? t / n : 0, m }' "$tmp/s"
-
-# 정리: 측정 예약 기록·멱등 기록·측정용 재고
-psql_q "
-  delete from stock_reservation_lines where order_id::text like '$PREFIX%';
-  delete from stock_reservations where order_id::text like '$PREFIX%';
-  delete from processed_message where message_id::text like 'ffffffff-$RUN%';
-  delete from stocks where product_id in ($(IFS=,; echo "${products[*]}"))" > /dev/null
+# 측정 예약 기록·멱등 기록·측정용 재고 정리는 cleanup (EXIT trap)
