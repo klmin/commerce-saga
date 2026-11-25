@@ -132,12 +132,14 @@ jobs:
           sent=$(gh api "repos/$REPO/commits/$SHA/statuses" --jq '[.[] | select(.context == "notify/all-passed")] | length')
           [ "$sent" = 0 ] || { echo "이미 보냄"; exit 0; }
 
-          # 이 커밋에서 돈 워크플로 실행(구독 중인 것만). 실행 단위로 보면 같은 워크플로를 다시 돌린 경우 마지막 시도만 남는다.
+          # 이 커밋의 PR 실행(구독 중인 워크플로만), 워크플로마다 가장 최근 실행 하나. 같은 실행을 다시 돌리면 그 실행의
+          # 마지막 시도가, PR 을 닫았다 다시 열어 새 실행이 생기면 새 실행이 남는다(이전 실행의 실패는 세지 않음).
           # 조회가 실패하면 set -e 로 여기서 멈춘다(판정도 status 기록도 하지 않음)
-          runs=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" --paginate \
-            --jq '.workflow_runs[] | [.name, .status, (.conclusion // "")] | @tsv')
+          runs=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=pull_request&per_page=100" --paginate \
+            --jq '.workflow_runs[] | [.name, .status, (.conclusion // ""), .created_at] | @tsv')
           counts=$(printf '%s\n' "$runs" | jq -Rr --argjson w "$WORKFLOWS" '
             [inputs | select(length > 0) | split("\t") | select(.[0] as $n | $w | index($n))]
+            | group_by(.[0]) | map(max_by(.[3]))
             | {total: length,
                pending: map(select(.[1] != "completed")) | length,
                bad: map(select(.[1] == "completed" and (.[2] | test("^(success|skipped|neutral)$") | not))) | length}
