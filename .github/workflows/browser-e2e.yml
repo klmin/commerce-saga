@@ -67,6 +67,10 @@ jobs:
           for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:3500/login && break; sleep 1; done
           curl -sf -o /dev/null http://localhost:3500/login
 
+      # 상품 검색 화면(e2e/search.spec.ts)용: products 테이블 CDC → search-service (ADR 0010)
+      - name: 상품 테이블 CDC 커넥터 등록
+        run: CONNECTORS=product-cdc bash scripts/register-connectors.sh
+
       - name: Playwright
         working-directory: frontend
         env:

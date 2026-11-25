@@ -3,11 +3,16 @@ import { Suspense } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ApiError } from "@/lib/api/client";
 import { listProducts } from "@/lib/api/products";
+import { searchProducts } from "@/lib/api/search";
+import type { Product } from "@/lib/products";
+import { parseSearch, type SearchCriteria } from "@/lib/search";
 
 import { addToCartAction } from "./cart/cart-actions";
 import { won } from "@/lib/products";
 
+import { ProductSearchForm } from "./product-search-form";
 import { pointBalanceOrUndefined, stocksByProduct } from "./shop-data";
 
 const loading = (
@@ -29,11 +34,64 @@ async function PointBalance() {
   return <p className="text-2xl font-semibold">{balance.toLocaleString("ko-KR")}P</p>;
 }
 
-async function ProductList() {
-  const products = await listProducts();
+type Listing = { products: Product[]; total?: number; notice?: string };
+
+/**
+ * 검색 조건이 있으면 search-service(ADR 0010), 없으면 product-service 목록. 검색 저장소가 멈추면(503) 전체 목록으로
+ * 대신 보여 준다: 검색은 보조 기능이라 상품을 볼 수 있어야 한다
+ */
+async function loadListing(criteria: SearchCriteria | null): Promise<Listing> {
+  if (!criteria) {
+    return { products: await listProducts() };
+  }
+  try {
+    const result = await searchProducts(criteria);
+    return { products: result.items, total: result.total };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 503) {
+      return {
+        products: await listProducts(),
+        notice: "검색을 잠시 사용할 수 없어 전체 상품을 보여 드립니다.",
+      };
+    }
+    if (e instanceof ApiError && e.status === 400) {
+      return { products: [], total: 0, notice: e.message };
+    }
+    throw e;
+  }
+}
+
+// searchParams 는 요청 시점 데이터라 Suspense 안에서 await 한다 (Cache Components)
+async function ProductSection({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
+  const criteria = parseSearch(await searchParams);
+  const { products, total, notice } = await loadListing(criteria);
+  return (
+    <>
+      <ProductSearchForm criteria={criteria} />
+      {notice && (
+        <p role="alert" className="text-sm text-muted-foreground">
+          {notice}
+        </p>
+      )}
+      {total !== undefined && (
+        <p className="text-sm text-muted-foreground">
+          검색 결과 {total.toLocaleString("ko-KR")}개
+          {total > products.length && ` 중 ${products.length}개`}. 검색은 몇 초 늦게 반영될 수
+          있습니다.
+        </p>
+      )}
+      {products.length === 0 && total !== undefined && !notice && (
+        <p className="text-sm">조건에 맞는 상품이 없습니다.</p>
+      )}
+      <ProductList products={products} />
+    </>
+  );
+}
+
+async function ProductList({ products }: { products: Product[] }) {
   const stocks = await stocksByProduct(products);
   return (
-    <ul className="flex flex-col divide-y">
+    <ul aria-label="상품 목록" className="flex flex-col divide-y">
       {products.map((p) => {
         const stock = stocks[p.id];
         return (
@@ -66,7 +124,7 @@ async function ProductList() {
   );
 }
 
-export default function Home() {
+export default function Home({ searchParams }: PageProps<"/">) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
       <Card>
@@ -90,7 +148,7 @@ export default function Home() {
             과정을 주문 상세에서 볼 수 있습니다.
           </p>
           <Suspense fallback={loading}>
-            <ProductList />
+            <ProductSection searchParams={searchParams} />
           </Suspense>
         </CardContent>
       </Card>
