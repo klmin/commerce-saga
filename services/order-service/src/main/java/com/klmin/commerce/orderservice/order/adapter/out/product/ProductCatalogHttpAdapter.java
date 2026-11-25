@@ -52,13 +52,13 @@ class ProductCatalogHttpAdapter implements ProductCatalogPort {
             throw new ProductCatalogUnavailableException(new IllegalStateException("empty product response"));
         }
         return response.items().stream()
-                .map(p -> new CatalogProduct(p.id(), p.price(), p.onSale()))
+                .map(p -> new CatalogProduct(p.id(), p.name(), p.price(), p.onSale()))
                 .toList();
     }
 
     record ProductsResponse(List<Item> items) {
     }
 
-    record Item(long id, long price, boolean onSale) {
+    record Item(long id, String name, long price, boolean onSale) {
     }
 }

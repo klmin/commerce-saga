@@ -73,7 +73,10 @@ export async function placeOrderAction(
 
   let orderId: string;
   try {
-    orderId = (await placeOrder(parsed.input, idempotencyKey)).orderId;
+    const fromCart = formData.get("fromCart") === "true";
+    orderId = (
+      await placeOrder(fromCart ? { ...parsed.input, fromCart } : parsed.input, idempotencyKey)
+    ).orderId;
   } catch (e) {
     // 로그인이 풀려 authedRequest 가 로그인 화면으로 보내는 경우(redirect)는 그대로 넘긴다
     unstable_rethrow(e);

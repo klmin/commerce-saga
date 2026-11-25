@@ -103,6 +103,8 @@ class GatewayRoutingTest {
         assertThat(LAST_REQUEST.get()).contains("path=/orders");
         assertThat(get("/api/payments?size=5", token).statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/payments");
+        assertThat(get("/api/cart", token).statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/cart");
     }
 
     @Test

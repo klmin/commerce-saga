@@ -124,6 +124,26 @@ describe("placeOrderAction", () => {
     );
   });
 
+  it("장바구니 주문이면 fromCart 를 함께 보낸다", async () => {
+    placeOrderMock.mockResolvedValue({ orderId: "01a2-order" });
+
+    await expect(
+      placeOrderAction(
+        { idempotencyKey: KEY },
+        form({ idempotencyKey: KEY, "qty-1": "1", fromCart: "true" }),
+      ),
+    ).rejects.toThrow("NEXT_REDIRECT:/orders/01a2-order");
+
+    expect(placeOrderMock).toHaveBeenCalledWith(
+      {
+        lines: [{ productId: 1, quantity: 1, unitPrice: 39_000 }],
+        pointAmount: 0,
+        fromCart: true,
+      },
+      KEY,
+    );
+  });
+
   it("판매 중지 상품(422)은 메시지를 보여 주고 키는 그대로", async () => {
     placeOrderMock.mockRejectedValue(new ApiError(422, "주문할 수 없는 상품입니다: [1]"));
 

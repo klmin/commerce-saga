@@ -14,11 +14,12 @@
 | Idempotency-Key | 409·422(상품)·503 에는 기록하지 않는다 → 같은 키로 새 가격을 보내면 주문된다. 이미 주문된 키의 재요청은 가격 확인 전에 처음 주문을 돌려준다(그 뒤 가격이 바뀌었거나 product 가 멈춰도) |
 | 확인과 저장 사이 | 그 사이 관리자가 또 바꾸면 주문은 확인한 가격(사용자가 본 가격)으로 들어간다. 한 번 더 확인하려면 주문 트랜잭션 안에서 다시 불러야 하는데, 트랜잭션 안 외부 호출이라 택하지 않았다 |
 | 화면 | 주문 폼이 보인 가격을 hidden 필드로 함께 보낸다. 409 면 바뀐 가격을 `옛 가격 → 새 가격` 으로 보여 주고, 다시 누르면 새 가격으로 보낸다 |
+| 장바구니 (4-1c) | order-service `cart_items`((user_id, product_id) PK, 수량, 담을 때 가격). 담을 때 product 에서 지금 가격을 받아 "담을 때 가격"으로 남기고(없는·판매 중지 422, 장애 503), 수량만 바꾸면 그대로 둔다. 조회 때 지금 가격과 비교해 `priceChanged`, product 장애면 담을 때 가격만(`pricesAvailable=false`). 장바구니 주문은 `POST /orders` + `fromCart: true`: 가격 확인은 위와 같고, 주문한 상품의 줄을 **주문과 같은 트랜잭션**에서 지운다(주문이 롤백되면 장바구니도 그대로). 내 장바구니만(JWT sub), 최대 50줄 |
 
 ## 재현
 
 1. 인프라, 서비스 전부(product-service 포함), gateway 를 띄운다
-2. `scripts/smoke-price-change.sh` (관리자 = 시드 사용자 100, 주문 = 사용자 1, 상품 3)
+2. `scripts/smoke-price-change.sh` (관리자 = 시드 사용자 100, 주문 = 사용자 1, 상품 3. 가격을 바꾸기 전에 장바구니에 담아 둔다)
 
 CI `e2e` 가 두 relay 모드에서 Idempotency-Key 시나리오(10) 다음에 돈다.
 
@@ -32,6 +33,9 @@ CI `e2e` 가 두 relay 모드에서 Idempotency-Key 시나리오(10) 다음에 �
 == 14c. 같은 키로 새 가격 → 주문, 가격 스냅샷
   ok  주문 …xxxxxxxx 생성, 줄 가격 19000
   ok  같은 키 재요청은 같은 주문 (200)
+== 14e. 장바구니: 가격 변경 표시, 장바구니 주문은 주문한 줄을 뺀다
+  ok  장바구니 담을 때 18000 → 지금 19000
+  ok  장바구니 주문 201, 주문한 줄이 빠짐
 == 14d. 판매 중지 상품 → 422
   ok  422
 PASS
@@ -43,4 +47,5 @@ PASS
 
 - order-service `PlaceOrderServiceTest`: 같은 가격 → 주문, 오르거나 내리면 409(주문·키 없음), 없는·판매 중지 422, product 장애 503, 잘못된 줄은 product 를 부르지 않고 400, 같은 키 재요청은 가격이 바뀌었거나 product 가 멈춰도 처음 주문
 - `ProductCatalogHttpAdapterTest`: 응답 읽기, 5xx·연결 거부·타임아웃(300ms 한도에 2초 지연)은 503 예외
+- 장바구니: `CartTest`(담을 때 가격 유지, 50줄), `CartServiceTest`(가격 변경 표시, 422·503, product 장애 fallback, 사용자 분리), `CartIntegrationTest`(Postgres upsert, 장바구니 주문이 주문한 줄만 지움), `PlaceOrderServiceTest`(409 면 장바구니 그대로), Playwright "장바구니에 담아 주문"
 - product-service `ProductPersistenceIntegrationTest`: 가격 이력, 같은 가격이면 이력 없음, 동시 가격 변경 10건에도 이력의 이전 가격이 직전 가격과 이어짐(행 잠금)

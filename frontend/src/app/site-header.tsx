@@ -23,6 +23,9 @@ export async function SiteHeaderSession() {
   return (
     <nav className="flex flex-wrap items-center justify-end gap-x-1 gap-y-2">
       <Button variant="ghost" size="sm" asChild>
+        <Link href="/cart">장바구니</Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild>
         <Link href="/orders">내 주문</Link>
       </Button>
       <Button variant="ghost" size="sm" asChild>
