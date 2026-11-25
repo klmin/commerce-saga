@@ -54,4 +54,10 @@ test("가격 범위와 정렬", async ({ page }) => {
   const names = await products(page).locator("span.font-medium").allTextContents();
   expect(names).toEqual(["USB-C 허브", "무선 마우스"]);
   await expect(page.getByLabel("정렬")).toHaveValue("price-asc");
+
+  // 전체 보기로 돌아가면 폼도 비워진다 (같은 페이지 안 이동에서 비제어 입력이 남지 않게)
+  await page.getByRole("link", { name: "전체 보기" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByLabel("정렬")).toHaveValue("relevance");
+  await expect(page.getByLabel("최소 가격")).toHaveValue("");
 });

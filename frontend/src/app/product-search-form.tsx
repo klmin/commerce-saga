@@ -7,11 +7,19 @@ import { SORTS, type SearchCriteria } from "@/lib/search";
 
 /**
  * 상품 검색 폼. 자바스크립트 없이 GET 으로 홈(/?q=...)을 다시 그린다 → 검색 조건이 URL 에 남아 새로고침·공유가 된다.
- * 서버 컴포넌트라 상태가 없고, 기본값은 지금 URL 의 조건이다
+ * 서버 컴포넌트라 상태가 없고, 기본값은 지금 URL 의 조건이다.
+ * 입력들이 비제어라 같은 페이지 안 이동(전체 보기 등)에서는 defaultValue 가 바뀌어도 화면 값이 남는다 →
+ * 조건마다 key 를 달리해 폼을 다시 마운트한다
  */
 export function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
   return (
-    <form action="/" method="get" role="search" className="flex flex-wrap items-end gap-2">
+    <form
+      key={JSON.stringify(criteria)}
+      action="/"
+      method="get"
+      role="search"
+      className="flex flex-wrap items-end gap-2"
+    >
       <div className="flex min-w-40 flex-1 flex-col gap-1">
         <Label htmlFor="search-q">검색어</Label>
         <Input
