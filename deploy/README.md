@@ -109,7 +109,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 |---|---|
 | `.github/workflows/release.yml` | main push(문서만 바뀐 커밋 제외)·수동 실행(`all`: 전부 다시 빌드). `ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시>` |
 | `scripts/release-plan.sh` | release 가 부른다. 마지막 배포 커밋과 비교해 바뀐 이미지를 고르고 `release-tags.yaml` 을 만든다 ([docs/ci-cd.md](../docs/ci-cd.md) "배포") |
-| `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` + `release-tags.yaml`(release/eks 에만 있음)을 값으로 쓴다 |
+| `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` 을 값으로 쓴다. 이미지별 태그 `release-tags.yaml`(release/eks 에만 있음)은 apps 차트가 `.Files` 로 읽는다(root 는 바꾸지 않음) |
 | `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |
 | `scripts/eks-argocd.sh` | 처음 한 번: ArgoCD 설치 → root apply → Synced·Healthy 대기 → 화면 주소 출력 |
 

@@ -82,7 +82,7 @@
 
 K-4 는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나라, 서비스 하나만 바뀌어도 이미지 11개를 다시 빌드하고 앱 Pod 10개를 모두 롤링했다. 컨슈머 전부가 재시작해 Kafka 리밸런스가 연달아 일어나고, 바꾸지 않은 서비스까지 재시작해 장애 범위가 넓어진다.
 
-- 결정: **이미지별 태그를 배포 브랜치에 커밋한다.** release 워크플로가 마지막 배포 이후 바뀐 이미지만 빌드하고(태그 = 이번 main 커밋 해시, 나머지는 이전 태그), `release/eks` 에 release 커밋(그 main 커밋의 파일 + `deploy/argocd/apps/release-tags.yaml`)을 얹는다. EKS root 가 이 파일을 valueFiles 로 읽고, 차트가 `image.tags.<이름>` 을 공통 `image.tag` 보다 먼저 쓴다. 태그가 그대로인 Deployment 는 ArgoCD 비교에서 차이가 없어 롤링되지 않는다
+- 결정: **이미지별 태그를 배포 브랜치에 커밋한다.** release 워크플로가 마지막 배포 이후 바뀐 이미지만 빌드하고(태그 = 이번 main 커밋 해시, 나머지는 이전 태그), `release/eks` 에 release 커밋(그 main 커밋의 파일 + `deploy/argocd/apps/release-tags.yaml`)을 얹는다. apps 차트(`templates/commerce-saga.yaml`)가 이 파일을 `.Files` 로 직접 읽어 앱 차트에 넘기고, 차트가 `image.tags.<이름>` 을 공통 `image.tag` 보다 먼저 쓴다. 태그가 그대로인 Deployment 는 ArgoCD 비교에서 차이가 없어 롤링되지 않는다. root 의 valueFiles 로 읽지 않은 이유: root 는 Git 에서 다시 읽히지 않아(처음 한 번 apply) 이미 등록된 클러스터는 root 를 다시 apply 해야 하고, 그 전에 새 형식 release 가 나가면 모든 이미지가 release 커밋 해시(이미지 없음)를 받는다
 - **비교 기준은 마지막 배포 커밋**(`release-tags.yaml` 의 `releasedCommit`)이다. 직전 커밋과 비교하면 release 의 `concurrency` 로 중간 실행이 건너뛰어지거나 실행이 실패했을 때 그 변경을 놓친다. 마지막 배포 커밋은 성공했을 때만 바뀌므로 다음 실행이 빠진 것을 모두 잡는다
 - **바뀐 것 판단은 경로로**(`scripts/release-plan.sh`): 서비스 폴더 → 그 서비스, 공유 모듈·빌드 설정·서비스 Dockerfile → 백엔드 전부, `frontend/` → frontend, Connect Dockerfile → connect. 서비스끼리 코드 의존이 없다는 규칙(AGENTS.md)이 있어 이 매핑이 성립한다
 - **release 커밋의 부모는 (이전 release 커밋, main 커밋)**: `release/eks` 가 force push 없이 앞으로만 가고 `git log --first-parent` 가 배포 이력이 된다. 롤백은 옛 release 커밋으로 브랜치를 되돌린다

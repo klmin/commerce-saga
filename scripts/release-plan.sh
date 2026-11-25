@@ -50,7 +50,8 @@ declare -A build=()
 if [ "$FORCE_ALL" = true ] || [ -z "$base" ]; then
   for i in $IMAGES; do build[$i]=1; done
 else
-  changed=$(git diff --name-only "$base" "$SHA")
+  # --no-renames: 이동한 파일은 원래 경로(삭제)와 새 경로(추가)를 모두 본다. 이미지 밖으로 옮겨도 원래 이미지를 다시 빌드한다
+  changed=$(git diff --name-only --no-renames "$base" "$SHA")
   has() { echo "$changed" | grep -qE "$1"; }
   # 이 판단 자체가 바뀌면 전부
   if has '^(\.github/workflows/release\.yml|scripts/release-plan\.sh)$'; then

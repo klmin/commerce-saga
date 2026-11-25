@@ -237,8 +237,7 @@ spec:
     targetRevision: release/eks                            # 어느 브랜치(커밋·태그도 가능)
     path: deploy/argocd/apps                               # 어느 폴더 (Chart.yaml 있음 → Helm)
     helm:
-      valueFiles: [values-eks.yaml, release-tags.yaml]     # values.yaml 위에 덮을 파일 (release-tags.yaml 은 release/eks 에만)
-      ignoreMissingValueFiles: true                        # main 에는 release-tags.yaml 이 없다
+      valueFiles: [values-eks.yaml]                        # values.yaml 위에 덮을 파일
       parameters:                                          # 그 위에 덮을 값
         - { name: revision, value: $ARGOCD_APP_REVISION }
         - { name: imageTag, value: $ARGOCD_APP_REVISION }  # release-tags.yaml 에 없는 이미지의 태그 (예전 방식 커밋용)
@@ -305,7 +304,7 @@ Application commerce-saga-root
 ```
 helm/commerce-saga/values.yaml   image.registry: ""   repositoryPrefix: commerce-saga   tag: dev
 argocd/apps/values-eks.yaml      commerceValues.image.registry: ghcr.io/klmin
-release-tags.yaml (release/eks)  commerceValues.image.tags.order-service: 59f17c1...
+argocd/apps/release-tags.yaml   commerceValues.image.tags.order-service: 59f17c1...  (release/eks 에만, apps 차트가 .Files 로 읽음)
 argocd/eks/root.yaml             imageTag = $ARGOCD_APP_REVISION (tags 에 없을 때만)
 argocd/apps/templates/commerce-saga.yaml   image.tag ← imageTag 를 commerceValues 에 합쳐 넘김
 helm/commerce-saga/templates/_helpers.tpl  commerce.imageTag = image.tags.<이름> 있으면 그것, 없으면 image.tag

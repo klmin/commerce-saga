@@ -64,7 +64,7 @@ main 머지 → plan: 마지막 배포 이후 바뀐 이미지 고르기 (script
 - 이미지는 linux/amd64 + linux/arm64 멀티 아키텍처. 아키텍처마다 그 아키텍처 러너(`ubuntu-latest`, `ubuntu-24.04-arm`)에서 네이티브로 빌드한다. 노드(x86, Graviton)는 자기 CPU 에 맞는 쪽을 받는다 ([ADR 0014](adr/0014-k8s-deployment.md) 멀티 아키텍처)
 - `release-tags.yaml` 의 모든 이미지가 두 아키텍처로 GHCR 에 있는지 확인한 뒤에만 `release/eks` 를 옮긴다. 그래서 이미지가 없는 커밋은 배포되지 않는다
 - release 커밋은 부모가 (이전 release 커밋, 이번 main 커밋)이라 `release/eks` 는 force push 없이 앞으로만 간다. `git log --first-parent origin/release/eks` 가 배포 이력이다
-- EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`, valueFiles 에 `release-tags.yaml`). CI 에는 클러스터 권한이 없다
+- EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`). `release-tags.yaml` 은 apps 차트(`templates/commerce-saga.yaml`)가 `.Files` 로 직접 읽어서 이미 등록된 root 를 다시 apply 하지 않아도 된다. CI 에는 클러스터 권한이 없다
 - 머지가 몰리면 한 번에 하나씩 돈다. 대기 중인 실행은 GitHub 가 최신 것 하나만 남긴다(건너뛴 커밋의 변경은 다음 실행에 포함된다)
 - 로컬·CI 검증용 ArgoCD(`deploy/argocd/root.yaml`)는 `main` 을 보고 `image.tags` 없이 공통 태그를 쓴다. 자세한 구성은 [deploy/README.md](../deploy/README.md), 결정은 [ADR 0014](adr/0014-k8s-deployment.md)
 
