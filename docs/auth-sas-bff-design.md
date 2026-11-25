@@ -243,7 +243,7 @@ ClientRegistration.withRegistrationId("gateway-web")
 
 - 확인(5-2 테스트·시나리오): 로그아웃 뒤 다시 로그인하면 **로그인 화면이 나와야** 한다(SAS 세션 ① 이 끝났는지)
 
-- **SCG·auth-service 가 원래 호스트를 알게 한다**: 둘 다 `server.forward-headers-strategy=framework`(auth-service 는 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). Caddy·Envoy·Vite 프록시가 넘긴 `Host`·`X-Forwarded-*` 로 redirect URI(`{baseUrl}/login/oauth2/code/{registrationId}`)를 만들고, 호스트에 맞는 클라이언트(`gateway-web`/`gateway-admin`)를 고른다
+- **SCG·auth-service 가 원래 호스트를 알게 한다**: 둘 다 `server.request.header.forwarded.strategy=framework` + `use-prefix=true`(Boot 4 이름. 옛 `server.forward-headers-strategy` 이고 `X-Forwarded-Prefix` 는 `use-prefix` 를 켜야 읽는다, 5-1 에서 확인. auth-service 는 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). Caddy·Envoy·Vite 프록시가 넘긴 `Host`·`X-Forwarded-*` 로 redirect URI(`{baseUrl}/login/oauth2/code/{registrationId}`)를 만들고, 호스트에 맞는 클라이언트(`gateway-web`/`gateway-admin`)를 고른다
 - **프록시는 들어온 `X-Forwarded-*` 를 믿지 않는다**: `framework` 전략은 헤더를 그대로 믿으므로, 브라우저가 직접 넣은 `X-Forwarded-Prefix`·`X-Forwarded-Host` 가 지나가면 auth-service 의 리다이렉트 주소·쿠키 `Path` 와 SCG 의 redirect URI·클라이언트 선택이 조작된다. 앞단(Caddy·Envoy)은 **두 방식 모두** 들어온 `X-Forwarded-Prefix` 를 지우고(경로 방식 `/auth` 경로에서만 자기가 다시 붙임), `X-Forwarded-Host`·`-Proto`·`-For` 는 자기 값으로 덮어쓴다(Caddy `request_header -X-Forwarded-Prefix`, Envoy `RequestHeaderModifier` 의 `remove`/`set`). SCG·auth-service 는 앞단을 거치지 않고는 닿지 않게 둔다(k8s 는 Service 만, 외부 노출은 Envoy 하나)
 - **클라이언트 고르기**: 화면은 클라이언트 이름을 몰라 항상 `/oauth2/authorization/auto` 로 시작한다(같은 빌드가 두 방식에서 돌아야 하므로). SCG 의 인가 요청 resolver 가 `auto` 를 실제 등록 id 로 바꾼다: 요청 호스트가 `ADMIN_CLIENT_HOST`(호스트 방식 `admin.example.com`) 면 `gateway-admin`, 아니면 `gateway-web`. 경로 방식은 `ADMIN_CLIENT_HOST` 를 비워 항상 `gateway-web`(7-4). 콜백 `/login/oauth2/code/{registrationId}` 는 고른 id 그대로라 라우팅(7-1)은 바뀌지 않는다
 - **로그아웃 뒤 돌아갈 곳**: 화면은 `POST /logout`(폼, `_csrf`) 에 `return_to` 로 자기 홈 경로를 보낸다. SCG 는 이를 그 클라이언트의 허용 목록(`WEB_HOME`·`ADMIN_HOME` 중 하나)과 비교해 `post_logout_redirect_uri` 를 정하고, 목록에 없으면 클라이언트 기본 홈. SAS 는 등록된 정확한 절대 주소만 받으므로 상대 값(`/admin/`)은 `{baseUrl}` 을 붙여 절대 주소로 만들고, 경로 방식에서는 `gateway-web` 에 `{origin}/`·`{origin}/admin/` 둘 다 등록한다(auth-service upsert 가 설정값에서)
@@ -265,7 +265,7 @@ ClientRegistration.withRegistrationId("gateway-web")
 | SPA 라우터 | `basename` 을 `<base>` 에서 읽는다(`new URL(document.baseURI).pathname`) |
 | SPA 가 부르는 주소 | **SCG 경로(`/api/…`, `/oauth2/authorization/auto`, `/logout`)는 루트 절대 경로**로. 상대 경로로 쓰면 경로 방식에서 `/admin/api` 가 된다. 로그인 클라이언트 이름은 쓰지 않는다(`auto`, 7-3 "클라이언트 고르기") |
 | 인증 화면이 부르는 주소 | **auth-service 경로(`login`, `signup`, `csrf`)와 화면 링크(`signin`, `register`)는 `<base>` 기준 상대 경로**로(앞 `/` 없이). 경로 방식에서 `/auth/login` 으로, 호스트 방식에서 `/login` 으로 저절로 맞는다 |
-| auth-service(SAS) | 항상 루트에서 돈다(context-path 없음). 경로 방식에서는 프록시가 `/auth` 를 떼고 `X-Forwarded-Prefix: /auth` 를 붙인다. `forward-headers-strategy=framework` 가 이를 읽어 SAS 가 만드는 주소(로그인 화면 리다이렉트 `/signin` 등)와 세션 쿠키 `Path` 에 `/auth` 를 붙인다 |
+| auth-service(SAS) | 항상 루트에서 돈다(context-path 없음). 경로 방식에서는 프록시가 `/auth` 를 떼고 `X-Forwarded-Prefix: /auth` 를 붙인다. `server.request.header.forwarded.strategy=framework`·`use-prefix=true` 가 이를 읽어 SAS 가 만드는 주소(로그인 화면 리다이렉트 `/signin` 등)와 세션 쿠키 `Path` 에 `/auth` 를 붙인다. 5-1 테스트로 확인(`OAuthPathModeIntegrationTest`: issuer `…/auth` 로 discovery·토큰 `iss`, 로그인 화면 `/auth/signin`, 쿠키 `Path=/auth`) |
 | issuer | `AUTH_ISSUER` 로 고정(경로 방식은 `https://example.com/auth` 처럼 경로가 붙는다). discovery 주소도 `…/auth/.well-known/openid-configuration`. **경로가 붙은 issuer 를 SAS 가 그대로 받는지 5-1 에서 테스트로 확인**한다 |
 | SCG | 두 방식 모두 그 도메인의 루트. 앞 경로 없음 |
 

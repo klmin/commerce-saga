@@ -49,7 +49,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 // outbox relay 는 켜 두되 돌지 않게 (Kafka 없이 outbox 행을 확인한다)
 // 로컬 개발용 키 파일(사용자 홈)을 만들지 않게 임시 키로
-@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h", "auth.jwt.dev-key-file="})
+// 클라이언트 시크릿은 테스트용 값으로 (로컬 개발용 파일을 만들지 않게)
+@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h", "auth.jwt.dev-key-file=",
+        "auth.oauth.secret-dev-dir=", "auth.oauth.clients.gateway-web.secret=test-web-secret",
+        "auth.oauth.clients.gateway-admin.secret=test-admin-secret"})
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @Testcontainers(disabledWithoutDocker = true)

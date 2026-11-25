@@ -5,6 +5,8 @@ import com.klmin.commerce.authservice.auth.application.InvalidCredentialsExcepti
 import com.klmin.commerce.authservice.auth.application.InvalidRefreshTokenException;
 import com.klmin.commerce.authservice.auth.application.LoginLockedException;
 import com.klmin.commerce.authservice.auth.application.SessionNotFoundException;
+import com.klmin.commerce.authservice.auth.application.port.in.AuthenticateCommand;
+import com.klmin.commerce.authservice.auth.application.port.in.AuthenticatedUserResult;
 import com.klmin.commerce.authservice.auth.application.port.in.LoginCommand;
 import com.klmin.commerce.authservice.auth.application.port.in.SessionResult;
 import com.klmin.commerce.authservice.auth.application.port.in.SignUpCommand;
@@ -133,6 +135,34 @@ class AuthServiceTest {
 
         clock.advance(Duration.ofMinutes(15));
         assertThat(service.login(new LoginCommand("alice", "password1", null)).accessToken()).isNotNull();
+    }
+
+    @Test
+    void SAS_로그인_확인은_토큰을_만들지_않고_userId_와_역할만_돌려주며_실패_제한을_같이_쓴다() {
+        long id = service.signUp(new SignUpCommand("alice", "password1"));
+
+        AuthenticatedUserResult user = service.authenticate(new AuthenticateCommand("ALICE", "password1"));
+        assertThat(user.userId()).isEqualTo(id);
+        assertThat(user.roles()).containsExactly("USER");
+        assertThat(families.store).isEmpty();
+
+        for (int i = 0; i < 5; i++) {
+            assertThatThrownBy(() -> service.authenticate(new AuthenticateCommand("alice", "wrong-pass")))
+                    .isInstanceOf(InvalidCredentialsException.class);
+        }
+        // SAS 로그인과 기존 로그인 API 는 같은 아이디별 실패 횟수를 쓴다
+        assertThatThrownBy(() -> service.login(new LoginCommand("alice", "password1", null)))
+                .isInstanceOf(LoginLockedException.class);
+    }
+
+    @Test
+    void 토큰_클레임은_지금_역할을_읽고_정지된_사용자는_거절한다() {
+        long id = service.signUp(new SignUpCommand("alice", "password1"));
+        assertThat(service.currentClaims(id).roles()).containsExactly("USER");
+
+        suspend(id);
+        assertThatThrownBy(() -> service.currentClaims(id)).isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> service.currentClaims(999_999)).isInstanceOf(InvalidCredentialsException.class);
     }
 
     @Test
