@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-1 auth-service → SAS: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-2 Gateway BFF: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -90,6 +90,7 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| #108 | 후속 5-2 Gateway BFF: `oauth2Login`(코드 등록, 공개 `AUTH_ISSUER`·내부 `AUTH_INTERNAL_URL`, PKCE), `/oauth2/authorization/auto` 클라이언트 자동 선택(`ADMIN_CLIENT_HOST`)·`return_to`(같은 출처 경로만), 토큰은 Redis 세션(`GW_SESSION`)·`TokenRelay`·refresh 갱신, 세션 없는 API 401, 쿠키 CSRF(`XSRF-TOKEN`), `POST /logout` → SAS OIDC 로그아웃, 서비스로 쿠키 안 넘김. issuer 통일(기존 토큰도 `AUTH_ISSUER`, 서비스 9개 `AUTH_INTERNAL_URL/oauth2/jwks`). SCG 는 Spring 기본 전달 헤더 처리 대신 믿는 프록시의 Proto/Host/Port 만 반영(rate limit IP 보호), userinfo 미사용. Bearer 요청은 그대로 |
 | #107 | 후속 5-1 auth-service → SAS: 표준 엔드포인트(issuer `AUTH_ISSUER`, 서명 키·JWKS 그대로), Flyway V4 SAS 스키마(PostgreSQL 맞춤·hash 인덱스), SSO 세션 Redis(`AUTH_SESSION`), 임시 로그인 화면 `/signin`·처리 `POST /login`(실패 제한 그대로)·가입 폼 `POST /signup`·`GET /csrf`(세션 CSRF), 토큰 `sub`=userId·`roles` 를 토큰마다 DB 에서, 고정 클라이언트 upsert(시크릿: 외부 → 개발용 파일 → 기동 실패), SSO 로그아웃 때 인가 기록 삭제·끝난 기록 정리, 경로 방식(`use-prefix`), k8s hook Job 이 `oauth-client-secrets` 생성. 기존 `/auth/*` API 는 5-3 까지 유지 |
 | #106 | 후속 5-0 [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md): auth-service → SAS(OIDC IdP), Gateway → BFF, 화면 → Vite SPA 3개, 고정 클라이언트 등록·시크릿 출처, 두 배치 방식. 고려한 안(자체 SSO·SAS·Keycloak / PKCE SPA·SCG BFF·Next BFF / 화면 2·3개 / Next CSR·Vite / DCR)과 대체 범위 표. ADR 0008(일부)·0011(전체)은 상태 줄만 대체 표시 |
 | #100 | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
@@ -573,7 +574,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 |---|---|
 | 5-0 | [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md) (결정·대체 범위, ADR 0008 일부·0011 대체 표시) |
 | 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지), PR #107 |
-| 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃) |
+| 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃), PR #108 |
 | 5-3 | 사용자 SPA(`frontend/apps/web` + `packages/ui`), compose Caddy·시크릿 init, Helm 호스트 라우트, e2e. 끝나면 Next·기존 `/auth/*` 제거 |
 | 5-4 | 인증 화면(`frontend/apps/auth`) |
 | 5-5 | 관리자 SPA(`frontend/apps/admin`), SSO 확인 |
