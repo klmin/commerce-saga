@@ -36,7 +36,7 @@
 - `main` 은 ruleset 으로 보호한다: 직접 push·삭제·force push 금지, PR 로만 머지(squash)
 - ruleset 에 필수 status check 는 없다. 경로로 건너뛴 워크플로가 머지를 막지 않는 대신, **머지 조건(CI 전부 통과 + 마지막 커밋에 Codex 지적 없음)은 사람이 확인한다** ([PROGRESS 0절](PROGRESS.md))
 - 체크를 필수로 바꾸려면 경로 필터(`paths`, `paths-ignore`)를 job 안의 경로 판단으로 바꿔야 한다. 건너뛴 워크플로의 필수 체크는 대기 상태로 남아 머지를 막는다
-- **배포는 main CI 가 통과한 커밋만 한다.** squash 머지라 PR 이 main 최신이 아니었으면 합친 결과는 머지 뒤 main CI 에서야 처음 돈다. 그래서 `release` 의 첫 잡(`ci`, `scripts/release-ci-gate.sh`)이 **마지막 배포 이후의 main 커밋들**의 CI(위 표의 CI 워크플로)가 끝나길 기다리고, 워크플로마다 가장 새 커밋의 실행이 통과해야 다음으로 간다. 실패·취소면 이미지도 만들지 않고 멈춘다. 이번 커밋만 보면 부족하다: CI 는 경로로 골라 돌아서, A 에서 backend 가 깨지고 B 가 frontend 만 바꿨으면 B 에는 backend 실행이 없어 A 의 깨진 코드가 B 와 함께 배포된다. 머지 자체는 막지 않는다(머지를 막으려면 위처럼 필수 체크 + ruleset 의 "브랜치 최신 상태 요구")
+- **배포는 main CI 가 통과한 커밋만 한다.** squash 머지라 PR 이 main 최신이 아니었으면 합친 결과는 머지 뒤 main CI 에서야 처음 돈다. 그래서 `release` 의 첫 잡(`ci`, `scripts/release-ci-gate.sh`)이 **마지막 배포 이후의 main 커밋들**의 CI(위 표의 CI 워크플로)가 끝나길 기다리고, **커밋 하나하나**의 실행(다시 돌렸으면 마지막 실행)이 모두 통과해야 다음으로 간다. 실패·취소면 이미지도 만들지 않고 멈춘다. 이번 커밋만 보면 부족하다: CI 는 경로로 골라 돌고 backend 는 바뀐 모듈만 빌드해서, A 에서 깨진 모듈이 B 에서는 다시 검증되지 않는다. 같은 이유로 B 의 통과가 A 의 실패를 대신하지 않는다. 실행이 아직 API 에 안 보이는 경우를 놓치지 않으려고, 문서만 바꾼 게 아닌 커밋은 codeql 실행(그런 push 마다 항상 돈다)이 보일 때까지 기다린다. 머지 자체는 막지 않는다(머지를 막으려면 위처럼 필수 체크 + ruleset 의 "브랜치 최신 상태 요구")
 
 ## 배포 (`release`)
 
@@ -67,7 +67,7 @@ main 머지 → ci: 마지막 배포 이후 main 커밋들의 CI 가 끝나고 �
 - release 커밋은 부모가 (이전 release 커밋, 이번 main 커밋)이라 `release/eks` 는 force push 없이 앞으로만 간다. `git log --first-parent origin/release/eks` 가 배포 이력이다
 - EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`). `release-tags.yaml` 은 apps 차트(`templates/commerce-saga.yaml`)가 `.Files` 로 직접 읽어서 이미 등록된 root 를 다시 apply 하지 않아도 된다. CI 에는 클러스터 권한이 없다
 - 머지가 몰리면 한 번에 하나씩 돈다. 대기 중인 실행은 GitHub 가 최신 것 하나만 남긴다(건너뛴 커밋의 변경은 다음 실행에 포함된다)
-- main CI 가 실패하면 고치는 커밋이 그 워크플로를 다시 돌려 통과할 때까지 배포가 멈춘다(그 사이 다른 서비스만 바꾼 머지도 배포되지 않는다). 고친 커밋이 통과하면 그 사이 변경을 한 번에 배포한다. 일시 실패였다면 CI 를 다시 돌려 통과시킨 뒤 그 release 실행을 다시 돌린다(Re-run failed jobs: `ci` 가 다시 판정)
+- main CI 가 실패하면 그 뒤 머지의 release 도 멈춘다(실패한 커밋이 범위에 남아 있다). 일시 실패면 그 CI 를 다시 돌려 통과시킨 뒤 release 를 다시 돌린다(Re-run failed jobs). 뒤 커밋이 고쳤다면 고친 커밋의 CI 통과를 확인하고 Actions 에서 release 를 수동 실행하며 `ci_from` = 고친 커밋(그 커밋부터만 판정)
 - 로컬·CI 검증용 ArgoCD(`deploy/argocd/root.yaml`)는 `main` 을 보고 `image.tags` 없이 공통 태그를 쓴다. 자세한 구성은 [deploy/README.md](../deploy/README.md), 결정은 [ADR 0014](adr/0014-k8s-deployment.md)
 
 **롤백**: 옛 release 커밋으로 브랜치를 되돌린다. 그 커밋의 `release-tags.yaml` 이 가리키는 이미지가 GHCR 에 남아 있다.

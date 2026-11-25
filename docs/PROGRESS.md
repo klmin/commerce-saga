@@ -89,7 +89,7 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | release 가 main CI 를 기다림: 첫 잡 `ci`(`scripts/release-ci-gate.sh`)가 마지막 배포 이후 main 커밋들의 CI 를 워크플로마다 가장 새 커밋 기준으로 판정(경로 필터로 빠진 워크플로의 앞 실패도 잡음), 실패·취소면 배포 중단. main CI 는 취소하지 않음(concurrency 그룹 = PR 은 브랜치, 그 밖은 실행 id). ADR 0014 "배포 전 main CI 대기" |
+| (이번 PR) | release 가 main CI 를 기다림: 첫 잡 `ci`(`scripts/release-ci-gate.sh`)가 마지막 배포 이후 main 커밋 하나하나의 CI 가 모두 통과해야 넘어감(경로 필터·모듈별 빌드라 뒤 커밋 통과가 앞 실패를 대신하지 않음, 고친 뒤 수동 실행 `ci_from`), 실행이 안 보이는 커밋은 codeql 이 보일 때까지 대기, 실패·취소면 배포 중단. main CI 는 취소하지 않음(concurrency 그룹 = PR 은 브랜치, 그 밖은 실행 id). ADR 0014 "배포 전 main CI 대기" |
 | #96 | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". |
 | #95 | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
 | #93 | 문서: 배포 환경 가이드 `docs/deployment-environments.md`(로컬·compose·k8s·ArgoCD·EKS, Helm·values·Application 매핑) |

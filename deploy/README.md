@@ -109,7 +109,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 | 파일 | 내용 |
 |---|---|
 | `.github/workflows/release.yml` | main push(문서만 바뀐 커밋 제외)·수동 실행(`all`: 전부 다시 빌드). `ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시>` |
-| `scripts/release-ci-gate.sh` | release 첫 잡. 마지막 배포 이후 main 커밋들의 CI 를 워크플로마다 가장 새 커밋 기준으로 판정, 실패·취소면 배포 중단 |
+| `scripts/release-ci-gate.sh` | release 첫 잡. 마지막 배포 이후 main 커밋 하나하나의 CI 가 통과해야 넘어감, 실패·취소면 배포 중단(고친 뒤 수동 실행 `ci_from`) |
 | `scripts/release-plan.sh` | release 가 부른다. 마지막 배포 커밋과 비교해 바뀐 이미지를 고르고 `release-tags.yaml` 을 만든다 ([docs/ci-cd.md](../docs/ci-cd.md) "배포") |
 | `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` 을 값으로 쓴다. 이미지별 태그 `release-tags.yaml`(release/eks 에만 있음)은 apps 차트가 `.Files` 로 읽는다(root 는 바꾸지 않음) |
 | `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |
