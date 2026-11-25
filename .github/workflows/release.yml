@@ -1,6 +1,6 @@
 name: release
 
-# 후속 3 K-4: main 에 머지되면 이미지 9개(서비스 7 + frontend + connect)를 GHCR 에 올리고,
+# 후속 3 K-4: main 에 머지되면 이미지 10개(서비스 8 + frontend + connect)를 GHCR 에 올리고,
 # 다 올라가면 release/eks 브랜치를 그 커밋으로 옮긴다.
 # EKS 의 ArgoCD 는 release/eks 를 보고(deploy/argocd/eks/root.yaml), 그 커밋 해시를 이미지 태그로 쓴다.
 # → 이미지가 아직 없는 커밋은 배포되지 않는다. 클러스터 권한은 CI 에 없다(ArgoCD 가 클러스터 안에서 가져간다)

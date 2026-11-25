@@ -7,7 +7,7 @@
 | 경로 | 내용 |
 |---|---|
 | `docker/service.Dockerfile` | 백엔드 서비스 공용 이미지. bootJar 를 받아 Spring Boot 레이어로 풀어 실행(비 root) |
-| `helm/commerce-saga/` | 차트 하나: Postgres(StatefulSet, 서비스별 DB·계정), Redis, Kafka(Strimzi `Kafka`·`KafkaNodePool`·`KafkaTopic`), 서비스 7개, 화면 |
+| `helm/commerce-saga/` | 차트 하나: Postgres(StatefulSet, 서비스별 DB·계정), Redis, Kafka(Strimzi `Kafka`·`KafkaNodePool`·`KafkaTopic`), 서비스 8개, 화면 |
 
 ## kind 에 올리기
 
@@ -99,7 +99,7 @@ kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-syst
 
 ```
 PR → CI(backend·e2e·k8s 등) → main 머지
-  → release 워크플로: bootJar → 이미지 9개 GHCR push (태그 = 커밋 해시) → release/eks 브랜치를 그 커밋으로
+  → release 워크플로: bootJar → 이미지 10개 GHCR push (amd64·arm64, 태그 = 커밋 해시) → release/eks 브랜치를 그 커밋으로
   → EKS 의 ArgoCD: release/eks 가 움직이면 sync, 이미지 태그 = 그 커밋 해시 → 롤링 배포
 ```
 
@@ -112,12 +112,12 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 
 ### 처음 한 번
 
-1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 9개, `release/eks` 브랜치가 생긴다
-2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 9개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
+1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 10개, `release/eks` 브랜치가 생긴다
+2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 10개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
 3. 클러스터 준비 확인
    - 노드는 amd64(x86)·arm64(Graviton) 둘 다 된다. 이미지가 멀티 아키텍처라 노드가 자기 CPU 에 맞는 쪽을 받는다
    - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
-   - 노드 여유: 요청 합계 CPU 약 1.5 코어, 메모리 약 5Gi (서비스 7개 JVM + Kafka + Connect + Postgres)
+   - 노드 여유: 요청 합계 CPU 약 1.6 코어, 메모리 약 5.5Gi (서비스 8개 JVM + Kafka + Connect + Postgres)
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
 
 그 뒤로는 머지만 하면 된다. 롤백은 `git push origin <옛 커밋>:refs/heads/release/eks --force` (그 커밋의 이미지가 GHCR 에 있다).

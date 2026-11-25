@@ -6,9 +6,9 @@ name: k8s
 on:
   push:
     branches: [main]
-    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'infra/alertmanager/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
   pull_request:
-    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'infra/alertmanager/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
   # argocd 잡은 PR 에서 배포 설정이 바뀔 때만 돈다 → main 에 들어간 결과는 매일 한 번 다시 본다
   schedule:
     - cron: '0 19 * * *' # 매일 04:00 KST
