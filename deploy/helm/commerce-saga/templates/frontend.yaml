@@ -28,10 +28,15 @@ spec:
     metadata:
       labels: {{- $labels | nindent 8 }}
     spec:
+      # 롤아웃 중 내려가는 Pod 로 가는 요청이 실패하지 않게 (values gracefulTermination)
+      terminationGracePeriodSeconds: {{ .Values.gracefulTermination.terminationGracePeriodSeconds }}
       containers:
         - name: app
           image: {{ include "commerce.image" (dict "name" "frontend" "root" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          lifecycle:
+            preStop:
+              sleep: { seconds: {{ .Values.gracefulTermination.preStopSleepSeconds }} }
           ports:
             - name: http
               containerPort: 3000

@@ -55,6 +55,8 @@ spec:
     metadata:
       labels: {{- $labels | nindent 8 }}
     spec:
+      # 롤아웃 중 내려가는 Pod 로 가는 요청이 실패하지 않게 (values gracefulTermination)
+      terminationGracePeriodSeconds: {{ $root.Values.gracefulTermination.terminationGracePeriodSeconds }}
       {{- if $jwtKey }}
       # 서명 키 Secret 파일을 앱 사용자(uid 10001, deploy/docker/service.Dockerfile)가 읽게 그룹을 준다
       securityContext:
@@ -71,6 +73,10 @@ spec:
         - name: app
           image: {{ include "commerce.image" (dict "name" $name "root" $root) }}
           imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          # SIGTERM 전에 기다려 Endpoints 에서 빠질 시간을 준다. sleep 핸들러라 이미지에 셸이 없어도 된다 (k8s 1.30+)
+          lifecycle:
+            preStop:
+              sleep: { seconds: {{ $root.Values.gracefulTermination.preStopSleepSeconds }} }
           ports:
             - name: http
               containerPort: {{ $svc.port }}
