@@ -60,7 +60,8 @@ docker compose -f infra/docker-compose.yml up -d
   - 커맨드(명령형, 수신자 하나, 응답 기대): `<수신 서비스>.command` — 수신 서비스 소유
   - 응답: `<응답 서비스>.reply` — 오케스트레이터만 구독
   - 이벤트(과거형 사실, 수신자 0~N): `<발행 서비스>.events` — 발행 서비스 소유
-- Kafka 메시지 키는 `orderId` (주문 단위 순서 보장). 주문과 상관없는 `auth.events` 는 `userId`
+  - 테이블 CDC(읽기 모델 복제용, 비즈니스 코드가 발행하지 않음): `<소유 서비스>.cdc.<테이블>` — 테이블 소유 서비스의 계약, 열은 추가만 (ADR 0010)
+- Kafka 메시지 키는 `orderId` (주문 단위 순서 보장). 주문과 상관없는 `auth.events` 는 `userId`, `product.cdc.products` 는 상품 id
 - 메시지에 JWT·비밀값을 싣지 않는다. 식별자(`userId`, `orderId`)만
 
 ## Saga / Outbox / 멱등성

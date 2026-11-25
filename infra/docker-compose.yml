@@ -98,11 +98,12 @@ services:
       - |
         # <토픽>.DLT: 재시도해도 처리할 수 없는 원본 메시지 보관 (리스너 에러 핸들러가 옮긴다)
         # auth.events: 키가 userId (가입 → 포인트 계정, 후속 2 A-3-2)
-        for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events auth.events inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT auth.events.DLT; do
+        # product.cdc.products: products 테이블 CDC(검색용, ADR 0010). 키가 상품 id
+        for t in inventory.command inventory.reply point.command point.reply payment.command payment.reply order.events auth.events product.cdc.products inventory.command.DLT inventory.reply.DLT point.command.DLT point.reply.DLT payment.command.DLT payment.reply.DLT order.events.DLT auth.events.DLT product.cdc.products.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$t" --partitions 3 --replication-factor 1
         done
         # Debezium 커넥터 heartbeat (heartbeat.interval.ms). 트래픽이 없는 DB 의 slot 위치를 앞으로 옮긴다 (시나리오 5)
-        for c in order-outbox inventory-outbox point-outbox payment-outbox auth-outbox; do
+        for c in order-outbox inventory-outbox point-outbox payment-outbox auth-outbox product-cdc; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "__debezium-heartbeat.$$c" --partitions 1 --replication-factor 1
         done
     restart: "no"
@@ -124,6 +125,7 @@ services:
       POINT_DB_PASSWORD: point_svc
       PAYMENT_DB_PASSWORD: payment_svc
       AUTH_DB_PASSWORD: auth_svc
+      PRODUCT_DB_PASSWORD: product_svc
     ports:
       # 8083 은 point-service 가 쓰므로 호스트에는 8088 로 연다
       - "${CONNECT_PORT:-8088}:8083"

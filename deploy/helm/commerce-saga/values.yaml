@@ -47,6 +47,8 @@ kafka:
     - payment.reply
     - order.events
     - auth.events
+    # products 테이블 CDC (검색용, ADR 0010). 키가 상품 id
+    - product.cdc.products
 
 # outbox relay. 배포 기준은 Debezium 이다(ADR 0004): KafkaConnect + 서비스별 KafkaConnector, 서비스는 스케줄러 relay 를 끈다.
 # false 면 KafkaConnect 없이 서비스의 스케줄러 relay(OUTBOX_RELAY_ENABLED=true)로 보낸다
@@ -79,10 +81,11 @@ services:
     strategy:
       type: RollingUpdate
       rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
-  # 상품·가격 (ADR 0016). 메시지·outbox 없음
+  # 상품·가격 (ADR 0016). outbox 없음. cdc: products 테이블을 Debezium 이 검색용으로 복제한다 (ADR 0010)
   product-service:
     port: 8087
     db: product
+    cdc: true
   order-service:
     port: 8081
     db: order

@@ -1,6 +1,7 @@
 {{- if .Values.debezium.enabled }}
 # Debezium outbox relay (ADR 0004 의 배포 기준). Strimzi KafkaConnect 하나에 서비스마다 KafkaConnector 하나.
 # 커넥터 설정은 compose 의 infra/connect/<서비스>-outbox.json 과 같다. 서비스는 OUTBOX_RELAY_ENABLED=false 로 뜬다
+# cdc: true 인 서비스(product)는 outbox 대신 테이블 CDC 커넥터(infra/connect/product-cdc.json 과 같음, ADR 0010)
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaConnect
 metadata:
@@ -40,7 +41,7 @@ spec:
     connectContainer:
       env:
         {{- range $name, $svc := .Values.services }}
-        {{- if $svc.outbox }}
+        {{- if or $svc.outbox $svc.cdc }}
         - name: {{ upper $svc.db }}_DB_PASSWORD
           valueFrom:
             secretKeyRef: { name: {{ $name }}-db, key: password }
@@ -93,6 +94,65 @@ spec:
     transforms.outbox.table.fields.additional.placement: "type:header:type,traceparent:header:traceparent"
 ---
 # heartbeat 토픽 (자동 생성을 껐으므로 만든다)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: debezium-heartbeat.{{ $connector }}
+  labels:
+    strimzi.io/cluster: {{ $.Release.Name }}
+spec:
+  topicName: __debezium-heartbeat.{{ $connector }}
+  partitions: 1
+  replicas: {{ $.Values.kafka.replicas }}
+{{- end }}
+{{- end }}
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.cdc }}
+{{- $connector := printf "%s-cdc" $svc.db }}
+---
+# 테이블 CDC: products 의 검색에 필요한 열만, 변경 후 행만 product.cdc.products 로 (키 = 상품 id, 헤더 __lsn·__source_ts_ms)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaConnector
+metadata:
+  name: {{ $connector }}
+  labels:
+    strimzi.io/cluster: {{ $.Release.Name }}
+spec:
+  class: io.debezium.connector.postgresql.PostgresConnector
+  tasksMax: 1
+  config:
+    plugin.name: pgoutput
+    database.hostname: postgres
+    database.port: 5432
+    database.user: {{ $svc.db }}_svc
+    database.password: "${env:{{ upper $svc.db }}_DB_PASSWORD}"
+    database.dbname: {{ $svc.db }}_db
+    topic.prefix: {{ $connector }}
+    table.include.list: public.products
+    column.include.list: public.products.id,public.products.name,public.products.description,public.products.price,public.products.on_sale,public.products.updated_at
+    slot.name: {{ $svc.db }}_cdc_slot
+    publication.name: {{ $svc.db }}_cdc_pub
+    publication.autocreate.mode: filtered
+    snapshot.mode: initial
+    poll.interval.ms: 100
+    heartbeat.interval.ms: 10000
+    heartbeat.action.query: "select pg_logical_emit_message(false, 'heartbeat', now()::varchar)"
+    message.prefix.exclude.list: heartbeat
+    tombstones.on.delete: true
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: org.apache.kafka.connect.json.JsonConverter
+    value.converter.schemas.enable: false
+    header.converter: org.apache.kafka.connect.storage.SimpleHeaderConverter
+    transforms: unwrap,key,route
+    transforms.unwrap.type: io.debezium.transforms.ExtractNewRecordState
+    transforms.unwrap.delete.tombstone.handling.mode: tombstone
+    transforms.unwrap.add.headers: lsn,source.ts_ms
+    transforms.key.type: org.apache.kafka.connect.transforms.ExtractField$Key
+    transforms.key.field: id
+    transforms.route.type: org.apache.kafka.connect.transforms.RegexRouter
+    transforms.route.regex: '{{ $connector }}\.public\.products'
+    transforms.route.replacement: product.cdc.products
+---
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
