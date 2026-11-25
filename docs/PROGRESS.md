@@ -588,6 +588,14 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 클라이언트 시크릿 k8s: 서명 키와 같은 hook Job 이 Secret `oauth-client-secrets` 를 없을 때만 만든다(설계 문서의 "k8s 스크립트" 자리. 이미 있는 Argo CD 밖 생성 방식을 그대로 씀)
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
+**5-2 에서 정한 것** (Gateway BFF, 추천안)
+- issuer 통일: 기존 `/auth/*` 토큰도 `iss` = `AUTH_ISSUER`(로컬 `http://localhost:8086`). Gateway·서비스 9개는 `AUTH_ISSUER` 문자열과 `AUTH_INTERNAL_URL/oauth2/jwks` 로 검증(두 토큰은 서명 키가 같다). 지금 Next 화면(Bearer)과 BFF 세션이 5-3 까지 함께 돈다. k8s 는 공개 주소가 생기는 5-3 전까지 `AUTH_ISSUER=http://auth-service:8086`
+- BFF 세션(`GW_SESSION`, Redis `gateway:session`) 유휴 2시간(`GATEWAY_SESSION_IDLE`): 쇼핑 중 잠깐 자리를 비워도 이어지고 공용 PC 에 오래 남지 않게. 끝나면 API 401 → 다시 로그인(SSO 세션 30분이 남아 있으면 화면 없이 통과)
+- 전달 헤더: Spring 기본 처리(`forwarded.strategy=framework`)를 SCG 에서는 쓰지 않는다. 연결 주소까지 `X-Forwarded-For` 맨 왼쪽으로 바꿔 rate limit IP 가 무너지기 때문. redirect URI 는 설정값 그대로, 믿는 프록시(`GATEWAY_TRUSTED_PROXIES`)의 `X-Forwarded-Proto/Host/Port` 만 요청 주소에 반영(TLS 종료 뒤 콜백 주소 비교용). 설계 문서 7-3 에 반영
+- userinfo 는 부르지 않는다(Security 7 은 주소가 등록돼 있으면 로그인 때 부른다). 역할은 ID 토큰 `roles` → 세션 권한(`/api/admin/**` 1차 검사), 서비스는 relay 된 access token 으로 다시 검사
+- 서비스로 브라우저 쿠키를 넘기지 않는다(`RemoveRequestHeader=Cookie`). 서비스는 쿠키가 실린 상태 변경을 CSRF 로 거절한다(ADR 0008)
+- 로그인 실패는 사용자 화면 `?login_error` 로(기본 `/login?error` 는 화면에 없는 주소)
+
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
 - 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그와 경보(`SagaCompensationStuck`)
