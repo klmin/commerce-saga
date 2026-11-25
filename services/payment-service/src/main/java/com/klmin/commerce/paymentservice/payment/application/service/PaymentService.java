@@ -15,6 +15,7 @@ import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGat
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentGatewayPort.GatewayResult;
 import com.klmin.commerce.paymentservice.payment.application.port.out.PaymentPort;
+import com.klmin.commerce.paymentservice.payment.application.port.out.PgApproveAttemptPort;
 import com.klmin.commerce.paymentservice.payment.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.paymentservice.payment.domain.Money;
 import com.klmin.commerce.paymentservice.payment.domain.Payment;
@@ -45,14 +46,17 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
     private final PaymentGatewayFaultPort faultPort;
     private final PaymentPort paymentPort;
     private final ProcessedMessagePort processedMessagePort;
+    private final PgApproveAttemptPort attemptPort;
 
     PaymentService(PaymentRecorder recorder, PaymentGatewayPort gateway, PaymentGatewayFaultPort faultPort,
-                   PaymentPort paymentPort, ProcessedMessagePort processedMessagePort) {
+                   PaymentPort paymentPort, ProcessedMessagePort processedMessagePort,
+                   PgApproveAttemptPort attemptPort) {
         this.recorder = recorder;
         this.gateway = gateway;
         this.faultPort = faultPort;
         this.paymentPort = paymentPort;
         this.processedMessagePort = processedMessagePort;
+        this.attemptPort = attemptPort;
     }
 
     @Override
@@ -70,6 +74,8 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
             recorder.replyInvalid(messageId, command.orderId(), "invalid command: amount must be positive");
             return;
         }
+        // PG 를 부르기 전에 시도를 남긴다(커밋). 이전 시도가 있었다면 그 요청이 PG 에 닿았을 수 있다
+        boolean attemptedBefore = attemptPort.recordAttempt(command.orderId());
         GatewayResult result;
         try {
             result = gateway.approve(command.orderId(), command.userId(), Money.of(command.amount()));
@@ -77,7 +83,14 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
             recorder.recordUnknown(messageId, command);
             return;
         } catch (PaymentGatewayUnavailableException e) {
-            // 서킷 브레이커가 열려 PG 를 부르지 않았다 → 확정 실패. Saga 가 바로 보상한다 (4-4절 ③)
+            if (attemptedBefore) {
+                // 이번 호출은 막혔지만 이전 시도(예: 타임아웃 뒤 UNKNOWN 기록이 실패해 재전달됨, Saga 재전송)가
+                // PG 에서 승인됐을 수 있다 → 거절로 확정하지 않고 PG 조회로 확정한다 (ADR 0007)
+                log.warn("PG 회로 열림, 이전 시도가 있어 결과 조회로 확정 (orderId={})", command.orderId());
+                recorder.recordUnknown(messageId, command);
+                return;
+            }
+            // 서킷 브레이커가 열려 이 주문은 PG 에 한 번도 가지 않았다 → 확정 실패. Saga 가 바로 보상한다 (4-4절 ③)
             log.warn("PG 회로 열림, 결제 즉시 실패 (orderId={})", command.orderId());
             result = GatewayResult.declined(CIRCUIT_OPEN_REASON);
         }

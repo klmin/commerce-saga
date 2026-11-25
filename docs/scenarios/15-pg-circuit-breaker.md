@@ -10,6 +10,7 @@ PG 가 느려지거나 멈추면 지금까지는 결제마다 클라이언트 �
 | 실패로 세는 것 | 타임아웃·오류. PG 의 거절(DECLINE)은 정상 응답이라 세지 않는다 |
 | 열기 | 최근 20건(카운트 창) 중 10건 이상 쌓였고 실패 50% 이상 |
 | 열린 동안 | PG 를 부르지 않는다 → 요청이 PG 에 가지 않았으므로 **확정 실패**: `DECLINED`("PG unavailable (circuit open)") 기록 + `PaymentFailed` 응답 → Saga 가 포인트 환불 → 재고 해제 → 취소 |
+| 이전 시도가 있던 주문 | PG 를 부르기 전 `pg_approve_attempts` 에 시도를 커밋한다. 회로가 열렸을 때 그 주문에 이전 시도가 있으면(타임아웃 뒤 UNKNOWN 기록이 실패해 재전달, Saga 재전송) 이전 요청이 PG 에서 승인됐을 수 있으므로 거절로 확정하지 않고 `UNKNOWN` → 보정이 조회로 확정한다(늦은 승인은 기존처럼 환불) |
 | 반열림 | 30초 뒤(`PAYMENT_CB_OPEN_WAIT`) 다음 결제부터 3건을 시험으로 PG 에 보낸다. 시험 호출이 타임아웃이면 지금처럼 UNKNOWN + 보정(ADR 0007), 실패가 많으면 다시 열림 |
 | 상태 | 인스턴스마다 따로(공유 저장소 없음). 지표 `payment_pg_circuit_state`(0 닫힘, 1 열림, 2 반열림) |
 | 라이브러리 | Resilience4j 코어(`resilience4j-circuitbreaker` 2.3.0). Spring Cloud CircuitBreaker 의 기본 구현이고 상태 머신이 검증돼 있다. Spring 통합 없이 코어만 쓰고 설정은 `payment.circuit-breaker.*` |

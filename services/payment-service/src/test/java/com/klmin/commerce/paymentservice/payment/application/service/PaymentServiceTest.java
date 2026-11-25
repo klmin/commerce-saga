@@ -36,9 +36,20 @@ class PaymentServiceTest {
     private final RecordingReplies replies = new RecordingReplies();
     private final StubGateway gateway = new StubGateway();
     private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
+    private final InMemoryAttempts attempts = new InMemoryAttempts();
     private final PaymentService service = new PaymentService(
             new PaymentRecorder(payments, replies, processed, Clock.fixed(NOW, ZoneOffset.UTC)), gateway, gateway, payments,
-            processed);
+            processed, attempts);
+
+    /** PG 승인 시도 기록 (주문 id 집합) */
+    static class InMemoryAttempts implements com.klmin.commerce.paymentservice.payment.application.port.out.PgApproveAttemptPort {
+        final java.util.Set<UUID> orderIds = new java.util.HashSet<>();
+
+        @Override
+        public boolean recordAttempt(UUID orderId) {
+            return !orderIds.add(orderId);
+        }
+    }
 
     @Test
     void pay_approved_recordsAndRepliesApproved() {
@@ -63,6 +74,29 @@ class PaymentServiceTest {
         assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
         assertThat(payments.store.get(orderId).reason()).isEqualTo(PaymentService.CIRCUIT_OPEN_REASON);
         assertThat(replies.log).singleElement().satisfies(s -> assertThat(s).startsWith("failed:" + orderId));
+    }
+
+    @Test
+    void pay_circuitOpen_afterEarlierAttempt_recordsUnknownWithoutReply() {
+        // 이전 시도가 PG 에 닿았을 수 있다(예: 타임아웃 뒤 UNKNOWN 기록이 실패해 같은 메시지가 재전달됨)
+        UUID orderId = UUID.randomUUID();
+        attempts.orderIds.add(orderId);
+        gateway.circuitOpen = true;
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(replies.log).isEmpty();
+    }
+
+    @Test
+    void pay_recordsAttemptBeforeCallingPg() {
+        UUID orderId = UUID.randomUUID();
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+
+        assertThat(attempts.orderIds).contains(orderId);
     }
 
     @Test
