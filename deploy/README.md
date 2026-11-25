@@ -33,6 +33,7 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **relay**: K-1 은 스케줄러 relay 로 시작했고, K-2 부터 배포 기준인 Debezium(ADR 0004)이 기본이다(아래)
 - **trace**: K-1 은 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0` 으로 시작했고, 지금은 차트가 관측성을 같이 올려 서비스가 trace·로그를 alloy 로 보낸다(아래 "관측성". 끄면 `observability.enabled=false`)
 - **auth-service 서명 키**: Secret `auth-jwt-key`(`private.pem` PKCS#8, `kid`)를 읽기만 한다. 로컬 k8s 는 차트의 hook Job(Helm `pre-install,pre-upgrade` = Argo CD PreSync)이 없을 때만 한 번 만들고 그 뒤로는 그대로 둔다. Secret 은 차트에 없어 Argo CD 가 관리하지 않는다(일부러, sync 로 덮어쓰거나 지우지 않게). EKS 는 외부 비밀 저장소(External Secrets 등)가 같은 이름의 Secret 을 채우고 `authJwtKey.generate=false`. 모든 Pod 가 같은 키라 `RollingUpdate`(`maxUnavailable: 0`)로 무중단 배포한다. Secret 을 지우면 다음 sync 때 새 키 → 그 전 access token 무효(refresh 로 복구). 확인: `kubectl -n commerce get secret auth-jwt-key -o jsonpath={.data.kid} | base64 -d` (ADR 0014 "auth-service 서명 키")
+- **Pod 종료**: 서비스·frontend 는 `preStop` 5초 대기(`sleep` 핸들러, k8s 1.30+) 뒤 SIGTERM, 유예 40초(`gracefulTermination`). 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시라, 대기가 없으면 Gateway·Envoy 가 옛 주소를 지우기 전에 앱이 연결을 닫아 롤아웃 중 요청이 실패한다(Gateway 는 연결 타임아웃 30초 뒤 500). Spring 은 graceful shutdown(기본)으로 처리 중인 요청을 끝낸다
 - **이미지**: kind 노드에 직접 넣는다(`kind load docker-image`). 레지스트리에 올리면 `image.registry` 만 채운다
 
 ## 결정 (K-2, Debezium)

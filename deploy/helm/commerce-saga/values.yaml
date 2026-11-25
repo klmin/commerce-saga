@@ -125,6 +125,14 @@ authJwtKey:
     openssl: alpine/openssl:3.5.8
     kubectl: alpine/kubectl:1.36.1
 
+# 서비스·frontend Pod 를 내릴 때. 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시에 일어난다.
+# Gateway·kube-proxy·Envoy 가 옛 Pod 주소를 지우기 전에 앱이 연결을 닫으면 그 사이 요청이 실패한다
+# (Gateway 는 연결 타임아웃 30초를 기다리다 500). 그래서 SIGTERM 전에 잠깐 기다려 새 요청이 끊기게 한 뒤 닫는다.
+# Spring 은 graceful shutdown(기본, 단계당 최대 30초)으로 처리 중인 요청을 끝낸다 → 유예는 대기 + 30초보다 길게
+gracefulTermination:
+  preStopSleepSeconds: 5
+  terminationGracePeriodSeconds: 40
+
 serviceResources:
   requests: { cpu: 100m, memory: 384Mi }
   limits: { memory: 768Mi }
