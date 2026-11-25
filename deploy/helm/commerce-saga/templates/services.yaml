@@ -3,6 +3,7 @@
 {{- $root := . }}
 {{- $kafka := include "commerce.kafkaBootstrap" . }}
 {{- range $name, $svc := .Values.services }}
+{{- $jwtKey := and (eq $name "auth-service") $root.Values.authJwtKey.enabled }}
 {{- $labels := include "commerce.labels" (dict "name" $name "root" $root) }}
 {{- if $svc.db }}
 ---
@@ -39,8 +40,13 @@ metadata:
 spec:
   replicas: {{ $svc.replicas | default 1 }}
   {{- with $svc.strategy }}
+  # 문자열(Recreate)이면 type 만, 맵이면 그대로 (rollingUpdate 포함)
   strategy:
+    {{- if kindIs "string" . }}
     type: {{ . }}
+    {{- else }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- end }}
   selector:
     matchLabels:
@@ -49,6 +55,11 @@ spec:
     metadata:
       labels: {{- $labels | nindent 8 }}
     spec:
+      {{- if $jwtKey }}
+      # 서명 키 Secret 파일을 앱 사용자(uid 10001, deploy/docker/service.Dockerfile)가 읽게 그룹을 준다
+      securityContext:
+        fsGroup: 10001
+      {{- end }}
       {{- if $svc.db }}
       # Flyway 가 DB 를 못 찾아 재시작을 거듭하지 않게 Postgres 가 받을 때까지 기다린다
       initContainers:
@@ -131,6 +142,17 @@ spec:
               valueFrom:
                 secretKeyRef: { name: {{ $name }}-db, key: password }
             {{- end }}
+            {{- if $jwtKey }}
+            # 서명 키는 Secret 에서 (values authJwtKey). file: 이 없으면 Spring 이 classpath 로 찾는다
+            - name: AUTH_JWT_PRIVATE_KEY_LOCATION
+              value: file:/etc/auth-jwt/private.pem
+            - name: AUTH_JWT_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: {{ $root.Values.authJwtKey.secretName }}, key: kid }
+            # 로컬 개발용 키 파일(앱이 띄울 때 만들어 재사용)을 끈다. k8s 는 위 Secret 만 쓴다
+            - name: AUTH_JWT_DEV_KEY_FILE
+              value: ""
+            {{- end }}
             {{- range $k, $v := $svc.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}
@@ -146,4 +168,19 @@ spec:
             httpGet: { path: /actuator/health/readiness, port: http }
             periodSeconds: 5
           resources: {{- toYaml $root.Values.serviceResources | nindent 12 }}
+          {{- if $jwtKey }}
+          volumeMounts:
+            - name: auth-jwt-key
+              mountPath: /etc/auth-jwt
+              readOnly: true
+      volumes:
+        - name: auth-jwt-key
+          secret:
+            secretName: {{ $root.Values.authJwtKey.secretName }}
+            # 개인키만 파일로. kid 는 env 로 받는다. 0440 + fsGroup 이라 앱 사용자만 읽는다
+            defaultMode: 0440
+            items:
+              - key: private.pem
+                path: private.pem
+          {{- end }}
 {{- end }}

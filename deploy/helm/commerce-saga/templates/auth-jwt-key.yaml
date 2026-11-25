@@ -1,0 +1,152 @@
+{{- /*
+auth-service 서명 키 Secret 을 클러스터 안에서 한 번만 만든다 (ADR 0014 "auth-service 서명 키").
+
+- Helm hook pre-install·pre-upgrade. Argo CD 는 이를 PreSync 로 보고 sync 마다 돌린다. 실패하면 sync 가 멈춘다
+- Secret 이 이미 있으면 건드리지 않는다. 동시에 두 Job 이 돌아 create 가 AlreadyExists 여도 성공으로 본다
+- Secret 자체는 차트 매니페스트에 없다(일부러). 차트에 두면 Argo CD 가 매 sync 에 덮어쓰거나 prune 해 키가 바뀐다.
+  Job 이 만든 Secret 에는 Argo CD 추적 표시가 없어 Argo CD 가 관리하지 않는다 → 지우지도 바꾸지도 않는다.
+  Secret 을 지우면 다음 sync 에서 새 키가 생기고 그 전 access token 은 무효다(refresh 로 다시 받는다)
+- EKS 등에서 외부 비밀 저장소(External Secrets 등)가 같은 이름의 Secret 을 채우면 authJwtKey.generate=false 로 끈다
+*/ -}}
+{{- if and .Values.authJwtKey.enabled .Values.authJwtKey.generate }}
+{{- $k := .Values.authJwtKey }}
+{{- $name := "auth-jwt-key-init" }}
+{{- $labels := include "commerce.labels" (dict "name" $name "root" .) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+---
+# 이 namespace 의 secrets get·create 만. create 는 resourceNames 로 좁힐 수 없다(k8s RBAC)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $k.secretName | quote }}]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+# ttlSecondsAfterFinished 는 두지 않는다. Argo CD 가 Job 상태를 읽어 hook 성공을 판단하고, 지우기는 hook-delete-policy 가 한다
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+      # 1) openssl 로 키·kid 를 만든다(메모리 emptyDir). Secret 이 이미 있으면 2) 가 버린다
+      initContainers:
+        - name: generate
+          image: {{ $k.images.openssl }}
+          command:
+            - sh
+            - -ec
+            - |
+              umask 077
+              openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /work/private.pem
+              # PKCS#8(-----BEGIN PRIVATE KEY-----) 인지 확인한다. auth-service 는 PKCS#8 만 읽는다
+              head -1 /work/private.pem | grep -qx -- '-----BEGIN PRIVATE KEY-----'
+              printf 'k8s-%s-%s' "$(date -u +%Y%m%d)" "$(openssl rand -hex 4)" > /work/kid
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      # 2) 없을 때만 만든다. 동시 실행으로 AlreadyExists 면 먼저 만든 쪽 키를 그대로 둔다
+      containers:
+        - name: create-secret
+          image: {{ $k.images.kubectl }}
+          command:
+            - sh
+            - -ec
+            - |
+              if kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" -o name >/dev/null 2>&1; then
+                echo "secret/$SECRET_NAME 이 이미 있다. 그대로 둔다"
+                exit 0
+              fi
+              if out=$(kubectl -n "$NAMESPACE" create secret generic "$SECRET_NAME" \
+                  --from-file=private.pem=/work/private.pem --from-file=kid=/work/kid 2>&1); then
+                echo "secret/$SECRET_NAME 을 만들었다 (kid=$(cat /work/kid))"
+                exit 0
+              fi
+              case "$out" in
+                *AlreadyExists*|*"already exists"*) echo "secret/$SECRET_NAME 을 다른 실행이 먼저 만들었다. 그대로 둔다"; exit 0 ;;
+              esac
+              echo "$out" >&2
+              exit 1
+          env:
+            - name: SECRET_NAME
+              value: {{ $k.secretName | quote }}
+            - name: NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            # kubectl 이 discovery 캐시를 쓸 곳 (루트 파일시스템은 읽기 전용)
+            - name: HOME
+              value: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir: { medium: Memory, sizeLimit: 8Mi }
+{{- end }}
