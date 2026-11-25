@@ -6,9 +6,9 @@ name: k8s
 on:
   push:
     branches: [main]
-    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'infra/alertmanager/**','scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
   pull_request:
-    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', 'services/**', 'libs/**', 'build-logic/**', 'frontend/**', 'infra/postgres/**', 'infra/alloy/**', 'infra/tempo/**', 'infra/loki/**', 'infra/prometheus/**', 'infra/grafana/**', 'infra/alertmanager/**','scripts/k8s-*.sh', 'scripts/smoke-tracing.sh', '.github/workflows/k8s.yml']
 
 permissions:
   contents: read
