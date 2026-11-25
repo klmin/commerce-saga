@@ -98,7 +98,12 @@ jobs:
           REGISTRY=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
           for s in $SERVICES frontend connect; do
             docker buildx imagetools create -t "$REGISTRY/$s:$TAG" "$REGISTRY/$s:$TAG-amd64" "$REGISTRY/$s:$TAG-arm64"
-            platforms=$(docker buildx imagetools inspect "$REGISTRY/$s:$TAG" | grep -oE 'Platform: +linux/(amd64|arm64)' | awk '{print $2}' | sort -u | tr '\n' ' ')
+            # GHCR 는 push 직후 같은 태그를 잠깐 "not found" 로 돌려줄 수 있다(읽기 지연) → 몇 번 다시 본다
+            for i in $(seq 1 10); do
+              if out=$(docker buildx imagetools inspect "$REGISTRY/$s:$TAG" 2>&1); then break; fi
+              echo "$s: 아직 조회되지 않음 ($i/10)"; out=""; sleep 3
+            done
+            platforms=$(echo "$out" | grep -oE 'Platform: +linux/(amd64|arm64)' | awk '{print $2}' | sort -u | tr '\n' ' ' || true)
             echo "$s: $platforms"
             [ "$platforms" = "linux/amd64 linux/arm64 " ] || { echo "$s 매니페스트에 두 아키텍처가 없음"; exit 1; }
           done
