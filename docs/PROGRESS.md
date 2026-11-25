@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (4-4절 ③ 결제 서킷 브레이커: PG 승인 타임아웃이 이어지면 회로를 열어 결제 즉시 실패·보상, 시나리오 15)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(이번 PR) 다음 ④ 후속 4 나머지(검색·CDC·ES, 시작 전 설계 메모)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-25 (후속 4 나머지 설계 확정: 상품 검색 = Debezium 테이블 CDC → search-service → Elasticsearch, 상품 관리 이력. 4-6절·ADR 0010)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. 다음 ④ 후속 4 나머지(설계 확정: 4-6절·ADR 0010, 4-2a 기반부터)**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -48,8 +48,8 @@
 | 후속 2 | 인증 + 프론트엔드 (auth-service 자체 JWT, Spring Cloud Gateway, Next.js 화면 전체). 설계는 아래 "후속 2 설계 메모" | 완료, 태그 `v0.4-auth-frontend` (Boot 4.2 PR #29, A-1 PR #30, A-2 PR #31, A-3 PR #33·#34, F-1a PR #35, F-1b PR #36, F-2a PR #38, F-2b PR #39) |
 | 후속 3 | k8s (Helm, Strimzi, ArgoCD). 클러스터 상시 구동 대신 CI에서 kind로 검증. 설계는 ADR 0014 | 완료 (K-1 PR #40, K-2 PR #41, K-3 PR #42, 태그 `v0.5-k8s`) |
 | DDD 보강 | 값 객체(서비스마다), 컨텍스트 맵·용어집. 설계는 ADR 0015 | 완료 (값 객체 PR #56~#59, ADR 0015 PR #61) |
-| 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 진행 중. **4-1 가격 스냅샷을 먼저** 떼어 하고(4-1a PR #65·4-1b PR #68·4-1c PR #72 완료), 검색·ES 는 아래 운영 보강 뒤 (2026-11-25 사용자 결정, 시작 전 설계 메모, 4-4절) |
-| 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 4-1 다음, 후속 4 나머지 전 (2026-11-25 사용자 결정, 4-4절) |
+| 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 진행 중. **4-1 가격 스냅샷을 먼저** 떼어 하고(4-1a PR #65·4-1b PR #68·4-1c PR #72 완료), 검색·ES 는 아래 운영 보강 뒤 (2026-11-25 사용자 결정). 나머지 설계 확정: 4-6절·ADR 0010 |
+| 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 완료 (PR #74·#76, 4-4절) |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
 
@@ -89,7 +89,8 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | 4-4절 ③ 결제 서킷 브레이커: payment-service `CircuitBreakingPaymentGateway`(`@Primary`, Resilience4j 코어 2.3.0) 가 PG 승인만 감싼다. 최근 20건 중 10건 이상·실패(타임아웃·오류) 50% 이상이면 열림 → PG 를 부르지 않고 `PaymentGatewayUnavailableException` → 결제 서비스가 확정 실패(DECLINED, "PG unavailable (circuit open)")로 바로 응답 → Saga 즉시 보상. 30초 뒤 반열림 시험 3건(타임아웃이면 지금처럼 UNKNOWN + 보정). 처리마다 PG 를 부르기 전 `pg_approve_attempts`(V7)에 호출을 예약(calls + 1, 커밋)한다. 회로가 이번 호출을 막았을 때 예약이 이 처리 하나뿐이면 봉인(이후 어떤 처리도 PG 를 부르지 않음)하고 거절 확정, 아니면(재전달·Saga 재전송·다른 인스턴스 동시 처리) 거절 대신 UNKNOWN → 조회로 확정. 예약과 봉인은 같은 행의 조건부 갱신이라 겹치지 않음. 거절은 실패로 세지 않음. 조회·환불은 회로 밖(보정이 계속 돌아야 돈이 맞음). 지표 `payment_pg_circuit_state`. 라이브러리: Resilience4j 는 Spring Cloud CircuitBreaker 기본 구현이고 상태 머신(카운트 창·반열림 시험 수)이 검증돼 있어 직접 만들지 않음, Spring 통합 없이 코어만(설정은 우리 properties). 시나리오 15(`smoke-pg-circuit.sh`, CI e2e 마지막) |
+| (이번 PR) | 문서: 후속 4 나머지 설계 메모(4-6절, 사용자 확인)·[ADR 0010](adr/0010-product-search-cqrs-table-cdc.md) 상품 검색 CQRS(테이블 CDC → search-service → ES). README ADR 목록 중복 줄 정리 |
+| #76 | 4-4절 ③ 결제 서킷 브레이커: payment-service `CircuitBreakingPaymentGateway`(`@Primary`, Resilience4j 코어 2.3.0) 가 PG 승인만 감싼다. 최근 20건 중 10건 이상·실패(타임아웃·오류) 50% 이상이면 열림 → PG 를 부르지 않고 `PaymentGatewayUnavailableException` → 결제 서비스가 확정 실패(DECLINED, "PG unavailable (circuit open)")로 바로 응답 → Saga 즉시 보상. 30초 뒤 반열림 시험 3건(타임아웃이면 지금처럼 UNKNOWN + 보정). 처리마다 PG 를 부르기 전 `pg_approve_attempts`(V7)에 호출을 예약(calls + 1, 커밋)한다. 회로가 이번 호출을 막았을 때 예약이 이 처리 하나뿐이면 봉인(이후 어떤 처리도 PG 를 부르지 않음)하고 거절 확정, 아니면(재전달·Saga 재전송·다른 인스턴스 동시 처리) 거절 대신 UNKNOWN → 조회로 확정. 예약과 봉인은 같은 행의 조건부 갱신이라 겹치지 않음. 거절은 실패로 세지 않음. 조회·환불은 회로 밖(보정이 계속 돌아야 돈이 맞음). 지표 `payment_pg_circuit_state`. 라이브러리: Resilience4j 는 Spring Cloud CircuitBreaker 기본 구현이고 상태 머신(카운트 창·반열림 시험 수)이 검증돼 있어 직접 만들지 않음, Spring 통합 없이 코어만(설정은 우리 properties). 시나리오 15(`smoke-pg-circuit.sh`, CI e2e 마지막) |
 | #74 | 4-4절 ② 멱등 기록 정리: order·inventory·point·payment 에 `IdempotencyCleanupScheduler`(1시간마다, `idempotency.cleanup.*`) → `IdempotencyCleanupService` 가 보존 기간(processed_message 30일 = 토픽 보존 7일 + DLT 재처리 여유, order Idempotency-Key 7일)이 지난 행을 오래된 것부터 1,000건씩(한 번에 최대 100배치) 지운다. `for update skip locked` 라 여러 인스턴스가 겹쳐도 서로 기다리지 않고 결과가 같다. 비즈니스 기록은 지우지 않음. order V8 `order_idempotency_keys(created_at)` 인덱스. 서비스마다 단위·Postgres 통합 테스트. 함께: 머지된 PR 번호(#49·#66·#67·#70·#71)·4-5절 완료 표시·5절 경보 전달 한계 반영(닫은 #69 내용) |
 | #72 | 후속 4-1c 장바구니: order-service `cart_items`(V7, (user_id, product_id) PK, 담을 때 가격), `Cart` 애그리거트(담을 때 가격 유지, 50줄), `GET/PUT/DELETE /cart(/items/{id})`(Gateway `/api/cart/**`), 담을 때 지금 가격을 받아 남김(없는·판매 중지 422, 장애 503), 조회는 지금 가격과 비교해 `priceChanged`·장애면 담을 때 가격. 장바구니 주문 `POST /orders` + `fromCart` 는 주문 트랜잭션 안에서 주문한 줄 삭제. 화면 `/cart`(수량 변경·빼기·가격 변경 표시, 주문 폼 재사용), 상품 목록 "담기", 헤더 링크, Playwright 1개, 시나리오 14e |
 | #68 | 후속 4-1b 서버 가격: order-service `PlaceOrderService`(트랜잭션 없음)가 같은 키 재요청이면 처음 주문 → 줄 검사 → `ProductCatalogPort`(RestClient, 연결·응답 2초, 재시도 없음)로 지금 가격 → 없는·판매 중지 422, 화면 가격과 다르면 409 + `currentPrices`, 같으면 `OrderService.placeOrder`(한 트랜잭션). product 장애 503(원인은 로그만). 409·422·503 에는 Idempotency-Key 를 남기지 않음. 프론트: 상품 목록·주문 폼을 `/api/products` 로, 보인 가격을 hidden 필드로 보내고 409 면 `옛 가격 → 새 가격` 안내 후 다시 누르면 새 가격. 주문 목록·상세의 상품 이름은 `?ids=` 로. 스모크 스크립트 가격을 시드 가격으로, 시나리오 14(`smoke-price-change.sh`, CI e2e). Helm order-service `PRODUCT_SERVICE_URL` |
@@ -478,8 +479,8 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 |---|---|---|---|
 | ① | 후속 4-1 가격 스냅샷 | 서버가 상품 가격을 정하고, 주문에 주문 시점 가격을 남긴다. 클라이언트가 보내는 `unitPrice`(5절 한계)를 믿지 않는다 | 시작 전 설계 메모 + 사용자 확인. 설계 확정(2026-11-25): 4-5절·ADR 0016. product-service 신설, 주문 때 동기 조회 + 화면 가격과 다르면 409, 장바구니 추가 |
 | ② | 멱등 기록 정리 (완료, PR #74) | `processed_message`(메시지를 받는 서비스 전부)·`order_idempotency_keys` 의 보존 기간이 지난 행을 나눠서(예: 1,000건씩) 지우는 스케줄러. 기존 `SagaTimeoutScheduler`·`PaymentReconcileScheduler` 와 같은 모양 | 보존 기간: `processed_message` 는 Kafka 토픽 보존 + DLT 재처리 기간보다 길게(ADR 0006), `Idempotency-Key` 는 24시간~7일 중 PR 에서 정한다. 만료 뒤 같은 키는 새 주문이 되는 것을 문서에 남긴다. 비즈니스 기록(주문·Saga 기록·예약·사용·결제)은 지우지 않는다. 삭제는 여러 인스턴스에서 겹쳐도 결과가 같다 |
-| ③ | 결제 서킷 브레이커 (완료, 이번 PR) | payment-service 의 PG 승인 호출에 서킷 브레이커. 타임아웃이 이어지면 회로를 열고, 열려 있는 동안은 **PG 를 부르지 않았으므로 확정 실패**(`PaymentFailed`)로 바로 응답 → Saga 가 곧바로 보상 | 반열림 상태의 시험 호출은 지금처럼 타임아웃이면 `UNKNOWN` + 보정(ADR 0007 그대로). 조회(`inquire`)·환불은 회로와 따로 둘지 PR 에서 정한다. 라이브러리(Resilience4j 등)는 PR 에서 고르고 이유를 적는다. 가짜 PG 장애 주입으로 시나리오 추가(PG 장애 중 주문 → 즉시 실패·보상 → 복구 후 정상) |
-| ④ | 후속 4 나머지 | 상품 검색(테이블 CDC + Elasticsearch), 상품·가격 관리 이력 | 1절 표 후속 4 |
+| ③ | 결제 서킷 브레이커 (완료, PR #76) | payment-service 의 PG 승인 호출에 서킷 브레이커. 타임아웃이 이어지면 회로를 열고, 열려 있는 동안은 **PG 를 부르지 않았으므로 확정 실패**(`PaymentFailed`)로 바로 응답 → Saga 가 곧바로 보상 | 반열림 상태의 시험 호출은 지금처럼 타임아웃이면 `UNKNOWN` + 보정(ADR 0007 그대로). 조회(`inquire`)·환불은 회로와 따로 둘지 PR 에서 정한다. 라이브러리(Resilience4j 등)는 PR 에서 고르고 이유를 적는다. 가짜 PG 장애 주입으로 시나리오 추가(PG 장애 중 주문 → 즉시 실패·보상 → 복구 후 정상) |
+| ④ | 후속 4 나머지 | 상품 검색(테이블 CDC + Elasticsearch), 상품·가격 관리 이력 | 설계 확정(2026-11-25): 4-6절·ADR 0010 |
 
 **정하고 미룬 것 (지금은 하지 않음)**
 - 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 인기 상품 한 행에 주문이 몰리는 경우만 문제라, 처리량 측정(k6 등) 뒤에 조건부 UPDATE·재고 버킷·Redis 선점을 검토한다
@@ -503,7 +504,44 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 정해서 진행한 것: 타임아웃 2초, 가격이 오르든 내리든 409, 장바구니 50줄, 상품 조회는 로그인 없이 공개(order 는 Gateway 를 거치지 않고 클러스터 안에서 호출, 토큰 전달 없음), 메시지 계약은 바꾸지 않음, `product.events` 는 만들지 않음(소비자가 생기면 추가).
 k8s: product-service 를 Helm 차트에 추가하고 기존 kind CI 로 같이 확인한다. Elasticsearch 는 ④에서 따로.
 
-## 5. 알려진 한계·나중 일
+## 4-6. 후속 4 나머지 설계 메모: 상품 검색(테이블 CDC + Elasticsearch)·상품 관리 이력 (2026-11-25 사용자 확인: 추천안대로)
+
+브리프 "상품 검색" 절의 구성(쓰기 Postgres, 검색 ES = CQRS)을 따르고, Debezium 을 outbox 릴레이가 아닌 **테이블 CDC(데이터 복제)** 로도 써서 두 쓰임새를 보여 준다. 결정은 ADR 0010(브리프에서 번호를 비워 둠)으로 남긴다.
+
+```
+product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ product.cdc.products ─▶ search-service ─▶ Elasticsearch
+                                                                                         ▲
+                                         화면 검색창 ─▶ Gateway /api/search/** ──────────┘
+```
+
+**정할 것과 추천**
+
+| # | 정할 것 | 추천 | 이유·대안 |
+|---|---|---|---|
+| 1 | 검색 서비스 모양 | `search-service` 하나가 ES 를 소유: CDC 소비(색인) + 검색 API | 서비스가 자기 저장소를 가진다는 규칙과 맞다. 브리프의 `search-indexer`(색인만) + 검색 API 분리는 서비스가 하나 더 늘고 ES 를 둘이 같이 쓰게 된다 |
+| 2 | CDC 를 쓸지, `product.events`(outbox)로 할지 | **테이블 CDC** (브리프 의도). 대신 테이블이 다른 서비스에 새는 것을 줄인다: 커넥터 `column.include.list` 로 검색에 필요한 열만, `ExtractNewRecordState` 로 변경 후 행만 보내고, 이 토픽 모양을 product-service 의 계약으로 문서화(열은 추가만) | 테이블 CDC 는 내부 스키마가 곧 계약이 되는 약점이 있다(ADR 에 적음). outbox 이벤트가 더 깔끔하지만 이미 3단계에서 보였고, "Debezium 의 두 쓰임새"가 이 단계의 목적 |
+| 3 | 토픽·키 | `product.cdc.products`, 키 = 상품 id | AGENTS.md 키 규칙(orderId, auth 는 userId)에 상품 id 를 예외로 추가. 상품 단위 순서만 필요 |
+| 4 | 중복·순서 | ES 문서 id = 상품 id, **외부 버전 = 원본 LSN**(`version_type=external`) → 같은 변경 재전달은 무시, 늦게 온 옛 변경은 ES 가 거절 | at-least-once(ADR 0006)를 ES 쪽에서 멱등으로. `processed_message` 같은 표가 필요 없다 |
+| 5 | 삭제 | 상품은 지우지 않고 판매 중지(`on_sale`) → 문서에 남기고 검색에서 거른다. tombstone 이 오면 문서 삭제 | 4-1a 가 삭제 API 를 두지 않았다 |
+| 6 | 처음 적재·다시 색인 | 커넥터 `snapshot.mode=initial` 로 기존 행(시드 포함) 적재. 색인 구조를 바꿀 때는 별칭(`products` → `products-v1`) + 새 색인 + Debezium 증분 스냅샷(signal 표)으로 다시 채운 뒤 별칭 전환 | 다시 색인 절차는 문서·스크립트로, 자동화는 하지 않음 |
+| 7 | 한글 검색 | **ngram 분석기**(플러그인 없음, 공식 이미지 그대로) | nori(형태소)는 플러그인 설치 이미지를 따로 빌드해야 한다(release 이미지 11개째). 상품명 부분 일치에는 ngram 으로 충분, nori 는 한계에 적음 |
+| 8 | 검색 기능 | 검색어(이름·설명), 가격 범위, 판매 중인 것만, 정렬(관련도·가격·최신), 페이지(최대 100). 로그인 없이 공개(상품 조회와 같음) | 자동완성·오타 교정·집계(facet)는 하지 않음 |
+| 9 | ES 장애 | 검색만 503. 상품 목록(product-service)·주문은 그대로. 색인 소비자는 ES 가 돌아올 때까지 제자리 재시도(ADR 0012), 돌아오면 따라잡음 | 검색 결과 가격은 조금 늦을 수 있다 → 주문 때 4-1b 가 다시 확인(409)하므로 돈은 맞다 |
+| 10 | 엔진·배포 | Elasticsearch 공식 이미지(단일 노드, 로컬은 보안 끔, 힙 512MB). Helm 차트에 StatefulSet 으로(ECK 오퍼레이터는 쓰지 않음). 라이선스가 걸리면 OpenSearch 로 바꿀 수 있게 클라이언트는 REST 수준만 | ECK 는 kind CI 에 무겁고 노드 하나면 이득이 작다 |
+| 11 | 관측성 | 색인 지연(지금 − 원본 커밋 시각) 지표·경보, 소비자 lag 는 기존 경보 그대로 | 시나리오에서 "가격 변경 → 몇 초 안에 검색 반영"을 이 지표로 보인다 |
+| 12 | 상품 관리 이력(audit) | product-service 안에서 **같은 트랜잭션**으로 `product_audit_log`(누가·언제·무엇: 등록·정보 수정·가격·판매 상태, 바뀐 값 전후)를 남김. 가격 이력(4-1a)은 그대로 두고 관리자 화면에서 함께 보여 줌 | CDC 로 만들 수도 있지만 "누가 바꿨는지"(JWT `sub`)가 테이블에 없어 열을 더 늘려야 한다. 가격 이력과 같은 방식이 단순 |
+
+**PR 나누기 (추천)**
+
+| PR | 범위 |
+|---|---|
+| 4-2a 기반 | ADR 0010, ES 를 compose·Helm·CI 에 추가, product_db 테이블 CDC 커넥터(compose 등록 스크립트·Strimzi `KafkaConnector`), 토픽 `product.cdc.products`, product_svc 에 publication·복제 권한. AGENTS.md 키 규칙에 상품 id |
+| 4-2b search-service | 새 서비스(헥사고날, DB 없음, ES 가 저장소): CDC 소비 → 외부 버전으로 색인, 검색 API, Gateway `/api/search/**`, 색인 지연 지표. 시나리오 16(가격 변경·판매 중지가 몇 초 안에 검색에 반영, ES 중단 중 검색 503·상품 목록·주문 정상, 복구 뒤 따라잡음, 같은 변경 재전달 무시) |
+| 4-2c 화면 | 상품 목록에 검색창·필터·정렬, 결과에서 바로 담기·주문(가격은 주문 때 다시 확인) |
+| 4-3 관리 이력 | `product_audit_log` + 관리자 화면(상품별 변경 이력) |
+
+**부담·한계로 적을 것**: ES 메모리(로컬 compose 전체가 약 1GB 늘어남, CI 러너는 여유 있음), 검색 결과는 최종 일관성(수 초 늦을 수 있음), ngram 이라 형태소 검색 아님, 단일 노드라 ES 고가용성 없음.
+
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
 - 보상 단계가 계속 실패하면 끝없이 재전송하고 경고 로그와 경보(`SagaCompensationStuck`)
