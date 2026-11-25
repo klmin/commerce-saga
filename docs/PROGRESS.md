@@ -90,6 +90,7 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| #107 | 후속 5-1 auth-service → SAS: 표준 엔드포인트(issuer `AUTH_ISSUER`, 서명 키·JWKS 그대로), Flyway V4 SAS 스키마(PostgreSQL 맞춤·hash 인덱스), SSO 세션 Redis(`AUTH_SESSION`), 임시 로그인 화면 `/signin`·처리 `POST /login`(실패 제한 그대로)·가입 폼 `POST /signup`·`GET /csrf`(세션 CSRF), 토큰 `sub`=userId·`roles` 를 토큰마다 DB 에서, 고정 클라이언트 upsert(시크릿: 외부 → 개발용 파일 → 기동 실패), SSO 로그아웃 때 인가 기록 삭제·끝난 기록 정리, 경로 방식(`use-prefix`), k8s hook Job 이 `oauth-client-secrets` 생성. 기존 `/auth/*` API 는 5-3 까지 유지 |
 | #106 | 후속 5-0 [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md): auth-service → SAS(OIDC IdP), Gateway → BFF, 화면 → Vite SPA 3개, 고정 클라이언트 등록·시크릿 출처, 두 배치 방식. 고려한 안(자체 SSO·SAS·Keycloak / PKCE SPA·SCG BFF·Next BFF / 화면 2·3개 / Next CSR·Vite / DCR)과 대체 범위 표. ADR 0008(일부)·0011(전체)은 상태 줄만 대체 표시 |
 | #100 | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
 | (이번 PR) | release 가 main CI 를 기다림: 첫 잡 `ci`(`scripts/release-ci-gate.sh`)가 마지막 배포 이후 main 커밋 하나하나의 CI 가 모두 통과해야 넘어감(경로 필터·모듈별 빌드라 뒤 커밋 통과가 앞 실패를 대신하지 않음, 고친 뒤 수동 실행 `ci_from`), 실행이 안 보이는 커밋은 codeql 이 보일 때까지 대기, 실패·취소면 배포 중단. main CI 는 취소하지 않음(concurrency 그룹 = PR 은 브랜치, 그 밖은 실행 id). ADR 0014 "배포 전 main CI 대기" |
@@ -571,7 +572,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | PR | 범위 |
 |---|---|
 | 5-0 | [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md) (결정·대체 범위, ADR 0008 일부·0011 대체 표시) |
-| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지). 진행 중 |
+| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지), PR #107 |
 | 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃) |
 | 5-3 | 사용자 SPA(`frontend/apps/web` + `packages/ui`), compose Caddy·시크릿 init, Helm 호스트 라우트, e2e. 끝나면 Next·기존 `/auth/*` 제거 |
 | 5-4 | 인증 화면(`frontend/apps/auth`) |
