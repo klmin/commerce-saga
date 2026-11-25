@@ -9,7 +9,8 @@
 | 기능 브랜치 push (PR 없음) | 없음. `push` 트리거는 전부 `main` 한정 |
 | PR 열기 / PR 에 push | 바뀐 경로에 맞는 CI(아래 표). PR 에 추가 push 하면 Codex 재리뷰 요청 |
 | main 머지 (= main push) | 같은 CI 를 main 에서 한 번 더 + `release`(이미지 → `release/eks` → EKS ArgoCD) |
-| 정기 | CodeQL 매주 월 03:00 KST, Dependabot 매주 |
+| 정기 | `k8s` 매일 04:00 KST, CodeQL 매주 월 03:00 KST, Dependabot 매주 |
+| 워크플로가 끝날 때·PR 열림·머지 | `notify` 가 Discord 로 알림 (아래 "알림") |
 
 모든 워크플로에 `concurrency` 가 있다. CI 는 같은 브랜치에 연달아 push 하면 앞 실행을 취소하고 마지막 것만 돈다. `release` 만 취소하지 않고 한 번에 하나씩 돈다.
 
@@ -22,10 +23,11 @@
 | `browser-e2e` | playwright | `frontend/` `services/` `libs/` `build-logic/` `infra/` | 인프라 + 서비스 + Next(production)를 띄우고 Playwright 화면 시나리오 |
 | `frontend` | frontend | `frontend/` | format·lint·typecheck·Vitest·`next build`·Docker 이미지 빌드 확인 |
 | `infra` | compose-up | `infra/` | compose 가 뜨는지, 토픽·Connect 플러그인·replication 권한·서비스 DB 분리(8개)·Redis 확인 |
-| `k8s` | kind, argocd | `deploy/` `services/` `libs/` `build-logic/` `frontend/` `infra/postgres/` 관측성 설정(`infra/alloy·tempo·loki·prometheus·grafana·alertmanager/`) `scripts/k8s-*.sh` `scripts/smoke-tracing.sh` | 차트의 infra 사본 diff, kind 에 Helm 차트(Strimzi 포함)로 올리고 스모크·Debezium·관측성 확인(kind). 같은 구성을 ArgoCD 로 sync(argocd) |
+| `k8s` | kind, argocd | `deploy/` `services/` `libs/` `build-logic/` `frontend/` `infra/postgres/` 관측성 설정(`infra/alloy·tempo·loki·prometheus·grafana·alertmanager/`) `scripts/k8s-*.sh` `scripts/smoke-tracing.sh` (+ 매일 schedule, 수동) | 차트의 infra 사본 diff, kind 에 Helm 차트(Strimzi 포함)로 올리고 스모크·Debezium·관측성 확인(kind). 같은 구성을 ArgoCD 로 sync(argocd). **argocd 는 PR 에서 `deploy/`·`scripts/k8s-*`·이 워크플로가 바뀔 때만** 돌고(서비스 코드만 바뀐 PR 은 kind 가 같은 차트로 확인), main push·매일·수동 실행에서는 항상 돈다 |
 | `codeql` | analyze (java-kotlin), analyze (javascript-typescript), analyze (actions) | `docs/**`·`*.md` 만 바뀐 경우 제외 전부 (+ 주간 schedule) | 정적 분석(security-and-quality). javascript-typescript 는 `frontend/` |
 | `Codex review on push` | request-review | 열린 PR 에 push(`synchronize`). draft·fork·Dependabot push 제외 | `@codex review` 댓글로 재리뷰 요청. PR 을 열 때·ready 로 바꿀 때는 Codex 가 스스로 리뷰 |
 | `release` | images (amd64), images (arm64), manifest | main push, `docs/**`·`*.md` 만 바뀐 경우 제외 (+ 수동 실행) | 아래 "배포" |
+| `notify` | pr-event, workflow-result | 위 워크플로가 끝날 때(`workflow_run`), PR 열림·ready·머지·닫힘 | 아래 "알림" |
 
 각 워크플로 파일 자기 자신이 바뀌어도 그 워크플로가 돈다. docs 만 바꾼 PR 은 CI 가 돌지 않고 Codex 리뷰만 받는다.
 
@@ -56,6 +58,21 @@ main 머지 → images (amd64·arm64 러너에서 각각): bootJar → 이미지
 ```bash
 git push origin <옛 커밋>:refs/heads/release/eks --force
 ```
+
+## 알림 (`notify` → Discord)
+
+채널(웹훅)은 둘이다. 사람이 바로 손대야 하는 것과 진행 상황만 보내고, PR 의 체크 하나하나는 보내지 않는다.
+
+| 채널 (저장소 시크릿) | 보내는 것 |
+|---|---|
+| `DISCORD_WEBHOOK_MAIN` | main push·매일·수동 실행의 워크플로 실패(실패한 잡, 실행 링크), `release` 성공(배포된 커밋 → `release/eks`) |
+| `DISCORD_WEBHOOK_PR` | PR 열림·머지·닫힘(draft 제외), PR 의 워크플로 실패, 커밋 하나의 체크가 모두 끝나고 실패가 없을 때 "모든 체크 통과" 한 번 |
+
+- 웹훅 URL 은 저장소 시크릿에만 둔다(URL 만 있으면 누구나 그 채널에 쓸 수 있다). 없으면 그 채널 알림만 건너뛴다. 넣기: `gh secret set DISCORD_WEBHOOK_MAIN` (값은 입력창으로)
+- 실패 알림 앞의 멘션(`@here`, `<@&역할ID>`)은 저장소 변수 `DISCORD_FAILURE_MENTION` (선택)
+- "모든 체크 통과"는 그 커밋의 PR 워크플로 실행(위 표의 워크플로만, 워크플로마다 가장 최근 실행)을 조회해 남은 것도 실패도 없을 때 보내고, 커밋 status `notify/all-passed` 로 한 번만 보냈음을 남긴다. 조회가 실패하면 보내지 않는다. 같은 커밋의 판정은 `concurrency` 로 한 번에 하나씩(실패 알림은 실행마다 따로라 대기열에서 사라지지 않는다)
+- `workflow_run` 은 main 에 있는 `notify.yml` 기준으로 돈다. 이 파일을 바꾼 PR 은 머지 뒤부터 적용된다
+- 포크 PR 은 알리지 않는다(PR 이벤트는 시크릿이 없고, 워크플로 결과는 PR 번호가 비어 있다). 운영 경보(Alertmanager → Discord)는 별도 웹훅이라 채널을 나누는 편이 낫다
 
 ## Dependabot
 

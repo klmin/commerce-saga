@@ -53,7 +53,8 @@ class OrderServiceTest {
     private final InMemoryProcessedMessages processed = new InMemoryProcessedMessages();
     private final InMemoryIdempotencyKeys keys = new InMemoryIdempotencyKeys();
     private final OrderService service =
-            new OrderService(orders, orders, sagas, sent, sent, processed, keys, Clock.fixed(NOW, ZoneOffset.UTC));
+            new OrderService(orders, orders, sagas, sent, sent, processed, keys, new InMemoryCart(),
+                    Clock.fixed(NOW, ZoneOffset.UTC));
 
     /** 합계 2,500 */
     private Order place(long userId, long pointAmount) {

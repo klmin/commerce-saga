@@ -38,7 +38,7 @@ spring:
             - id: orders
               uri: ${ORDER_SERVICE_URL:http://localhost:8081}
               predicates:
-                - Path=/api/orders,/api/orders/**
+                - Path=/api/orders,/api/orders/**,/api/cart,/api/cart/**
               filters: &user-api
                 - StripPrefix=1
                 - name: RequestRateLimiter

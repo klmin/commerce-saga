@@ -9,6 +9,7 @@
 #   14b. 옛 가격(화면에서 본 가격)으로 주문 → 409 + 지금 가격, 주문은 만들어지지 않는다
 #   14c. 같은 Idempotency-Key 로 새 가격을 보내면 주문된다 (409 는 키를 남기지 않음). 주문에는 그 가격이 스냅샷된다
 #   14d. 판매 중지 상품 주문 → 422
+#   14e. 장바구니: 가격 변경 전에 담은 상품은 "담을 때 가격 → 지금 가격"으로 보이고, 장바구니 주문(fromCart)은 주문한 줄을 뺀다
 # 끝나면 가격·판매 상태를 원래대로 돌려놓는다
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
@@ -36,7 +37,11 @@ order() { # key unitPrice → "status body"
 original=$(curl -sf "$GATEWAY_URL/api/products/$PRODUCT_ID" | field price)
 [ -n "$original" ] || fail "상품 $PRODUCT_ID 조회 실패 (product-service·Gateway 확인)"
 changed=$(( original + 1000 ))
-trap 'admin_put /price "{\"price\":$original}" || true; admin_put /sale "{\"onSale\":true}" || true' EXIT
+trap 'admin_put /price "{\"price\":$original}" || true; admin_put /sale "{\"onSale\":true}" || true; curl -s -o /dev/null -X DELETE "$GATEWAY_URL/api/cart/items/$PRODUCT_ID" -H "$(auth $USER_ID)" || true' EXIT
+
+# 14e 준비: 가격을 바꾸기 전에 장바구니에 담는다 (담을 때 가격 = 원래 가격)
+curl -sf -X PUT "$GATEWAY_URL/api/cart/items/$PRODUCT_ID" -H "$(auth $USER_ID)" -H 'Content-Type: application/json' \
+  -d '{"quantity":1}' > /dev/null || fail "장바구니 담기 실패"
 
 echo "== 14a. 관리자가 가격 변경 → 이력"
 admin_put /price "{\"price\":$changed}"
@@ -61,6 +66,18 @@ ok "주문 …${order_id: -8} 생성, 줄 가격 $changed"
 read -r code body <<< "$(order "$key" "$changed")"
 [ "$code" = 200 ] && [ "$(field orderId <<< "$body")" = "$order_id" ] || fail "같은 키 재요청 → $code $body"
 ok "같은 키 재요청은 같은 주문 (200)"
+
+echo "== 14e. 장바구니: 가격 변경 표시, 장바구니 주문은 주문한 줄을 뺀다"
+cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth $USER_ID)")
+grep -q "\"productId\":$PRODUCT_ID,[^}]*\"addedPrice\":$original,\"currentPrice\":$changed,[^}]*\"priceChanged\":true" <<< "$cart" \
+  || fail "장바구니에 가격 변경이 보이지 않음: $cart"
+ok "장바구니 담을 때 $original → 지금 $changed"
+out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth $USER_ID)" -H 'Content-Type: application/json' \
+  -d "{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$changed}],\"pointAmount\":0,\"fromCart\":true}")
+[ "$(tail -n1 <<< "$out")" = 201 ] || fail "장바구니 주문 → $(tail -n1 <<< "$out")"
+cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth $USER_ID)")
+grep -q "\"productId\":$PRODUCT_ID," <<< "$cart" && fail "주문한 상품이 장바구니에 남음: $cart"
+ok "장바구니 주문 201, 주문한 줄이 빠짐"
 
 echo "== 14d. 판매 중지 상품 → 422"
 admin_put /sale '{"onSale":false}'

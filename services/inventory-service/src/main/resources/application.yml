@@ -45,6 +45,15 @@ outbox:
     fixed-delay: 200ms
     batch-size: 100
 
+# 멱등 기록 정리 (PROGRESS 4-4절 ②, ADR 0006). processed_message 보존은 Kafka 토픽 보존(7일) + DLT 재처리 기간보다 길게
+idempotency:
+  cleanup:
+    enabled: ${IDEMPOTENCY_CLEANUP_ENABLED:true}
+    interval: ${IDEMPOTENCY_CLEANUP_INTERVAL:1h}
+    processed-message-retention: ${PROCESSED_MESSAGE_RETENTION:30d}
+    batch-size: 1000
+    max-batches-per-run: 100
+
 management:
   endpoints:
     web:

@@ -50,6 +50,8 @@ export type SagaHistoryStep = z.infer<typeof sagaStep>;
 export type PlaceOrderInput = {
   lines: OrderLine[];
   pointAmount: number;
+  /** 장바구니 주문이면 true: 주문한 상품이 장바구니에서 빠진다 (주문과 같은 트랜잭션) */
+  fromCart?: boolean;
 };
 
 export const ORDERS_PAGE_SIZE = 20;

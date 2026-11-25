@@ -14,6 +14,6 @@ public class StubProductCatalogConfiguration {
     @Bean
     @Primary
     ProductCatalogPort stubProductCatalog() {
-        return ids -> ids.stream().map(id -> new ProductCatalogPort.CatalogProduct(id, PRICE, true)).toList();
+        return ids -> ids.stream().map(id -> new ProductCatalogPort.CatalogProduct(id, "상품 " + id, PRICE, true)).toList();
     }
 }

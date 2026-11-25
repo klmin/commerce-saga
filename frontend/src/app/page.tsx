@@ -4,6 +4,8 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listProducts } from "@/lib/api/products";
+
+import { addToCartAction } from "./cart/cart-actions";
 import { won } from "@/lib/products";
 
 import { pointBalanceOrUndefined, stocksByProduct } from "./shop-data";
@@ -43,6 +45,17 @@ async function ProductList() {
                 {p.description && ` · ${p.description}`}
               </span>
             </div>
+            <form action={addToCartAction}>
+              <input type="hidden" name="productId" value={p.id} />
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                aria-label={`${p.name} 장바구니 담기`}
+              >
+                담기
+              </Button>
+            </form>
             <Button size="sm" variant={stock === 0 ? "outline" : "default"} asChild>
               <Link href={`/orders/new?productId=${p.id}`}>주문</Link>
             </Button>

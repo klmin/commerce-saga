@@ -16,6 +16,6 @@ public interface ProductCatalogPort {
      */
     List<CatalogProduct> findByIds(Collection<Long> productIds);
 
-    record CatalogProduct(long productId, long price, boolean onSale) {
+    record CatalogProduct(long productId, String name, long price, boolean onSale) {
     }
 }

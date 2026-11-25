@@ -1,5 +1,6 @@
 package com.klmin.commerce.orderservice.order.adapter.out.persistence;
 
+import com.klmin.commerce.orderservice.order.application.port.out.IdempotencyKeyCleanupPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderIdempotencyPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -17,7 +18,7 @@ import java.util.UUID;
  * READ COMMITTED 라 기다린 뒤의 SELECT 는 앞 트랜잭션이 커밋한 행을 본다.
  */
 @Component
-class OrderIdempotencyPersistenceAdapter implements OrderIdempotencyPort {
+class OrderIdempotencyPersistenceAdapter implements OrderIdempotencyPort, IdempotencyKeyCleanupPort {
 
     private static final String INSERT = """
             insert into order_idempotency_keys (user_id, idempotency_key, request_hash, order_id, created_at)
@@ -45,6 +46,18 @@ class OrderIdempotencyPersistenceAdapter implements OrderIdempotencyPort {
         return Optional.of(jdbc.sql(SELECT).params(userId, key)
                 .query((rs, n) -> new KeyRecord(rs.getObject("order_id", UUID.class), rs.getString("request_hash")))
                 .single());
+    }
+
+    // 키만 지운다 (주문은 남는다). 잠긴 행은 건너뛴다
+    @Override
+    public int deleteCreatedBefore(Instant cutoff, int limit) {
+        return jdbc.sql("""
+                        delete from order_idempotency_keys where (user_id, idempotency_key) in (
+                            select user_id, idempotency_key from order_idempotency_keys where created_at < ?
+                            order by created_at limit ? for update skip locked)
+                        """)
+                .params(Timestamp.from(cutoff), limit)
+                .update();
     }
 
     @Override
