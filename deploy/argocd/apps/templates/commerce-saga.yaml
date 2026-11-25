@@ -1,4 +1,10 @@
 # 애플리케이션: deploy/helm/commerce-saga 차트를 같은 커밋에서. Strimzi·Gateway API CRD 가 생길 때까지는 dry-run 을 건너뛰고 재시도한다
+#
+# 이미지별 태그: 이 차트 폴더의 release-tags.yaml (release 워크플로가 release/eks 의 release 커밋에만 넣는다).
+# root 의 valueFiles 가 아니라 여기서 .Files 로 읽는다 → 이미 클러스터에 등록된 root 를 다시 apply 하지 않아도 된다.
+# 파일이 없으면(main, kind·CI) 모든 이미지가 imageTag 하나
+{{- $release := .Files.Get "release-tags.yaml" | fromYaml }}
+{{- $values := merge (dict "image" (dict "tag" .Values.imageTag)) ($release.commerceValues | default dict) .Values.commerceValues }}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,7 +20,7 @@ spec:
     path: deploy/helm/commerce-saga
     helm:
       releaseName: commerce
-      valuesObject: {{- toYaml (merge (dict "image" (dict "tag" .Values.imageTag)) .Values.commerceValues) | nindent 8 }}
+      valuesObject: {{- toYaml $values | nindent 8 }}
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.namespace }}

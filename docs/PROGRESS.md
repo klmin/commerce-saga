@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (후속 4 완료 정리, 태그 `v0.6-search-audit`)
+- 마지막 갱신: 2026-11-25 (release 가 바뀐 이미지만 배포. 다음 PR: release 가 main CI 를 기다림)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 아직 정하지 않음(후보는 4-4절 "정하고 미룬 것")**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -89,7 +89,9 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
+| (이번 PR) | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". 다음 PR 은 release 가 main CI 결과를 기다리게(main CI 취소 안 함) |
+| #95 | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
+| #93 | 문서: 배포 환경 가이드 `docs/deployment-environments.md`(로컬·compose·k8s·ArgoCD·EKS, Helm·values·Application 매핑) |
 | #94 | 후속 4-3b 관리자 상품 화면: `/admin/products`(판매 중지 포함 목록·페이지, 상품 등록) → `/admin/products/{id}`(이름·설명·가격·판매 상태 변경, 관리 이력 최근부터: 변경 종류·시각·관리자 id·바뀐 값만 전 → 후, 옮겨 온 옛 가격 이력은 가격만). 서버 액션이 저장 뒤 `refresh()` 로 다시 그림, 입력은 값이 바뀌면 key 로 다시 마운트. 관리자가 아니면 404. 입력 검사·이력 표시 `lib/admin/product-input.ts`(Vitest), Playwright `e2e/admin-products.spec.ts`(등록 → 가격·설명·판매 중지 → 이력 4건 순서·전후 값, 같은 가격 요청은 이력 없음, 일반 사용자 404) |
 | #91 | 후속 4-3a 상품 관리 이력(ADR 0010 결정 12): `product_audit_log`(V3, 바꾼 전·후 값을 열로, JSON 없음) 에 등록·정보 수정·가격·판매 상태를 바꾼 관리자(JWT `sub`)·시각과 함께 상품 변경과 같은 트랜잭션으로 남김. 같은 값 요청은 남기지 않음(정보 수정도 값이 같으면 `updated_at` 을 바꾸지 않아 CDC 이벤트도 없음). 기존 가격 이력은 가격만 옮김. 조회 `GET /admin/products/{id}/audit-log`(ADMIN, 최근부터, 페이지). 등록·정보 수정·판매 상태 커맨드에도 관리자 id. 가격 이력 API 는 그대로 |
 | #90 | 후속 4-2c 검색 화면: 홈 상품 목록 위에 검색 폼(검색어·최소/최대 가격·정렬, 자바스크립트 없는 GET 폼이라 조건이 URL 에 남음). 조건이 있으면 search-service(`/api/search/products`, 판매 중만), 없으면 지금처럼 product-service 목록. 검색 저장소 503 이면 전체 목록으로 대신 보여 주고 안내, 400 이면 메시지. "검색 결과 N개", 결과에서 바로 담기·주문(가격은 주문 때 다시 확인). URL 값은 `lib/search.ts` 가 걸러냄(Vitest). Playwright `e2e/search.spec.ts`(부분 검색·URL·전체 보기, 가격 범위·정렬), 브라우저 e2e 에 product-cdc 커넥터 등록 |
