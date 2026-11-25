@@ -1,5 +1,10 @@
+{{/* 이미지 태그: image.tags.<이름> 이 있으면 그것(EKS release 가 바뀐 이미지만 새 태그로 준다), 없으면 공통 image.tag */}}
+{{- define "commerce.imageTag" -}}
+{{- index (.root.Values.image.tags | default dict) .name | default .root.Values.image.tag -}}
+{{- end -}}
+
 {{- define "commerce.image" -}}
-{{- $img := printf "%s/%s:%s" .root.Values.image.repositoryPrefix .name .root.Values.image.tag -}}
+{{- $img := printf "%s/%s:%s" .root.Values.image.repositoryPrefix .name (include "commerce.imageTag" .) -}}
 {{- if .root.Values.image.registry -}}
 {{- printf "%s/%s" .root.Values.image.registry $img -}}
 {{- else -}}

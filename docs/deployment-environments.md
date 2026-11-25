@@ -55,7 +55,7 @@ k8s 쪽 환경 이름은 두 가지를 섞어 부른 것이다. 따로 떼어 �
 | root | `deploy/argocd/root.yaml` | `deploy/argocd/eks/root.yaml` |
 | 보는 브랜치 | 스크립트가 넣은 `REVISION` (PR 커밋, 기본 `main`) | `release/eks` |
 | 이미지 | 레지스트리 없음. 스크립트가 빌드 → `kind load` | release 워크플로가 GHCR 에 push |
-| 이미지 태그 | 스크립트가 만든 `dev-<시각>` 을 root parameter 로 | ArgoCD 가 sync 하는 커밋 해시 (`$ARGOCD_APP_REVISION`) |
+| 이미지 태그 | 스크립트가 만든 `dev-<시각>` 을 root parameter 로 (모든 이미지 같은 태그) | 이미지마다 마지막으로 바뀐 main 커밋 해시 (`release/eks` 의 `release-tags.yaml`) |
 | 외부 노출 | Envoy Service = ClusterIP (port-forward 로 접속) | Envoy Service = LoadBalancer (AWS ELB 주소) |
 | 디스크 | kind 기본 StorageClass (노드 로컬 디스크) | EBS (EBS CSI 드라이버) |
 | 진짜 GitOps 인가 | 매니페스트는 Git 에서 pull. 단 이미지는 스크립트가 넣어서 **반쯤** | 이미지·매니페스트 모두 Git 커밋 기준. **완전한** GitOps |
@@ -130,13 +130,14 @@ scripts/eks-argocd.sh
 [그 뒤로는 매번]
 PR 머지 → main
   → .github/workflows/release.yml
-       bootJar → 이미지 10개(amd64·arm64) → ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시> push
-       → release/eks 브랜치를 그 커밋으로 이동
-  → EKS 안의 ArgoCD 가 release/eks 변경을 감지 → sync → 롤링 배포
+       마지막 배포 이후 바뀐 이미지만 bootJar → ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시> push (amd64·arm64)
+       → release/eks 에 release 커밋 (그 main 커밋 + release-tags.yaml: 이미지별 태그)
+  → EKS 안의 ArgoCD 가 release/eks 변경을 감지 → sync → 태그가 바뀐 Deployment 만 롤링
 ```
 
 - CI 에는 클러스터 권한이 없다. CI 는 이미지 push 와 브랜치 이동까지만 하고, 배포는 클러스터 안의 ArgoCD 가 끌어와서 한다(pull)
-- `release/eks` 브랜치의 끝 커밋 = 지금 배포된 버전. 롤백은 브랜치를 옛 커밋으로 옮기면 된다
+- `release/eks` 브랜치의 끝 커밋 = 지금 배포된 버전. 롤백은 브랜치를 옛 release 커밋으로 옮기면 된다 (`git log --first-parent origin/release/eks`)
+- 어떤 이미지를 다시 빌드하는지는 [docs/ci-cd.md](ci-cd.md) "배포"
 - 클러스터 준비 조건(EBS CSI 드라이버와 기본 StorageClass, 노드 여유, GHCR 패키지 public)은 [deploy/README.md](../deploy/README.md#eks-에-올리기-k-4-ghcr--argocd-gitops)
 
 ---
@@ -239,7 +240,7 @@ spec:
       valueFiles: [values-eks.yaml]                        # values.yaml 위에 덮을 파일
       parameters:                                          # 그 위에 덮을 값
         - { name: revision, value: $ARGOCD_APP_REVISION }
-        - { name: imageTag, value: $ARGOCD_APP_REVISION }
+        - { name: imageTag, value: $ARGOCD_APP_REVISION }  # release-tags.yaml 에 없는 이미지의 태그 (예전 방식 커밋용)
   destination:
     server: https://kubernetes.default.svc                 # 어느 클러스터 (자기 자신)
   syncPolicy:
@@ -254,7 +255,8 @@ spec:
 ArgoCD 버전이 아니다. **ArgoCD 가 지금 sync 하는 Git 커밋 해시**를 ArgoCD 가 렌더링할 때 자동으로 넣어 주는 내장 변수다. 파일 어디에도 값이 없다.
 
 - `revision` 으로 → 자식 Application 도 브랜치 이름이 아니라 **같은 커밋**을 본다. sync 중에 브랜치가 움직여도 root 와 자식이 어긋나지 않는다
-- `imageTag` 로 → 이미지 태그. release 워크플로가 같은 커밋 해시로 이미지를 push 하므로 "Git 커밋 = 배포된 이미지" 가 된다. 태그를 Git 파일에 따로 커밋할 필요가 없다
+- `imageTag` 로 → 공통 이미지 태그(기본값). 지금 EKS 는 이미지별 태그를 `release-tags.yaml` 이 모두 주므로 쓰이지 않고, 그 파일이 없는 예전 release 커밋으로 되돌렸을 때만 쓰인다
+- `release/eks` 의 끝은 release 커밋(main 커밋 + `release-tags.yaml`)이라 `$ARGOCD_APP_REVISION` 은 그 release 커밋 해시다. 이미지 태그는 main 커밋 해시라 서로 다르다
 
 ### `deploy/argocd/apps` 차트 (Application 을 만드는 차트)
 
@@ -302,9 +304,11 @@ Application commerce-saga-root
 ```
 helm/commerce-saga/values.yaml   image.registry: ""   repositoryPrefix: commerce-saga   tag: dev
 argocd/apps/values-eks.yaml      commerceValues.image.registry: ghcr.io/klmin
-argocd/eks/root.yaml             imageTag = $ARGOCD_APP_REVISION
+argocd/apps/release-tags.yaml   commerceValues.image.tags.order-service: 59f17c1...  (release/eks 에만, apps 차트가 .Files 로 읽음)
+argocd/eks/root.yaml             imageTag = $ARGOCD_APP_REVISION (tags 에 없을 때만)
 argocd/apps/templates/commerce-saga.yaml   image.tag ← imageTag 를 commerceValues 에 합쳐 넘김
-helm/commerce-saga/templates/_helpers.tpl  commerce.image = registry/repositoryPrefix/이름:tag
+helm/commerce-saga/templates/_helpers.tpl  commerce.imageTag = image.tags.<이름> 있으면 그것, 없으면 image.tag
+                                           commerce.image = registry/repositoryPrefix/이름:imageTag
 helm/commerce-saga/templates/services.yaml image: {{ include "commerce.image" ... }}
                                  ▼
 k8s Deployment                   image: ghcr.io/klmin/commerce-saga/order-service:59f17c1...
@@ -355,23 +359,23 @@ Git 커밋마다 붙는 고유 ID 다 (예: `59f17c1ce2d05de957cf5dfcc1313e0e04a
 
 이 값을 **이미지 태그 문자열로 재사용**할 뿐이다.
 
-1. release 워크플로가 커밋 `59f17c1` 을 빌드해 `order-service:59f17c1...` 이라는 태그로 GHCR 에 push 한다
-2. `release/eks` 브랜치를 `59f17c1` 로 옮긴다
-3. ArgoCD 가 그 커밋을 sync 하면서 `$ARGOCD_APP_REVISION` = `59f17c1...` 을 `imageTag` 로 넘긴다
-4. 렌더링된 Deployment 의 `image:` 가 `...:59f17c1...` 이 된다
+1. main 커밋 `59f17c1` 에서 order-service 만 바뀌었다. release 워크플로가 order-service 만 빌드해 `order-service:59f17c1...` 로 GHCR 에 push 한다
+2. `release-tags.yaml` 에 `order-service: 59f17c1...` 을 쓰고, 나머지 이미지는 이전 태그 그대로 둔다. 이 파일을 담은 release 커밋을 `release/eks` 에 얹는다
+3. ArgoCD 가 그 release 커밋을 sync 하면서 `release-tags.yaml` 을 values 로 읽는다
+4. order-service Deployment 의 `image:` 만 `...:59f17c1...` 로 바뀌어 그것만 롤링된다. 다른 Deployment 는 그대로다
 
-그래서 "지금 클러스터에 떠 있는 이미지 = Git 의 어느 커밋" 이 1:1 로 맞는다.
+그래서 "지금 떠 있는 이미지마다 = 그 이미지가 마지막으로 바뀐 main 커밋" 이 맞는다. `release-tags.yaml` 이 그 목록이다.
 
 ### 이미지는 누가, 어떻게 받나
 
 values → 템플릿 → Deployment 의 `image:` 문자열까지가 Helm·ArgoCD 의 일이다. **실제로 이미지를 내려받는 것은 k8s 노드의 kubelet** 이다.
 
 ```
-values-eks.yaml  commerceValues.image.registry = ghcr.io/klmin
-root parameter   imageTag = <커밋 해시>
-      │  apps 차트 commerce-saga.yaml 이 둘을 합쳐 앱 차트의 values 로 넘김 (image.registry, image.tag)
+values-eks.yaml    commerceValues.image.registry = ghcr.io/klmin
+release-tags.yaml  commerceValues.image.tags.<이름> = <그 이미지가 마지막으로 바뀐 커밋 해시>
+      │  apps 차트 commerce-saga.yaml 이 합쳐 앱 차트의 values 로 넘김 (image.registry, image.tags, image.tag)
       ▼
-앱 차트 _helpers.tpl   registry / repositoryPrefix / 이름 : tag
+앱 차트 _helpers.tpl   registry / repositoryPrefix / 이름 : (image.tags.<이름> 또는 image.tag)
       ▼
 Deployment  image: ghcr.io/klmin/commerce-saga/order-service:<커밋 해시>
       ▼  k8s 가 Pod 를 노드에 배치
@@ -394,7 +398,7 @@ kind 는 레지스트리 주소가 비어 있어 `image: commerce-saga/order-ser
 |---|---|---|---|
 | 자체 k8s (Helm 직접) | O (차트는 Git) | X (스크립트가 push) | X |
 | kind + ArgoCD | 매니페스트 O, 이미지 X (스크립트가 kind load) | O | 매니페스트만 |
-| EKS + ArgoCD | O (이미지 = 커밋 해시) | O | O |
+| EKS + ArgoCD | O (이미지별 태그 = `release/eks` 의 `release-tags.yaml`) | O | O |
 
 GitOps 바깥에 남는 것:
 
