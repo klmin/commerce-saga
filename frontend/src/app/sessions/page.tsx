@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { ApiError } from "@/lib/api/client";
 import { listSessions } from "@/lib/auth/backend";
 import { clientInfoFrom } from "@/lib/auth/client";
 import { accessToken, refreshToken } from "@/lib/auth/server-session";
+import { redirectAfterUnauthorized, redirectToLogin } from "@/lib/auth/unauthorized";
 import { deviceName } from "@/lib/auth/device";
 import { formatTime } from "@/lib/orders/format";
 
@@ -25,14 +25,14 @@ const ERRORS: Record<string, string> = {
 async function SessionList() {
   const token = await accessToken();
   if (!token) {
-    redirect("/login?next=%2Fsessions");
+    return redirectToLogin();
   }
   let sessions;
   try {
     sessions = await listSessions(token, await refreshToken(), clientInfoFrom(await headers()));
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) {
-      redirect("/login?next=%2Fsessions");
+      return redirectAfterUnauthorized();
     }
     throw e;
   }

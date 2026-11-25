@@ -13,6 +13,7 @@ import {
   sessionCookies,
   userIdFromAccessToken,
 } from "./session";
+import { RENEWED_COOKIE } from "./renew";
 
 export async function accessToken(): Promise<string | undefined> {
   return (await cookies()).get(ACCESS_COOKIE)?.value;
@@ -38,6 +39,8 @@ export async function saveSession(session: Session): Promise<void> {
   for (const c of sessionCookies(session, serverEnv().COOKIE_SECURE)) {
     store.set(c.name, c.value, c.options);
   }
+  // 새로 로그인했으니 "방금 renew 했음" 표식을 지운다 (남아 있으면 로그인 직후 401 이 renew 없이 로그인 화면으로 간다)
+  store.delete(RENEWED_COOKIE);
 }
 
 /** Server Action 에서만 부른다 */

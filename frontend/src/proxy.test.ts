@@ -82,6 +82,23 @@ describe("proxy", () => {
     expect(res.cookies.get(REFRESH_COOKIE)?.value).toBe("");
   });
 
+  it("통과할 때 지금 경로를 요청 헤더로 넘긴다 (브라우저가 보낸 같은 이름 헤더·_rsc 는 버린다)", async () => {
+    const request = req("/orders?before=abc&_rsc=xyz", { [ACCESS_COOKIE]: "at" });
+    request.headers.set("x-cs-request-path", "//evil.example");
+
+    const res = await proxy(request);
+
+    expect(res.headers.get("x-middleware-request-x-cs-request-path")).toBe("/orders?before=abc");
+  });
+
+  it("renew 경로는 쿠키를 건드리지 않고 그대로 (refresh 도 하지 않는다)", async () => {
+    const res = await proxy(req("/session/renew?next=%2Forders", { [REFRESH_COOKIE]: "fam.old" }));
+
+    expect(res.headers.get("location")).toBeNull();
+    expect(refreshMock).not.toHaveBeenCalled();
+    expect(res.cookies.getAll()).toEqual([]);
+  });
+
   it("백엔드에 닿지 않으면 쿠키는 그대로 두고 통과 (다음 요청에서 다시 시도)", async () => {
     refreshMock.mockRejectedValue(new TypeError("fetch failed"));
     vi.spyOn(console, "error").mockImplementation(() => {});
