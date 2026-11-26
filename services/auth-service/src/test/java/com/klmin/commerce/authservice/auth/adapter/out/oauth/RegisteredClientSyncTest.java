@@ -59,7 +59,8 @@ class RegisteredClientSyncTest {
         assertThat(encoder.matches("secret-1", saved.getClientSecret())).isTrue();
         assertThat(saved.getClientSettings().isRequireProofKey()).isTrue();
         assertThat(saved.getClientSettings().isRequireAuthorizationConsent()).isFalse();
-        assertThat(saved.getTokenSettings().isReuseRefreshTokens()).isFalse();
+        // refresh token 은 회전하지 않는다 (BFF 세션의 동시 갱신, 5-2)
+        assertThat(saved.getTokenSettings().isReuseRefreshTokens()).isTrue();
 
         sync.sync("gateway-web", config("http://localhost:5173/login/oauth2/code/gateway-web"), "secret-1");
         assertThat(repository.saves).isEqualTo(1);
