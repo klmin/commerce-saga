@@ -593,6 +593,12 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 
 **순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
 
+**5-3c 에서 정한 것** (사용자 결정 2026-11-26)
+- 기존 자체 JWT API(`/auth/*`: 가입·로그인·refresh 회전·재사용 탐지·로그아웃·기기 관리, `/.well-known/jwks.json`)와 refresh family(Redis)·관련 코드·테스트를 지웠다. Gateway 의 `/auth/**` 라우트·IP rate limit 도. auth-service 는 SAS(로그인 화면·토큰·JWKS `/oauth2/jwks`) + 가입 폼 + 로그인 실패 제한(그대로)
+- 시나리오 스크립트의 토큰: SAS 에 **스크립트용 공개 클라이언트 `scripts`**(시크릿 없음, PKCE, 루프백 redirect `http://127.0.0.1/scripts/callback`, 인가 코드만·refresh 없음 = 네이티브 앱 방식 RFC 8252). `scripts/lib/auth.sh` 가 curl 로 인가 요청 → 로그인 폼 → 코드(redirect 주소에서 읽음) → 토큰 교환. 서비스는 그대로 Bearer 로 부른다. 시드 사용자가 없는 EKS 는 끈다(`AUTH_SCRIPTS_CLIENT_ENABLED=false`). 켰다 끄면 DB 에 남은 행은 직접 지운다(경고 로그)
+- 시나리오 9 의 인증 부분(9a~9e, `smoke-auth.sh`)은 지우고 문서에 기록으로 남김. 9f~9i(`smoke-gateway.sh`)는 그대로. 시나리오 13 은 SAS 가입 폼 + 스크립트 클라이언트로
+- 리뷰 지침(AGENTS.md)의 인증 항목을 SAS·BFF 기준으로 바꿨다
+
 **5-5 에서 정한 것** (추천안)
 - 관리자 SPA 는 사용자 SPA 와 같은 구성(Vite + React Router + TanStack Query), 로컬 `localhost:5174`, 로그인 클라이언트 `gateway-admin`(Gateway 가 `ADMIN_CLIENT_HOST` 로 고름). 경로는 앱 기준 `/`·`/products`·`/products/:id`(경로 방식이면 앞에 `/admin`)
 - `ADMIN` 역할이 없으면 화면 대신 "관리자만 볼 수 있는 화면"(권한 검사는 Gateway `/api/admin/**`·서비스가 토큰으로)

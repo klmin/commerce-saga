@@ -37,16 +37,6 @@ spring:
             - RemoveRequestHeader=X-User-Id
           # /api/<자원>/** → 서비스의 /<자원>/** (StripPrefix=1). Authorization 헤더는 그대로 넘겨 서비스가 다시 검증한다
           routes:
-            - id: auth
-              uri: ${AUTH_SERVICE_URL:http://localhost:8086}
-              predicates:
-                - Path=/auth/**,/.well-known/jwks.json
-              filters:
-                - name: RequestRateLimiter
-                  args:
-                    key-resolver: "#{@clientIpKeyResolver}"
-                    redis-rate-limiter.replenishRate: ${GATEWAY_AUTH_RATE:5}
-                    redis-rate-limiter.burstCapacity: ${GATEWAY_AUTH_BURST:20}
             - id: orders
               uri: ${ORDER_SERVICE_URL:http://localhost:8081}
               predicates:

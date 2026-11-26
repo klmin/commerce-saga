@@ -128,10 +128,12 @@ class GatewayRoutingTest {
     }
 
     @Test
-    void 로그인_전_경로는_토큰_없이_넘긴다() throws Exception {
+    void 상품_조회는_토큰_없이_넘기고_기존_auth_경로는_없다() throws Exception {
+        // 기존 자체 JWT API(/auth/**)는 후속 5-3c 에서 지웠다. 로그인은 SAS(auth-service 직접)와 BFF(/oauth2/authorization/**)
+        LAST_REQUEST.set(null);
         assertThat(send(HttpRequest.newBuilder(uri("/auth/login"))
-                .POST(HttpRequest.BodyPublishers.ofString("{}")).build()).statusCode()).isEqualTo(200);
-        assertThat(LAST_REQUEST.get()).contains("path=/auth/login");
+                .POST(HttpRequest.BodyPublishers.ofString("{}")).build()).statusCode()).isIn(401, 403, 404);
+        assertThat(LAST_REQUEST.get()).isNull();
 
         assertThat(get("/api/stocks/1", null).statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/stocks/1");
@@ -164,25 +166,22 @@ class GatewayRoutingTest {
     }
 
     @Test
-    void auth_rate_limit_은_믿는_프록시_BFF_가_넘긴_브라우저_IP_마다_따로다() throws Exception {
-        // 테스트 클라이언트는 localhost 라 기본 설정(gateway.trusted-proxies = 루프백)에서 Next 서버처럼 믿는 프록시다
+    void 로그인_없는_요청의_rate_limit_은_믿는_프록시가_넘긴_브라우저_IP_마다_따로다() throws Exception {
+        // 테스트 클라이언트는 localhost 라 기본 설정(gateway.trusted-proxies = 루프백)에서 앞단 프록시처럼 믿는 주소다
         int limited = 0;
         for (int i = 0; i < 8; i++) {
-            if (refreshFrom("198.51.100.1").statusCode() == 429) {
+            if (stocksFrom("198.51.100.1").statusCode() == 429) {
                 limited++;
             }
         }
 
         assertThat(limited).isPositive();
-        // 같은 Next 서버를 거친 다른 브라우저는 영향이 없다
-        assertThat(refreshFrom("198.51.100.2").statusCode()).isNotEqualTo(429);
+        // 같은 프록시를 거친 다른 브라우저는 영향이 없다
+        assertThat(stocksFrom("198.51.100.2").statusCode()).isNotEqualTo(429);
     }
 
-    private HttpResponse<String> refreshFrom(String browserIp) throws Exception {
-        return send(HttpRequest.newBuilder(uri("/auth/refresh"))
-                .header("X-Forwarded-For", browserIp)
-                .POST(HttpRequest.BodyPublishers.noBody())
-                .build());
+    private HttpResponse<String> stocksFrom(String browserIp) throws Exception {
+        return send(HttpRequest.newBuilder(uri("/api/stocks/1")).header("X-Forwarded-For", browserIp).GET().build());
     }
 
     private HttpResponse<String> get(String path, String token) throws Exception {

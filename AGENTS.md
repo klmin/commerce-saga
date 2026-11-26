@@ -40,8 +40,8 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
 | product-service | 상품·가격의 주인, 가격 변경 이력. 공개 조회 API(order 가 주문 때 동기 조회, ADR 0016). 메시지를 발행하지 않음(products 테이블은 Debezium 이 검색용으로 복제, ADR 0010) |
 | search-service | 상품 검색. `product.cdc.products`(테이블 CDC)를 소비해 Elasticsearch 에 색인(외부 버전 = 원본 LSN), 공개 검색 API. ES 가 자기 저장소(DB 없음) (ADR 0010) |
-| auth-service | 회원가입·로그인, access token(JWT RS256) 발급·JWKS, refresh token 회전(Redis). 메시지를 주고받지 않음 (ADR 0008) |
-| gateway | Spring Cloud Gateway(WebFlux). `/auth/**` → auth-service, `/api/<자원>/**` → 서비스, JWT 1차 검증·역할·사용자별 rate limit (ADR 0008) |
+| auth-service | 회원가입, Spring Authorization Server(OIDC): 로그인 화면·SSO 세션(Redis)·토큰(JWT RS256) 발급·JWKS. 메시지는 `auth.events` 만 (ADR 0017, 0008) |
+| gateway | Spring Cloud Gateway(WebFlux) = BFF: 화면 로그인(`oauth2Login`, 세션에 토큰), `/api/<자원>/**` → 서비스(토큰 릴레이), JWT 1차 검증·역할·사용자별 rate limit (ADR 0017, 0008) |
 
 ## 명령
 
@@ -166,10 +166,10 @@ common/error, common/web, common/config
 - 소유권·권한
   - 주문·포인트 등 사용자 리소스를 ID로 조회·취소할 때 현재 사용자(JWT `sub`)와 소유자를 비교하는지. 빠뜨리면 IDOR (P0)
   - 메시지에 토큰이나 비밀값이 실리지 않는지
-- 인증 (auth-service, ADR 0008)
-  - refresh token 은 httpOnly 쿠키로만 오가고 서버(Redis)에는 secret 해시만 있는지. 비밀번호·토큰이 로그·예외 메시지·`toString` 에 남지 않는지
-  - refresh 회전이 compare-and-set(현재 secret 이 그대로일 때만 교체)인지. 아니면 동시 refresh 가 둘 다 회전해 family 가 갈라진다 (P1)
-  - 이미 회전된 옛 secret 재사용을 탐지해 family 를 지우는지, 기기 관리 API 가 토큰의 `sub` 와 family 소유자를 비교하는지 (P0)
+- 인증 (auth-service = SAS, Gateway = BFF, ADR 0017)
+  - 토큰(access·refresh)이 브라우저(JS·URL·쿠키 값)로 나가지 않는지. 화면은 Gateway 세션 쿠키(httpOnly)만. 비밀번호·토큰·클라이언트 시크릿이 로그·예외 메시지·`toString` 에 남지 않는지
+  - redirect URI·로그아웃 뒤 주소·`return_to` 가 등록된 정확한 값·같은 출처 경로만인지(open redirect), PKCE·state 를 쓰는지 (P0)
+  - 쿠키로 인증되는 상태 변경에 CSRF 검사가 있는지, 앞단이 들어온 `X-Forwarded-Prefix`·`Host` 를 믿지 않는지 (P1)
 - 동시성
   - 재고·포인트 차감이 동시 요청에서 음수가 되지 않는지 (조건부 UPDATE, 낙관적 락 등)
 - 민감정보

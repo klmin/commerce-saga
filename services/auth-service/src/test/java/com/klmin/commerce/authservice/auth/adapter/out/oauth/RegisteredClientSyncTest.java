@@ -94,7 +94,7 @@ class RegisteredClientSyncTest {
 
     private RegisteredClientSync sync(OAuthClientProperties.Client client) {
         OAuthClientProperties properties = new OAuthClientProperties(Map.of("gateway-web", client), dir.toString(),
-                Duration.ofMinutes(15), Duration.ofDays(14));
+                Duration.ofMinutes(15), Duration.ofDays(14), null);
         return new RegisteredClientSync(repository, encoder, properties, Clock.systemUTC());
     }
 

@@ -7,19 +7,14 @@ import com.nimbusds.jose.jwk.KeyUse;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -40,12 +35,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 서명 키를 읽어 두 가지를 만든다.
- * <ul>
- *   <li>{@link JwtKeys}: 서명용 현재 키 + JWKS 로 내보낼 공개키(현재 + 은퇴한 키)</li>
- *   <li>{@link JwtDecoder}: auth-service 자신의 API(로그인 기기 관리, 전체 로그아웃)가 access token 을 검증할 때.
- *       JWKS 와 같은 공개키 집합과 issuer 로 검증한다</li>
- * </ul>
+ * 서명 키를 읽어 {@link JwtKeys}(서명용 현재 키 + JWKS 로 내보낼 공개키: 현재 + 은퇴한 키)를 만들고,
+ * SAS 가 쓰는 JWKS({@link JWKSource})·서명({@link JwtEncoder})으로 내놓는다 (ADR 0008 의 키 주입 순서, ADR 0017)
  */
 @Configuration(proxyBeanMethods = false)
 class JwtKeyConfig {
@@ -62,22 +53,11 @@ class JwtKeyConfig {
             publicKeys.add(new RSAKey.Builder(key).keyID(retired.keyId())
                     .keyUse(KeyUse.SIGNATURE).algorithm(JWSAlgorithm.RS256).build());
         }
-        return new JwtKeys(properties.issuer(), signingKey, new JWKSet(publicKeys));
-    }
-
-    @Bean
-    JwtDecoder jwtDecoder(JwtKeys keys) {
-        DefaultJWTProcessor<SecurityContext> processor = new DefaultJWTProcessor<>();
-        processor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256,
-                new ImmutableJWKSet<>(keys.publicKeys())));
-        NimbusJwtDecoder decoder = new NimbusJwtDecoder(processor);
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(keys.issuer()));
-        return decoder;
+        return new JwtKeys(signingKey, new JWKSet(publicKeys));
     }
 
     /**
-     * SAS 가 JWKS({@code /oauth2/jwks})로 내보내는 공개키 (ADR 0017). 지금 {@code /.well-known/jwks.json} 과 같은 집합
-     * (현재 + 은퇴한 키)이라 두 발급 경로의 토큰이 같은 키로 검증된다. 개인키는 넣지 않는다.
+     * SAS 가 JWKS({@code /oauth2/jwks})로 내보내는 공개키 (ADR 0017): 현재 + 은퇴한 키. 개인키는 넣지 않는다.
      */
     @Bean
     JWKSource<SecurityContext> jwkSource(JwtKeys keys) {
