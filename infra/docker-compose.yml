@@ -1,4 +1,5 @@
 # 로컬 개발용 인프라. 서비스(Spring Boot 앱)는 호스트에서 ./gradlew bootRun 으로 띄운다.
+# 앱까지 컨테이너로 띄우려면 docker-compose.app.yml 을 함께 쓴다(그 파일 머리 주석).
 #
 #   docker compose -f infra/docker-compose.yml up -d --wait
 #

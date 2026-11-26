@@ -1,0 +1,34 @@
+# 호스트 방식 (설계 문서 7-2): 화면마다 호스트, 같은 경로. compose 의 caddy 가 쓴다(CADDY_MODE=host, 기본)
+# 브라우저가 보낸 X-Forwarded-Prefix 는 버린다(위조하면 SAS 의 리다이렉트 주소·쿠키 Path 가 바뀐다, 설계 문서 7-3).
+# X-Forwarded-For·Proto·Host 는 Caddy 가 자기 값으로 넣는다(믿지 않는 곳에서 온 값은 쓰지 않음)
+{
+	auto_https off
+}
+
+(scg) {
+	request_header -X-Forwarded-Prefix
+	@scg path /api/* /oauth2/authorization/* /login/oauth2/code/* /logout
+	handle @scg {
+		reverse_proxy gateway:8000
+	}
+}
+
+http://localhost {
+	import scg
+	handle {
+		reverse_proxy web:8080
+	}
+}
+
+http://admin.localhost {
+	import scg
+	handle {
+		reverse_proxy admin:8080
+	}
+}
+
+# 로그인 화면도 지금은 auth-service 의 임시 화면(/signin·/register) → 전부 auth-service. 인증 화면 SPA 는 5-4
+http://auth.localhost {
+	request_header -X-Forwarded-Prefix
+	reverse_proxy auth-service:8086
+}
