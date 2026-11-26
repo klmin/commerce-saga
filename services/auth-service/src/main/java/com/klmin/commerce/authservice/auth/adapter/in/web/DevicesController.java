@@ -5,6 +5,7 @@ import com.klmin.commerce.authservice.auth.application.port.in.ManageDevicesUseC
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -62,8 +64,13 @@ class DevicesController {
         response.sendRedirect(request.getContextPath() + "/devices");
     }
 
+    /** SSO 세션의 사용자는 우리 로그인 폼이 넣은 userId 다. 아니면 기기가 없는 사용자라 401 */
     private static long userId(Authentication authentication) {
-        return Long.parseLong(authentication.getName());
+        try {
+            return Long.parseLong(authentication.getName());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "userId 로 로그인하지 않았습니다");
+        }
     }
 
     record DeviceResponse(String id, boolean current, String userAgent, Instant loginAt, Instant lastSeenAt) {

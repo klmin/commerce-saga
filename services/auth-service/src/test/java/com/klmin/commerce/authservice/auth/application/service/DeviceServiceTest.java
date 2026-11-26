@@ -43,37 +43,45 @@ class DeviceServiceTest {
     @BeforeEach
     void setUp() {
         DevicePort devices = new DevicePort() {
+            @Override
             public void save(long userId, DeviceRecord device) {
                 deviceStore.computeIfAbsent(userId, k -> new LinkedHashMap<>()).put(device.deviceId(), device);
             }
 
+            @Override
             public List<DeviceRecord> findAll(long userId) {
                 return new ArrayList<>(deviceStore.getOrDefault(userId, Map.of()).values());
             }
 
+            @Override
             public void remove(long userId, String deviceId) {
                 deviceStore.getOrDefault(userId, new HashMap<>()).remove(deviceId);
             }
 
+            @Override
             public void extend(long userId) {
                 extended.add(userId);
             }
         };
         SsoSessionPort sessions = new SsoSessionPort() {
+            @Override
             public Optional<Instant> lastAccessed(String sessionId) {
                 return Optional.ofNullable(liveSessions.get(sessionId));
             }
 
+            @Override
             public void delete(String sessionId) {
                 liveSessions.remove(sessionId);
                 deletedSessions.add(sessionId);
             }
         };
         AuthorizationRecordPort authorizations = new AuthorizationRecordPort() {
+            @Override
             public int deleteByPrincipal(String principalName) {
                 return 0;
             }
 
+            @Override
             public int deleteByDevice(String principalName, String deviceId) {
                 assertThat(principalName).isEqualTo(Long.toString(USER));
                 if (deviceId.equals(failRevokeOf)) {
@@ -83,10 +91,12 @@ class DeviceServiceTest {
                 return liveTokens.remove(deviceId) == null ? 0 : 1;
             }
 
+            @Override
             public Map<String, Instant> liveDevices(String principalName, Instant now) {
                 return Map.copyOf(liveTokens);
             }
 
+            @Override
             public int deleteExpiredBefore(Instant cutoff) {
                 return 0;
             }
