@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # kind 클러스터에 commerce-saga 를 올린다 (후속 3 K-1, deploy/README.md)
 #
-# 준비: kind·kubectl·helm·docker, 클러스터 (kind create cluster --name commerce-saga), bootJar·frontend 이미지 빌드 가능
+# 준비: kind·kubectl·helm·docker, 클러스터 (kind create cluster --name commerce-saga), bootJar·화면 이미지 빌드 가능
 # 실행: scripts/k8s-deploy.sh [helm 추가 인자...]
 #   예) scripts/k8s-deploy.sh --set services.gateway.env.GATEWAY_USER_RATE=5
 #
 # 하는 일
-#   1. 서비스 8개 이미지(deploy/docker/service.Dockerfile) + frontend + Kafka Connect(Debezium) 이미지를 빌드해 kind 노드에 넣는다
+#   1. 서비스 8개 이미지(deploy/docker/service.Dockerfile) + 화면 SPA(web·admin) + Kafka Connect(Debezium) 이미지를 빌드해 kind 노드에 넣는다
 #   2. Strimzi 오퍼레이터를 같은 namespace 에 설치한다 (그 namespace 의 Kafka CR 만 본다)
 #   3. 차트(deploy/helm/commerce-saga)를 설치하고 Kafka·토픽·Deployment 가 준비될 때까지 기다린다
 set -euo pipefail
@@ -36,13 +36,16 @@ if [ "$SKIP_BUILD" != true ]; then
     docker build -q -f deploy/docker/service.Dockerfile \
       --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "commerce-saga/$s:$TAG" . > /dev/null
   done
-  docker build -q -t "commerce-saga/frontend:$TAG" frontend/next > /dev/null
+  # 화면 SPA (nginx, ADR 0017)
+  for app in web admin; do
+    docker build -q --build-arg APP=$app -t "commerce-saga/$app:$TAG" frontend > /dev/null
+  done
   # Debezium Postgres 플러그인을 얹은 Strimzi Kafka Connect (K-2)
   docker build -q -f deploy/docker/connect.Dockerfile -t "commerce-saga/connect:$TAG" deploy/docker > /dev/null
 fi
 
 echo "== kind 노드에 이미지 넣기"
-for s in $SERVICES frontend connect; do
+for s in $SERVICES web admin connect; do
   kind load docker-image "commerce-saga/$s:$TAG" --name "$KIND_CLUSTER" > /dev/null
 done
 
@@ -65,7 +68,7 @@ kubectl -n "$NAMESPACE" wait kafkatopic --all --for=condition=Ready --timeout=5m
 kubectl -n "$NAMESPACE" rollout status statefulset/postgres --timeout=5m
 # 상품 검색 저장소 (ADR 0010). 이미지가 커서 처음 받을 때 오래 걸린다
 kubectl -n "$NAMESPACE" rollout status statefulset/elasticsearch --timeout=8m
-for d in redis $SERVICES frontend; do
+for d in redis $SERVICES web admin; do
   kubectl -n "$NAMESPACE" rollout status deployment/"$d" --timeout=8m
 done
 # Debezium (debezium.enabled). 커넥터는 서비스의 Flyway 가 outbox 테이블을 만든 뒤에야 Ready 가 된다

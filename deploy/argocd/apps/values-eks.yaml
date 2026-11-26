@@ -21,21 +21,22 @@ commerceValues:
 
   edge:
     enabled: true
+    # 도메인이 없어 LB 주소 하나로 연다 → 경로 방식(/, /admin/, /auth/). 도메인을 붙이면 mode: host 와 host.web·admin·auth
+    mode: path
+    path:
+      # 브라우저가 여는 LB 주소 (http, 끝 / 없이). 처음 배포 뒤 Envoy Service 의 EXTERNAL-IP(LB DNS)를 넣는다(deploy/README.md).
+      # 비어 있으면 화면·edge 는 뜨지만 로그인(SAS issuer·redirect URI)이 안 된다
+      url: ""
     # Envoy 를 AWS 로드밸런서로 연다. AWS Load Balancer Controller 가 있으면 NLB, 없으면 EKS 기본 CLB
     serviceType: LoadBalancer
     serviceAnnotations:
       # LB Controller 는 기본이 internal 이다. 화면을 인터넷에 연다 (LB Controller 가 없으면 무시된다)
       service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 
-  # TLS(도메인·인증서)를 붙이기 전까지는 LB 주소를 http 로 연다. Secure 쿠키는 http 에서 브라우저가 버려 로그인이 안 된다
-  # → 임시로 끈다. https 를 붙이면 두 값을 지운다(기본 true)
-  frontend:
-    env:
-      COOKIE_SECURE: "false"
+  # TLS(도메인·인증서)를 붙이기 전까지는 LB 주소를 http 로 연다. 쿠키 Secure 는 공개 주소의 스킴(http 면 끔)으로 차트가 정한다
   services:
     auth-service:
       env:
-        AUTH_COOKIE_SECURE: "false"
         # 개발용 시드 사용자(admin/local-dev-pass 등, 저장소에 공개)를 넣지 않는다. 인터넷에 열린 화면에서 관리자 로그인이 되면
         # 누구나 결제 장애를 주입할 수 있다. 사용자는 회원가입으로, 관리자는 DB 에서 따로 역할을 준다
         AUTH_FLYWAY_LOCATIONS: classpath:db/migration
