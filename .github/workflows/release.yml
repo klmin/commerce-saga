@@ -68,7 +68,7 @@ jobs:
           SHA: ${{ github.sha }}
           CI_FROM: ${{ inputs.ci_from }}
           # 배포 전에 통과해야 하는 워크플로 (push: main 으로 도는 CI)
-          WORKFLOWS: '["backend","frontend","e2e","browser-e2e","infra","k8s","codeql"]'
+          WORKFLOWS: '["backend","frontend","e2e","browser-e2e","compose","infra","k8s","codeql"]'
         run: |
           set -euo pipefail
           PREV_RELEASE=$(git rev-parse -q --verify refs/remotes/origin/release/eks || true) bash scripts/release-ci-gate.sh

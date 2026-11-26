@@ -78,6 +78,16 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 (cd frontend && pnpm dev:admin)                        # 관리자 화면 SPA http://localhost:5174
 ```
 
+앱까지 컨테이너로 한 번에 띄우려면(후속 5-3d): 밖으로는 Caddy(:80) 하나, 화면·Gateway·SAS 를 경로로 나눈다
+
+```bash
+./gradlew bootJar
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build --wait
+# 호스트 방식(기본): 사용자 http://localhost, 관리자 http://admin.localhost, 로그인 http://auth.localhost
+docker compose --env-file infra/app-path.env -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build --wait
+# 경로 방식: http://localhost/, /admin/, /auth/
+```
+
 ```bash
 TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/json' \
   -d '{"loginId":"user1","password":"local-dev-pass"}' | sed -nE 's/.*"accessToken":"([^"]+)".*/\1/p')   # 개발용 시드 사용자 1
