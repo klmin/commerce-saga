@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-3b 화면 SPA 배포·Next 제거: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-3d compose 전체 실행·Caddy: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -593,6 +593,14 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
 **순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
+
+**5-3d 에서 정한 것** (추천안)
+- 전체 실행은 인프라 compose 위에 얹는 파일(`infra/docker-compose.app.yml`). 서비스 이미지는 미리 만든 jar(`./gradlew bootJar`) + `deploy/docker/service.Dockerfile`, 화면은 `frontend/Dockerfile`. 밖으로는 Caddy(:80) 하나, 서비스·Gateway·SAS 는 compose 네트워크 안
+- 방식은 `CADDY_MODE`(`caddy/Caddyfile.host`·`Caddyfile.path`)와 공개 주소 값들. 경로 방식은 `--env-file infra/app-path.env` 로 한 번에 바꾼다(issuer·redirect URI·홈·`ADMIN_CLIENT_HOST` 비움·관리자 `BASE_PATH`)
+- 시크릿 init(`oauth-secrets-init`, alpine): 없을 때만 `gateway-web`·`gateway-admin` 시크릿 파일을 만들고 auth-service·Gateway 가 같은 볼륨을 개발용 시크릿 디렉터리로 읽는다. 서명 키 볼륨도 준비해 auth-service 가 처음 만든 키를 재시작해도 쓴다
+- 검색용 `product-cdc` 커넥터는 `connectors-init`(curl 이미지가 `scripts/register-connectors.sh` 를 실행, product-service 기동 뒤)이 등록. Alloy 메트릭 수집 대상은 compose 내부 주소로 덮어씀. 80 이 아닌 포트로 띄우면 `ADMIN_CLIENT_HOST` 도 포트까지
+- Caddy 는 두 방식 모두 들어온 `X-Forwarded-Prefix` 를 지우고, 경로 방식 `/auth` 에서만 다시 붙인다. `X-Forwarded-For·Proto·Host` 는 Caddy 가 자기 값으로. Gateway 는 compose 네트워크 대역을 믿는 프록시로
+- CI `compose` 워크플로: 경로 방식으로 띄워 `/`·`/admin/`·SAS issuer·위조한 `X-Forwarded-Prefix` 무시·BFF 로그인(curl), 같은 볼륨으로 호스트 방식으로 다시 띄워 관리자 호스트의 `gateway-admin`·BFF 로그인
 
 **5-3b 에서 정한 것** (추천안, EKS 방식은 사용자 확인 2026-11-26)
 - 5-3b 를 둘로: 이 PR(이미지·Helm·k8s·Next 제거)과 5-3d(compose 전체 실행·Caddy·시크릿 init). Next 를 지우면서 k8s·EKS 가 화면 없이 남지 않게 이미지·차트를 함께 바꿨다

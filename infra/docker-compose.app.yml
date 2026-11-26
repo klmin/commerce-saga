@@ -1,0 +1,263 @@
+# 앱까지 컨테이너로 띄우는 전체 실행 (후속 5-3d, 설계 문서 7-2). 인프라(docker-compose.yml) 위에 얹는다.
+# 밖으로는 Caddy(:80) 하나만 연다. 서비스·Gateway·auth-service 는 compose 네트워크 안에만 있다(설계 문서 8절).
+#
+#   ./gradlew bootJar                                   # 서비스 이미지는 미리 만든 jar 를 쓴다
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build --wait
+#     호스트 방식(기본): 사용자 http://localhost, 관리자 http://admin.localhost, 로그인 http://auth.localhost
+#   docker compose --env-file infra/app-path.env -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build --wait
+#     경로 방식: http://localhost/, /admin/, /auth/
+#
+# *.localhost 는 크롬·엣지·파이어폭스가 hosts 수정 없이 127.0.0.1 로 연다. 80 포트를 못 쓰면 CADDY_PORT 를 바꾸고
+# 아래 PUBLIC_* 주소·GATEWAY_*_HOME·WEB_POST_LOGOUT_REDIRECT_URIS 에도 같은 포트를 넣는다(브라우저가 보는 주소가 SAS issuer·redirect URI 다).
+# 호스트 방식이면 ADMIN_CLIENT_HOST 도 포트까지(예: admin.localhost:8080). Gateway 는 요청 호스트:포트와 그대로 비교해 관리자 클라이언트를 고른다.
+# 계정·비밀번호는 로컬 개발용 값이다(서비스 기본값과 같다).
+
+x-service: &service
+  restart: unless-stopped
+  depends_on:
+    postgres-init: { condition: service_completed_successfully }
+    kafka-init: { condition: service_completed_successfully }
+    redis: { condition: service_healthy }
+  healthcheck:
+    # 이미지에 curl 이 없어 bash 의 /dev/tcp 로 actuator 를 부른다
+    test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/$$SERVER_PORT && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+    interval: 5s
+    timeout: 5s
+    retries: 60
+    start_period: 30s
+
+x-env: &env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  # 토큰 iss = 브라우저가 가는 SAS 공개 주소. 서비스·Gateway 는 문자열로 검증하고 공개키는 내부 주소에서 받는다
+  AUTH_ISSUER: ${PUBLIC_AUTH_URL:-http://auth.localhost}
+  AUTH_INTERNAL_URL: http://auth-service:8086
+  OTLP_TRACING_ENDPOINT: http://alloy:4318/v1/traces
+  OTLP_LOGGING_ENDPOINT: http://alloy:4318/v1/logs
+
+x-build: &build
+  context: ..
+  dockerfile: deploy/docker/service.Dockerfile
+
+services:
+  # OAuth 클라이언트 시크릿(gateway-web·gateway-admin)을 없을 때만 만든다 (설계 문서 6절: 앱 밖에서 생성).
+  # auth-service·Gateway 가 같은 볼륨을 개발용 시크릿 디렉터리로 읽는다. 볼륨을 지우면 새 값(두 앱을 다시 띄우면 맞는다).
+  # 서명 키 볼륨(auth-jwt)도 앱 사용자(uid 10001)가 쓰게 준비한다: auth-service 가 처음 띄울 때 키를 만들어 두고 재시작해도 쓴다
+  oauth-secrets-init:
+    image: alpine:3.22
+    volumes:
+      - oauth-secrets:/secrets
+      - auth-jwt:/keys
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for id in gateway-web gateway-admin; do
+          f=/secrets/oauth-client-$$id.secret
+          if [ ! -s "$$f" ]; then
+            head -c 32 /dev/urandom | base64 | tr -d '/+=\n' > "$$f"
+            echo "만듦: $$f"
+          fi
+        done
+        chown -R 10001:10001 /secrets /keys
+        chmod 600 /secrets/*
+    restart: "no"
+
+  auth-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/auth-service/build/libs/auth-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/auth-service:local
+    depends_on:
+      postgres-init: { condition: service_completed_successfully }
+      kafka-init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      oauth-secrets-init: { condition: service_completed_successfully }
+    volumes:
+      - oauth-secrets:/secrets:ro
+      - auth-jwt:/keys
+    environment:
+      <<: *env
+      SERVER_PORT: 8086
+      # 서명 키: 없으면 만들어 저장 (ADR 0008 의 로컬 개발용 키 파일)
+      AUTH_JWT_DEV_KEY_FILE: /keys/auth-jwt-dev.pem
+      AUTH_DB_URL: jdbc:postgresql://postgres:5432/auth_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OAUTH_CLIENT_SECRET_DEV_DIR: /secrets
+      # 고정 클라이언트의 redirect URI·로그아웃 뒤 주소 (시작할 때 DB 에 upsert)
+      WEB_HOME: ${PUBLIC_WEB_URL:-http://localhost}/
+      WEB_REDIRECT_URI: ${PUBLIC_WEB_URL:-http://localhost}/login/oauth2/code/gateway-web
+      WEB_POST_LOGOUT_REDIRECT_URIS: ${WEB_POST_LOGOUT_REDIRECT_URIS:-http://localhost/}
+      ADMIN_REDIRECT_URI: ${PUBLIC_ADMIN_URL:-http://admin.localhost}/login/oauth2/code/gateway-admin
+      ADMIN_POST_LOGOUT_REDIRECT_URIS: ${PUBLIC_ADMIN_URL:-http://admin.localhost}/
+      # http 라 쿠키 Secure 를 끈다
+      AUTH_COOKIE_SECURE: "false"
+
+  # 검색용 상품 테이블 CDC 커넥터 등록 (ADR 0010). outbox 는 서비스의 스케줄러 relay 라 product-cdc 만.
+  # product-service 의 Flyway 가 products 테이블을 만든 뒤에 등록한다(publication 이 테이블 기준). 다시 띄워도 된다(PUT, 멱등)
+  connectors-init:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      connect: { condition: service_healthy }
+      product-service: { condition: service_healthy }
+    volumes:
+      - ../scripts/register-connectors.sh:/work/register-connectors.sh:ro
+      - ./connect:/work/connect:ro
+    working_dir: /work
+    environment:
+      CONNECT_URL: http://connect:8083
+      CONNECTOR_DIR: /work/connect
+      CONNECTORS: product-cdc
+      TIMEOUT_SECONDS: 120
+    entrypoint: ["sh", "/work/register-connectors.sh"]
+    restart: "no"
+
+  # 메트릭 수집 대상: 서비스가 호스트가 아니라 compose 네트워크 안에 있다 (인프라 파일의 host.docker.internal 을 덮어씀)
+  alloy:
+    environment:
+      METRICS_SERVICE_TARGETS: >-
+        [{"__address__":"order-service:8081","service":"order-service"},
+        {"__address__":"inventory-service:8082","service":"inventory-service"},
+        {"__address__":"point-service:8083","service":"point-service"},
+        {"__address__":"payment-service:8084","service":"payment-service"},
+        {"__address__":"notification-service:8085","service":"notification-service"},
+        {"__address__":"auth-service:8086","service":"auth-service"},
+        {"__address__":"product-service:8087","service":"product-service"},
+        {"__address__":"search-service:8089","service":"search-service"},
+        {"__address__":"gateway:8000","service":"gateway"}]
+
+  product-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/product-service/build/libs/product-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/product-service:local
+    environment:
+      <<: *env
+      SERVER_PORT: 8087
+      PRODUCT_DB_URL: jdbc:postgresql://postgres:5432/product_db
+
+  search-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/search-service/build/libs/search-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/search-service:local
+    depends_on:
+      kafka-init: { condition: service_completed_successfully }
+      elasticsearch: { condition: service_healthy }
+    environment:
+      <<: *env
+      SERVER_PORT: 8089
+      ELASTICSEARCH_URI: http://elasticsearch:9200
+
+  order-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/order-service/build/libs/order-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/order-service:local
+    environment:
+      <<: *env
+      SERVER_PORT: 8081
+      ORDER_DB_URL: jdbc:postgresql://postgres:5432/order_db
+      PRODUCT_SERVICE_URL: http://product-service:8087
+
+  inventory-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/inventory-service/build/libs/inventory-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/inventory-service:local
+    environment:
+      <<: *env
+      SERVER_PORT: 8082
+      INVENTORY_DB_URL: jdbc:postgresql://postgres:5432/inventory_db
+
+  point-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/point-service/build/libs/point-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/point-service:local
+    environment:
+      <<: *env
+      SERVER_PORT: 8083
+      POINT_DB_URL: jdbc:postgresql://postgres:5432/point_db
+
+  payment-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/payment-service/build/libs/payment-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/payment-service:local
+    environment:
+      <<: *env
+      SERVER_PORT: 8084
+      PAYMENT_DB_URL: jdbc:postgresql://postgres:5432/payment_db
+
+  notification-service:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/notification-service/build/libs/notification-service-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/notification-service:local
+    environment:
+      <<: *env
+      SERVER_PORT: 8085
+      NOTIFICATION_DB_URL: jdbc:postgresql://postgres:5432/notification_db
+
+  gateway:
+    <<: *service
+    build: { <<: *build, args: { JAR: services/gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar } }
+    image: commerce-saga/gateway:local
+    depends_on:
+      redis: { condition: service_healthy }
+      oauth-secrets-init: { condition: service_completed_successfully }
+      auth-service: { condition: service_healthy }
+    volumes:
+      - oauth-secrets:/secrets:ro
+    environment:
+      <<: *env
+      SERVER_PORT: 8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OAUTH_CLIENT_SECRET_DEV_DIR: /secrets
+      AUTH_SERVICE_URL: http://auth-service:8086
+      ORDER_SERVICE_URL: http://order-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      POINT_SERVICE_URL: http://point-service:8083
+      PAYMENT_SERVICE_URL: http://payment-service:8084
+      NOTIFICATION_SERVICE_URL: http://notification-service:8085
+      PRODUCT_SERVICE_URL: http://product-service:8087
+      SEARCH_SERVICE_URL: http://search-service:8089
+      # 전달 헤더(X-Forwarded-*)를 믿을 앞단 = Caddy. compose 네트워크 대역 (docker 기본 사설 대역)
+      GATEWAY_TRUSTED_PROXIES: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,127.0.0.1,::1
+      # BFF 로그인: 화면별 클라이언트·돌아올 곳 (설계 문서 7-3·7-4)
+      WEB_REDIRECT_URI: ${PUBLIC_WEB_URL:-http://localhost}/login/oauth2/code/gateway-web
+      ADMIN_REDIRECT_URI: ${PUBLIC_ADMIN_URL:-http://admin.localhost}/login/oauth2/code/gateway-admin
+      ADMIN_CLIENT_HOST: ${ADMIN_CLIENT_HOST-admin.localhost}
+      WEB_HOME: ${GATEWAY_WEB_HOME:-http://localhost/}
+      ADMIN_HOME: ${GATEWAY_ADMIN_HOME:-http://admin.localhost/}
+      GATEWAY_COOKIE_SECURE: "false"
+
+  # 화면 SPA (frontend/Dockerfile, nginx). 경로 방식이면 관리자 화면의 앞 경로가 /admin/
+  web:
+    build: { context: ../frontend, args: { APP: web } }
+    image: commerce-saga/web:local
+    restart: unless-stopped
+    environment:
+      BASE_PATH: /
+
+  admin:
+    build: { context: ../frontend, args: { APP: admin } }
+    image: commerce-saga/admin:local
+    restart: unless-stopped
+    environment:
+      BASE_PATH: ${ADMIN_BASE_PATH:-/}
+
+  # 앞단 프록시: 설계 문서 7-1 표대로 화면·Gateway·SAS 로 나눈다. CADDY_MODE 로 Caddyfile 을 고른다 (caddy/Caddyfile.host·path)
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      gateway: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+      web: { condition: service_started }
+      admin: { condition: service_started }
+      # 일회성 서비스는 누군가 완료를 기다려야 --wait 가 정상 종료(0)를 실패로 보지 않는다
+      connectors-init: { condition: service_completed_successfully }
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.${CADDY_MODE:-host}", "--adapter", "caddyfile"]
+    ports:
+      - "${CADDY_PORT:-80}:80"
+    volumes:
+      - ./caddy:/etc/caddy:ro
+
+volumes:
+  oauth-secrets:
+  auth-jwt:

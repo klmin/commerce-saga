@@ -10,7 +10,7 @@ name: notify
 on:
   workflow_run:
     # "모두 통과" 판정은 아래 워크플로의 check run 만 센다 → 목록을 바꾸면 all-passed 의 WORKFLOWS 도 같이
-    workflows: [backend, frontend, e2e, browser-e2e, infra, k8s, codeql, release, Codex review on push]
+    workflows: [backend, frontend, e2e, browser-e2e, compose, infra, k8s, codeql, release, Codex review on push]
     types: [completed]
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
@@ -125,7 +125,7 @@ jobs:
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
           COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
           # 위 on.workflow_run.workflows 와 같은 목록 (이 워크플로들의 실행만 센다)
-          WORKFLOWS: '["backend","frontend","e2e","browser-e2e","infra","k8s","codeql","release","Codex review on push"]'
+          WORKFLOWS: '["backend","frontend","e2e","browser-e2e","compose","infra","k8s","codeql","release","Codex review on push"]'
         run: |
           set -euo pipefail
           [ -n "$PR_WEBHOOK" ] || { echo "DISCORD_WEBHOOK_PR 없음, 건너뜀"; exit 0; }
