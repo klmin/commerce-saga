@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-5 관리자 화면 SPA, 순서를 5-3b 앞으로: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-3b 화면 SPA 배포·Next 제거: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -577,7 +577,8 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃), PR #108 |
 | 5-3a | 사용자 SPA(`frontend/apps/web` + `packages/ui`, pnpm workspace), Vite 프록시로 로컬 개발, Gateway `GET /api/me`, BFF 로그인으로 도는 브라우저 e2e. Next 는 `frontend/next` 로 옮겨 그대로 둠 |
 | 5-5 | 관리자 SPA(`frontend/apps/admin`), 공용 `packages/bff`. 순서를 5-3b 앞으로 당김(아래) |
-| 5-3b | compose 전체 실행·Caddy(`CADDY_MODE` host·path)·시크릿 init, nginx 이미지(`BASE_PATH`), Helm `edge.mode` 라우트, k8s 공개 `AUTH_ISSUER`·`GATEWAY_TRUSTED_PROXIES`, 경로 방식 e2e. Next(`frontend/next`)·이미지 `frontend` 제거 |
+| 5-3b | 화면 SPA nginx 이미지(`frontend/Dockerfile`, `BASE_PATH`), Helm 화면(web·admin)·edge `mode` host·path 라우트·공개 주소로 SAS·BFF 설정, kind 경로 방식 로그인 확인, Next·이미지 `frontend` 제거 |
+| 5-3d | compose 전체 실행·Caddy(`CADDY_MODE` host·path)·시크릿 init, compose 경로 방식 e2e |
 | 5-3c | 기존 `/auth/*` API·refresh family 제거(auth-service·Gateway 라우트) |
 | 5-4 | 인증 화면(`frontend/apps/auth`) |
 | 5-6 | 로그인 기기 관리 재구현, 시나리오 문서, 태그 |
@@ -592,6 +593,15 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
 **순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
+
+**5-3b 에서 정한 것** (추천안, EKS 방식은 사용자 확인 2026-11-26)
+- 5-3b 를 둘로: 이 PR(이미지·Helm·k8s·Next 제거)과 5-3d(compose 전체 실행·Caddy·시크릿 init). Next 를 지우면서 k8s·EKS 가 화면 없이 남지 않게 이미지·차트를 함께 바꿨다
+- 화면 이미지는 Dockerfile 하나(`--build-arg APP=web|admin`), `nginxinc/nginx-unprivileged`(uid 101, 8080). 시작 스크립트가 `BASE_PATH`(/ 로 시작·끝, 쓸 글자 제한)로 `<base href>` 를 바꾸고, 틀리면 기동 실패. `index.html`·화면 경로는 `no-cache`, 해시 자산은 1년, 없는 자산은 404
+- Helm: `screens`(web·admin Deployment·Service 80), `edge.mode` host(호스트 3개: 화면 둘 + auth) / path(한 주소에 /·/admin/·/auth/, URLRewrite·X-Forwarded-Prefix). auth 호스트·경로는 지금 auth-service 로 다 보낸다(로그인 화면이 auth-service 의 임시 화면, 인증 화면 SPA 는 5-4)
+- 공개 주소(`edge.host.*` 또는 `edge.path.url`)로 차트가 `AUTH_ISSUER`(모든 서비스), redirect URI·로그아웃 뒤 주소(auth-service upsert), `ADMIN_CLIENT_HOST`·`WEB_HOME`·`ADMIN_HOME`(Gateway), 쿠키 Secure(https 면 켬)를 만든다. edge 를 끄면(scripts/k8s-deploy.sh) 내부 주소 그대로(브라우저 로그인 없음)
+- EKS: 도메인이 없어 경로 방식. 공개 주소(LB DNS)는 처음 배포 뒤 `values-eks.yaml` 의 `edge.path.url` 에 넣는다(지금 EKS 는 띄우지 않음, 사용자 확인). 비어 있으면 화면·edge 는 뜨고 로그인만 안 된다(LB 를 만들어야 주소를 알기 때문)
+- kind(argocd job): 경로 방식, 공개 주소 `http://localhost:18080`(port-forward). curl 로 BFF 로그인 한 바퀴(`scripts/smoke-bff-login.sh`): 화면 → Gateway → SAS 로그인 폼 → 콜백 → `/api/me`·`/api/points/me`
+- release: 이미지 `web`·`admin`(공용 패키지·workspace 설정이 바뀌면 둘 다). 옛 `frontend` 이미지는 더 쓰지 않는다
 
 **5-5 에서 정한 것** (추천안)
 - 관리자 SPA 는 사용자 SPA 와 같은 구성(Vite + React Router + TanStack Query), 로컬 `localhost:5174`, 로그인 클라이언트 `gateway-admin`(Gateway 가 `ADMIN_CLIENT_HOST` 로 고름). 경로는 앱 기준 `/`·`/products`·`/products/:id`(경로 방식이면 앞에 `/admin`)

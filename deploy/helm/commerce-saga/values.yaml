@@ -18,7 +18,8 @@ storageClass: ""
 # 서비스 공통 환경변수
 common:
   env:
-    # 토큰 iss (auth-service 가 발급, Gateway·서비스가 문자열로 검증). 공개 주소가 생기는 5-3 에서 auth 호스트로 바꾼다
+    # 토큰 iss (auth-service 가 발급, Gateway·서비스가 문자열로 검증). edge 를 켜면 edge 의 공개 auth 주소로 바뀐다
+    # (templates/services.yaml). edge 없이 띄우면(scripts/k8s-deploy.sh) 브라우저 로그인은 쓰지 않으므로 내부 주소
     AUTH_ISSUER: http://auth-service:8086
 
 postgres:
@@ -84,7 +85,6 @@ services:
     db: auth
     outbox: true
     env:
-      AUTH_COOKIE_SECURE: "true"
       # 개발용 시드 사용자(user1~4, admin)를 넣는다. 운영이면 classpath:db/migration 만
       AUTH_FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/dev-seed
     # 서명 키는 Secret(authJwtKey) 에서 읽어 모든 Pod 가 같다. 그래서 replicas 를 늘려도 된다
@@ -130,7 +130,7 @@ services:
   gateway:
     port: 8000
     env:
-      # Next(BFF) 가 넘기는 X-Forwarded-For 를 믿을 주소. 클러스터 Pod 대역 (ADR 0011)
+      # 전달 헤더(X-Forwarded-For·Proto·Host·Port)를 믿을 주소 = 앞단 Envoy(edge) Pod 대역. 클러스터 Pod 대역 (ADR 0017)
       GATEWAY_TRUSTED_PROXIES: 10.0.0.0/8,127.0.0.1,::1
 
 # auth-service 서명 키 (ADR 0014 "auth-service 서명 키"). Secret(secretName) 의 private.pem(RSA PKCS#8 PEM)·kid 를 읽는다.
@@ -155,7 +155,7 @@ oauthClientSecrets:
   generate: true
   secretName: oauth-client-secrets
 
-# 서비스·frontend Pod 를 내릴 때. 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시에 일어난다.
+# 서비스·화면 Pod 를 내릴 때. 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시에 일어난다.
 # Gateway·kube-proxy·Envoy 가 옛 Pod 주소를 지우기 전에 앱이 연결을 닫으면 그 사이 요청이 실패한다
 # (Gateway 는 연결 타임아웃 30초를 기다리다 500). 그래서 SIGTERM 전에 잠깐 기다려 새 요청이 끊기게 한 뒤 닫는다.
 # Spring 은 graceful shutdown(기본, 단계당 최대 30초)으로 처리 중인 요청을 끝낸다 → 유예는 대기 + 30초보다 길게
@@ -167,20 +167,30 @@ serviceResources:
   requests: { cpu: 100m, memory: 384Mi }
   limits: { memory: 768Mi }
 
-frontend:
+# 화면 SPA (frontend/Dockerfile, nginx). 이름 = 이미지 이름 = Service 이름. pathPrefix 는 경로 방식에서의 앞 경로
+screens:
   enabled: true
-  port: 3000
-  env:
-    COOKIE_SECURE: "true"
+  apps:
+    web: { pathPrefix: / }
+    admin: { pathPrefix: /admin/ }
   resources:
-    requests: { cpu: 50m, memory: 128Mi }
-    limits: { memory: 384Mi }
+    requests: { cpu: 10m, memory: 16Mi }
+    limits: { memory: 64Mi }
 
-# edge (Gateway API). 화면만 밖으로 연다. 구현은 Envoy Gateway (deploy/argocd 가 설치한다)
+# edge (Gateway API): 밖으로 여는 유일한 입구. 구현은 Envoy Gateway (deploy/argocd 가 설치한다).
+# 공개 주소로 SAS issuer·redirect URI·로그아웃 뒤 주소·쿠키 Secure 를 만들어 auth-service·Gateway·서비스에 넣는다 (설계 문서 7-3·7-4)
 edge:
   enabled: false
-  # 비우면 모든 호스트. 실제 도메인을 쓰면 채운다
-  hostname: ""
+  # host: 화면마다 호스트 (도메인이 있을 때) / path: 주소 하나에 /, /admin/, /auth/ (IP·LB 주소만 있을 때)
+  mode: host
+  host:
+    web: https://example.com
+    admin: https://admin.example.com
+    auth: https://auth.example.com
+  path:
+    # 브라우저가 여는 주소 (스킴 포함, 끝 / 없이). 예: http://1.2.3.4, http://xxx.elb.amazonaws.com
+    # 비우면 edge·화면은 뜨지만 로그인 설정(issuer·redirect URI)을 넣지 않아 로그인이 안 된다 (LB 주소를 아직 모를 때)
+    url: ""
   # Envoy 의 Service 타입. 클라우드는 LoadBalancer
   serviceType: ClusterIP
   # Envoy Service 의 annotation (클라우드 LB 설정. 예: AWS 는 service.beta.kubernetes.io/aws-load-balancer-scheme)

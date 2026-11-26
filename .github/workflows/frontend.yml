@@ -1,8 +1,6 @@
 name: frontend
 
-# 화면. 두 갈래 (ADR 0017):
-# - web: 새 화면 SPA workspace(frontend/apps/*, packages/*, pnpm). 형식·lint·타입·단위 테스트·빌드
-# - next: 5-3b 에서 지우는 Next 화면(frontend/next, npm, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지
+# 화면 SPA workspace (frontend/apps/*, packages/*, pnpm, ADR 0017). 형식·lint·타입·단위 테스트·빌드·이미지(nginx) 빌드 확인
 # 백엔드 전체를 띄우는 브라우저 e2e(Playwright)는 browser-e2e 워크플로
 on:
   push:
@@ -46,26 +44,11 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  next:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend/next
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: npm
-          cache-dependency-path: frontend/next/package-lock.json
-
-      - run: npm ci
-      - run: npm run format:check
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-
-      - name: Docker 이미지 빌드 확인
-        run: docker build -t frontend .
+      - name: 이미지 빌드 확인 (web·admin, 경로 방식 BASE_PATH)
+        run: |
+          for app in web admin; do docker build -q --build-arg APP=$app -t commerce-saga/$app:ci . > /dev/null; done
+          docker run -d --name admin-ci -p 18080:8080 -e BASE_PATH=/admin/ commerce-saga/admin:ci > /dev/null
+          for i in $(seq 1 20); do curl -sf -o /dev/null http://localhost:18080/healthz && break; sleep 1; done
+          curl -sf http://localhost:18080/products/1 | grep -q '<base href="/admin/" />'
+          # 끝 / 가 없는 BASE_PATH 면 기동하지 않는다 (뜨면 timeout 이 끊어 실패)
+          ! timeout 20 docker run --rm -e BASE_PATH=/admin commerce-saga/admin:ci > /dev/null 2>&1

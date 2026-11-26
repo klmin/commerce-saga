@@ -17,7 +17,7 @@
 ```bash
 kind create cluster --name commerce-saga
 scripts/k8s-deploy.sh            # 이미지 빌드 → kind 에 넣기 → Strimzi → 차트, 모두 준비될 때까지 기다림
-scripts/k8s-port-forward.sh      # compose 때와 같은 로컬 포트 (8081~8086, gateway 8000, 화면 3500, Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091)
+scripts/k8s-port-forward.sh      # compose 때와 같은 로컬 포트 (8081~8086, gateway 8000, 화면 SPA 5173·5174(정적 파일만), Grafana 3030·Tempo 3210·Loki 3110·Prometheus 9091)
 scripts/smoke-saga.sh            # 기존 스모크를 그대로
 scripts/k8s-port-forward.sh stop
 kind delete cluster --name commerce-saga
@@ -35,7 +35,7 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **trace**: K-1 은 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0` 으로 시작했고, 지금은 차트가 관측성을 같이 올려 서비스가 trace·로그를 alloy 로 보낸다(아래 "관측성". 끄면 `observability.enabled=false`)
 - **auth-service 서명 키**: Secret `auth-jwt-key`(`private.pem` PKCS#8, `kid`)를 읽기만 한다. 로컬 k8s 는 차트의 hook Job(Helm `pre-install,pre-upgrade` = Argo CD PreSync)이 없을 때만 한 번 만들고 그 뒤로는 그대로 둔다. Secret 은 차트에 없어 Argo CD 가 관리하지 않는다(일부러, sync 로 덮어쓰거나 지우지 않게). EKS 는 외부 비밀 저장소(External Secrets 등)가 같은 이름의 Secret 을 채우고 `authJwtKey.generate=false`. 모든 Pod 가 같은 키라 `RollingUpdate`(`maxUnavailable: 0`)로 무중단 배포한다. Secret 을 지우면 다음 sync 때 새 키 → 그 전 access token 무효(refresh 로 복구). 확인: `kubectl -n commerce get secret auth-jwt-key -o jsonpath={.data.kid} | base64 -d` (ADR 0014 "auth-service 서명 키")
 - **OAuth 클라이언트 시크릿**(후속 5, ADR 0017): Secret `oauth-client-secrets`(키 `gateway-web`·`gateway-admin`)를 auth-service(와 5-2 부터 Gateway)가 `GATEWAY_*_CLIENT_SECRET` 으로 읽는다. 위 서명 키와 같은 hook Job 이 없을 때만 만들고 Argo CD 가 관리하지 않는다. 외부 비밀 저장소가 채우면 `oauthClientSecrets.generate=false`. 개발용 시크릿 파일은 끄므로(`OAUTH_CLIENT_SECRET_DEV_DIR=""`) Secret 이 없으면 auth-service 가 기동 실패한다(조용히 만들면 Gateway 와 값이 어긋남). Secret 을 지우면 새 값이 생기고 auth-service·Gateway 를 다시 띄워야 맞는다
-- **Pod 종료**: 서비스·frontend 는 `preStop` 5초 대기(`sleep` 핸들러, k8s 1.30+) 뒤 SIGTERM, 유예 40초(`gracefulTermination`). 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시라, 대기가 없으면 Gateway·Envoy 가 옛 주소를 지우기 전에 앱이 연결을 닫아 롤아웃 중 요청이 실패한다(Gateway 는 연결 타임아웃 30초 뒤 500). Spring 은 graceful shutdown(기본)으로 처리 중인 요청을 끝낸다
+- **Pod 종료**: 서비스·화면은 `preStop` 5초 대기(`sleep` 핸들러, k8s 1.30+) 뒤 SIGTERM, 유예 40초(`gracefulTermination`). 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시라, 대기가 없으면 Gateway·Envoy 가 옛 주소를 지우기 전에 앱이 연결을 닫아 롤아웃 중 요청이 실패한다(Gateway 는 연결 타임아웃 30초 뒤 500). Spring 은 graceful shutdown(기본)으로 처리 중인 요청을 끝낸다
 - **이미지**: kind 노드에 직접 넣는다(`kind load docker-image`). 레지스트리에 올리면 `image.registry` 만 채운다
 
 ## 결정 (K-2, Debezium)
@@ -84,16 +84,16 @@ kind create cluster --name commerce-saga
 REVISION=<push 된 커밋 또는 브랜치> scripts/k8s-argocd.sh   # 이미지 → kind, ArgoCD 설치, root apply, Synced·Healthy 대기
 kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-system get svc \
   -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o jsonpath='{.items[0].metadata.name}') 18080:80
-# 화면: http://localhost:18080
+# 화면: http://localhost:18080 (사용자), /admin/ (관리자), /auth/ (로그인). argocd/apps/values.yaml 이 경로 방식·이 주소로 둔다
 ```
 
 ## 결정 (K-3)
 
 - **GitOps 는 app-of-apps**. 자식 Application 은 작은 Helm 차트(`argocd/apps`)라 `revision` 하나로 모든 자식이 같은 커밋을 본다(CI 는 PR 커밋을 넣는다). 자식 순서는 sync-wave(플랫폼 먼저), CRD 가 아직 없을 때는 `SkipDryRunOnMissingResource` + 재시도
-- **edge = Gateway API(`Gateway`·`HTTPRoute`), 구현은 Envoy Gateway**. ingress-nginx 는 2026년에 은퇴해 Ingress 대신 k8s 표준 다음 API 를 쓴다. **화면(Next)만 연다**: 브라우저는 Next 만 보고 Next 서버만 Spring Gateway 를 부른다(ADR 0011). Spring Gateway·서비스·DB·Kafka·Redis 는 내부망
+- **edge = Gateway API(`Gateway`·`HTTPRoute`), 구현은 Envoy Gateway**. ingress-nginx 는 2026년에 은퇴해 Ingress 대신 k8s 표준 다음 API 를 쓴다. **화면 SPA·Spring Gateway(BFF)·SAS 의 정해진 경로만 연다**(설계 문서 7-1, ADR 0017). 서비스·DB·Kafka·Redis 는 내부망. 두 방식 `edge.mode`: `host`(화면마다 호스트 `edge.host.web·admin·auth`) / `path`(주소 하나 `edge.path.url` 에 `/`·`/admin/`·`/auth/`). 공개 주소로 SAS issuer·redirect URI·로그아웃 뒤 주소·쿠키 Secure 를 차트가 만든다(후속 5-3b)
 - Envoy 의 Service 타입은 값(`edge.serviceType`). kind 는 LoadBalancer 가 없어 ClusterIP, 클라우드는 LoadBalancer
 - 이미지는 여전히 `kind load`(레지스트리 없음). 레지스트리에 올리면 ArgoCD 만으로 끝난다
-- CI `k8s` 워크플로의 `argocd` 잡이 Synced·Healthy, edge 로 화면, 시나리오 0·1 을 확인한다
+- CI `k8s` 워크플로의 `argocd` 잡이 Synced·Healthy, edge(경로 방식)로 화면·SAS·BFF 로그인 한 바퀴(`scripts/smoke-bff-login.sh`), 시나리오 0·1 을 확인한다
 
 ## EKS 에 올리기 (K-4, GHCR + ArgoCD GitOps)
 
@@ -113,20 +113,23 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 | `scripts/release-ci-gate.sh` | release 첫 잡. 마지막 배포 이후 main 커밋 하나하나의 CI 가 통과해야 넘어감, 실패·취소면 배포 중단(고친 뒤 수동 실행 `ci_from`) |
 | `scripts/release-plan.sh` | release 가 부른다. 마지막 배포 커밋과 비교해 바뀐 이미지를 고르고 `release-tags.yaml` 을 만든다 ([docs/ci-cd.md](../docs/ci-cd.md) "배포") |
 | `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` 을 값으로 쓴다. 이미지별 태그 `release-tags.yaml`(release/eks 에만 있음)은 apps 차트가 `.Files` 로 읽는다(root 는 바꾸지 않음) |
-| `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |
+| `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, edge 경로 방식(공개 주소 `edge.path.url`) |
 | `scripts/eks-argocd.sh` | 처음 한 번: ArgoCD 설치 → root apply → Synced·Healthy 대기 → 화면 주소 출력. `ARGOCD_DISCORD_WEBHOOK` 을 주면 sync 결과 Discord 알림도 켠다 |
 | `argocd/notifications.yaml` | ArgoCD Notifications(배포 완료·sync 실패·Degraded → Discord) 값. 웹훅 URL 은 클러스터 Secret 에만 ([docs/ci-cd.md](../docs/ci-cd.md) "EKS 배포 결과") |
 
 ### 처음 한 번
 
-1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 10개, `release/eks` 브랜치가 생긴다
-2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 10개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
+1. main 에 머지(또는 Actions 에서 `release` 수동 실행) → GHCR 에 패키지 11개(서비스 9 + 화면 `web`·`admin` + connect, 옛 `frontend` 는 더 쓰지 않음), `release/eks` 브랜치가 생긴다
+2. GHCR 패키지를 **public** 으로: GitHub → 프로필 → Packages → `commerce-saga/<이름>` → Package settings → Change visibility. 11개 모두 (private 이면 노드가 이미지를 못 받아 `ImagePullBackOff`)
 3. 클러스터 준비 확인
    - 노드는 amd64(x86)·arm64(Graviton) 둘 다 된다. 이미지가 멀티 아키텍처라 노드가 자기 CPU 에 맞는 쪽을 받는다
    - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
    - 노드 여유: 요청 합계 CPU 약 1.6 코어, 메모리 약 5.5Gi (서비스 8개 JVM + Kafka + Connect + Postgres)
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
    - sync 결과를 Discord 로 받으려면: `read -rs ARGOCD_DISCORD_WEBHOOK && export ARGOCD_DISCORD_WEBHOOK && scripts/eks-argocd.sh` (이미 설치된 클러스터에 다시 돌려도 된다)
+5. **공개 주소 넣기** (후속 5-3b): 로그인(SAS·BFF)은 브라우저가 보는 주소를 정확히 알아야 한다(issuer·redirect URI). 처음 sync 는 `edge.path.url` 이 비어 있어 화면은 뜨지만 로그인이 안 된다. Envoy 의 LB 주소를 확인해 `values-eks.yaml` 의 `edge.path.url` 에 넣고(예: `http://xxx.elb.amazonaws.com`) main 에 머지한다
+   - LB 주소: `kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge` 의 EXTERNAL-IP
+   - 화면: `<주소>/`(사용자), `<주소>/admin/`(관리자), 로그인은 `<주소>/auth/`. 도메인을 붙이면 `edge.mode: host` 와 `edge.host.web·admin·auth`
 
 그 뒤로는 머지만 하면 된다. 바뀐 서비스만 새 이미지로 롤링된다. 롤백은 `git log --first-parent origin/release/eks` 에서 옛 release 커밋을 골라 `git push origin <옛 release 커밋>:refs/heads/release/eks --force` (그 커밋의 이미지가 GHCR 에 있다).
 
@@ -135,5 +138,5 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 - **레지스트리는 GHCR**: 저장소와 같은 곳, Actions 의 기본 `GITHUB_TOKEN` 으로 push. AWS IAM·OIDC 설정이 없다. public 패키지라 pull secret 도 없다
 - **태그는 main 이 아니라 배포 브랜치에 커밋한다**: main 은 PR 로만 바뀌어(ruleset) 봇 커밋이 어렵다. 대신 release 워크플로가 이미지가 다 올라간 뒤에만 `release/eks` 에 release 커밋(main 커밋 + 이미지별 태그 `release-tags.yaml`)을 얹는다. Git 의 `release/eks` 가 곧 "지금 배포된 것"이다. 처음(K-4)에는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나였는데, 서비스 하나만 바뀌어도 전부 롤링돼서 이미지별 태그로 바꿨다 (ADR 0014 "바뀐 서비스만 배포")
 - **개발용 시드 사용자 없음**: `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`. 공개된 admin 비밀번호로 누구나 관리자(결제 장애 주입)가 되지 않게. 사용자는 회원가입, 관리자 역할은 DB 에서 따로 준다
-- **http 로 먼저**: TLS(도메인·ACM/cert-manager)를 붙이기 전이라 `COOKIE_SECURE`·`AUTH_COOKIE_SECURE` 를 `false` 로 둔다. https 를 붙이면 지운다
+- **http 로 먼저**: TLS(도메인·ACM/cert-manager)를 붙이기 전이라 공개 주소가 http 다. 쿠키 Secure 는 차트가 공개 주소 스킴으로 정한다(https 면 켬)
 - DB·Redis·Kafka 는 kind 와 같이 클러스터 안 단일 인스턴스(EBS PVC). 운영이면 RDS(logical replication)·ElastiCache·MSK 로 바꿀 자리

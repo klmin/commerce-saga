@@ -14,5 +14,9 @@ envoyGateway:
 
 # commerce-saga 차트에 넘길 값 (deploy/helm/commerce-saga/values.yaml 위에 덮는다)
 commerceValues:
+  # kind 에는 도메인이 없다 → 경로 방식. CI 는 Envoy 를 localhost:18080 으로 port-forward 해 그 주소로 연다(.github/workflows/k8s.yml)
   edge:
     enabled: true
+    mode: path
+    path:
+      url: http://localhost:18080
