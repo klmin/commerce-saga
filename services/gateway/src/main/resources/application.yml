@@ -9,13 +9,25 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+      # 명령 하나를 기다리는 최대 시간 (기본 60초). 세션·rate limit 은 요청마다 Redis 를 부르고 연결 하나를 같이 쓴다.
+      # SPA 가 화면을 옮기며 진행 중인 요청을 끊을 때 그 연결이 한동안 응답을 못 받아 모든 요청이 기본값만큼 멈춘 적이 있다
+      # (5-3a browser-e2e). 짧게 두면 그 요청만 실패하고 바로 풀린다. rate limit 은 Redis 오류면 통과시킨다
+      timeout: ${REDIS_TIMEOUT:2s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+  # BFF 세션 (ADR 0017). 쿠키 GW_SESSION 은 BffClientConfig. auth-service 의 SSO 세션(auth:session)과 접두어를 나눈다.
+  # 유휴 2시간: 쇼핑 중 잠깐 자리를 비워도 이어지고, 공용 PC 에 오래 남지 않게. 끝나면 API 가 401 → 다시 로그인
+  # (SSO 세션 30분이 남아 있으면 화면 없이 통과)
+  session:
+    timeout: ${GATEWAY_SESSION_IDLE:2h}
+    redis:
+      namespace: gateway:session
   # access token 1차 검증 (ADR 0008). 서비스도 같은 설정으로 다시 검증한다
   security:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8086/.well-known/jwks.json}
-          issuer-uri: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+          jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:8086}/oauth2/jwks
+          issuer-uri: ${AUTH_ISSUER:http://localhost:5175}
   cloud:
     gateway:
       server:
@@ -25,22 +37,17 @@ spring:
             - RemoveRequestHeader=X-User-Id
           # /api/<자원>/** → 서비스의 /<자원>/** (StripPrefix=1). Authorization 헤더는 그대로 넘겨 서비스가 다시 검증한다
           routes:
-            - id: auth
-              uri: ${AUTH_SERVICE_URL:http://localhost:8086}
-              predicates:
-                - Path=/auth/**,/.well-known/jwks.json
-              filters:
-                - name: RequestRateLimiter
-                  args:
-                    key-resolver: "#{@clientIpKeyResolver}"
-                    redis-rate-limiter.replenishRate: ${GATEWAY_AUTH_RATE:5}
-                    redis-rate-limiter.burstCapacity: ${GATEWAY_AUTH_BURST:20}
             - id: orders
               uri: ${ORDER_SERVICE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/orders,/api/orders/**,/api/cart,/api/cart/**
               filters: &user-api
                 - StripPrefix=1
+                # BFF 세션이면 세션의 access token 을 Authorization: Bearer 로 (만료면 refresh 로 갱신). Bearer 로 온 요청은 그대로
+                - TokenRelay=
+                # 브라우저 쿠키(GW_SESSION·XSRF-TOKEN)를 서비스로 넘기지 않는다. 서비스는 Bearer 로만 인증하고,
+                # 쿠키가 실린 상태 변경 요청은 CSRF 로 거절한다(ADR 0008)
+                - RemoveRequestHeader=Cookie
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@userKeyResolver}"
@@ -97,6 +104,29 @@ spring:
 # 로컬은 Next 가 같은 PC 에서 돈다. 배포에서는 BFF 대역만 둔다. 비우면 아무도 믿지 않는다
 gateway:
   trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:127.0.0.1,::1}
+  # BFF: SAS 의 OAuth2 클라이언트 (ADR 0017, 설계 문서 6·7-3절). 주소는 모두 설정값이고 코드에 박지 않는다.
+  # 전달 헤더(forwarded)를 처리하지 않는다: 켜면 X-Forwarded-For 맨 왼쪽(브라우저가 쓸 수 있는 값)이 연결 주소가 되어
+  # rate limit IP(ClientIpResolver)가 무너진다. 그래서 redirect URI 는 요청 주소로 만들지 않고 아래 설정값을 쓴다
+  bff:
+    # 공개 주소 (브라우저가 가는 인가·로그아웃 주소, 토큰 iss). auth-service 의 auth.issuer 와 같다. 끝에 / 없이
+    issuer: ${AUTH_ISSUER:http://localhost:5175}
+    # 내부 주소 (Gateway 가 부르는 토큰 교환·JWKS)
+    internal-url: ${AUTH_INTERNAL_URL:http://localhost:8086}
+    # 이 Host(포트 포함)로 로그인을 시작하면 gateway-admin. 경로 방식은 비운다(늘 gateway-web)
+    admin-client-host: ${ADMIN_CLIENT_HOST:localhost:5174}
+    # 로그인 뒤 return_to 가 없을 때·로그아웃 뒤 갈 곳. 절대 주소 또는 경로(경로 방식: / 와 /admin/)
+    web-home: ${WEB_HOME:http://localhost:5173/}
+    admin-home: ${ADMIN_HOME:http://localhost:5174/}
+    # 시크릿: 외부 변수 → 로컬 개발용 파일(auth-service 와 같은 파일) → 없으면 기동 실패. compose·k8s 는 디렉터리를 비운다
+    secret-dev-dir: ${OAUTH_CLIENT_SECRET_DEV_DIR:${user.home}/.commerce-saga}
+    # BFF 세션 쿠키 Secure. 로컬·compose(http)만 false
+    cookie-secure: ${GATEWAY_COOKIE_SECURE:true}
+    web:
+      secret: ${GATEWAY_WEB_CLIENT_SECRET:}
+      redirect-uri: ${WEB_REDIRECT_URI:http://localhost:5173/login/oauth2/code/gateway-web}
+    admin:
+      secret: ${GATEWAY_ADMIN_CLIENT_SECRET:}
+      redirect-uri: ${ADMIN_REDIRECT_URI:http://localhost:5174/login/oauth2/code/gateway-admin}
 
 management:
   endpoints:

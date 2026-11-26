@@ -137,7 +137,7 @@ class JwtKeyConfigTest {
     }
 
     private static JwtProperties properties(String privateKeyLocation, String keyId, String devKeyFile) {
-        return new JwtProperties("test-issuer", keyId, privateKeyLocation, devKeyFile, null);
+        return new JwtProperties(keyId, privateKeyLocation, devKeyFile, null);
     }
 
     private static RSAPrivateCrtKey newKey() throws Exception {

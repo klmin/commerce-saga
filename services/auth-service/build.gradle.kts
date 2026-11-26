@@ -9,6 +9,10 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    // OIDC 인가 서버(후속 5, ADR 0017). 등록된 클라이언트·인가 기록은 auth_db(JDBC), SSO 로그인 세션은 Redis
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server")
+    implementation("org.springframework.boot:spring-boot-starter-session-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
     implementation("org.flywaydb:flyway-database-postgresql")

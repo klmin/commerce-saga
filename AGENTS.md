@@ -9,7 +9,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 - Java 25, Spring Boot 4.2, Gradle Kotlin DSL 멀티모듈 모노레포. 인증은 Spring Security (OAuth2 Resource Server, JWT RS256) + Redis (후속 2)
 - PostgreSQL(서비스별 DB), Flyway, Kafka(KRaft), Spring for Apache Kafka, Debezium(Kafka Connect, 3단계)
 - 테스트: JUnit 5, ArchUnit, Testcontainers(Postgres, Kafka)
-- 프론트엔드: Next.js 16 / React 19 / TypeScript / Tailwind 4 / shadcn/ui, Vitest·Playwright (`frontend/`, 명령은 frontend/README.md). Next 16 은 `frontend/node_modules/next/dist/docs/` 를 먼저 읽는다
+- 프론트엔드: 화면 SPA 는 Vite + React 19 / TypeScript / Tailwind 4 / shadcn/ui / React Router / TanStack Query, Vitest·Playwright (`frontend/` pnpm workspace: `apps/*`, `packages/ui`, 명령은 frontend/README.md, ADR 0017).. 이미지는 `frontend/Dockerfile`(nginx, `--build-arg APP=web|admin`)
 
 ## 구성
 
@@ -19,7 +19,11 @@ services/gateway/          API Gateway (Spring Cloud Gateway, WebFlux, DB 없음
 libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 토픽 이름만
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
-frontend/                  Next.js 화면 (App Router, Tailwind, shadcn/ui). Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다 (ADR 0011)
+frontend/apps/web/         사용자 화면 SPA (Vite + React). 토큰을 모르고 같은 출처 /api 를 BFF 세션 쿠키로 부른다 (ADR 0017)
+frontend/apps/admin/       관리자 화면 SPA (상품 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
+frontend/apps/auth/        인증 화면 SPA (SAS 로그인·가입). 폼은 auth-service 로 그대로 POST, CSRF 는 GET csrf 본문 (설계 문서 4절)
+frontend/packages/ui/      화면 SPA 공용 shadcn/ui 컴포넌트·테마
+frontend/packages/bff/     화면 SPA 공용 Gateway(BFF) 호출·로그인 확인·로그아웃
 build-logic/               공통 빌드 설정 (convention plugin)
 infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect, Redis, Alloy·Tempo·Loki·Prometheus·Grafana)
 scripts/                   커넥터 등록, 부하 생성, 장애 주입, 스모크 테스트
@@ -36,8 +40,8 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
 | product-service | 상품·가격의 주인, 가격 변경 이력. 공개 조회 API(order 가 주문 때 동기 조회, ADR 0016). 메시지를 발행하지 않음(products 테이블은 Debezium 이 검색용으로 복제, ADR 0010) |
 | search-service | 상품 검색. `product.cdc.products`(테이블 CDC)를 소비해 Elasticsearch 에 색인(외부 버전 = 원본 LSN), 공개 검색 API. ES 가 자기 저장소(DB 없음) (ADR 0010) |
-| auth-service | 회원가입·로그인, access token(JWT RS256) 발급·JWKS, refresh token 회전(Redis). 메시지를 주고받지 않음 (ADR 0008) |
-| gateway | Spring Cloud Gateway(WebFlux). `/auth/**` → auth-service, `/api/<자원>/**` → 서비스, JWT 1차 검증·역할·사용자별 rate limit (ADR 0008) |
+| auth-service | 회원가입, Spring Authorization Server(OIDC): 로그인 화면·SSO 세션(Redis)·토큰(JWT RS256) 발급·JWKS. 메시지는 `auth.events` 만 (ADR 0017, 0008) |
+| gateway | Spring Cloud Gateway(WebFlux) = BFF: 화면 로그인(`oauth2Login`, 세션에 토큰), `/api/<자원>/**` → 서비스(토큰 릴레이), JWT 1차 검증·역할·사용자별 rate limit (ADR 0017, 0008) |
 
 ## 명령
 
@@ -162,10 +166,10 @@ common/error, common/web, common/config
 - 소유권·권한
   - 주문·포인트 등 사용자 리소스를 ID로 조회·취소할 때 현재 사용자(JWT `sub`)와 소유자를 비교하는지. 빠뜨리면 IDOR (P0)
   - 메시지에 토큰이나 비밀값이 실리지 않는지
-- 인증 (auth-service, ADR 0008)
-  - refresh token 은 httpOnly 쿠키로만 오가고 서버(Redis)에는 secret 해시만 있는지. 비밀번호·토큰이 로그·예외 메시지·`toString` 에 남지 않는지
-  - refresh 회전이 compare-and-set(현재 secret 이 그대로일 때만 교체)인지. 아니면 동시 refresh 가 둘 다 회전해 family 가 갈라진다 (P1)
-  - 이미 회전된 옛 secret 재사용을 탐지해 family 를 지우는지, 기기 관리 API 가 토큰의 `sub` 와 family 소유자를 비교하는지 (P0)
+- 인증 (auth-service = SAS, Gateway = BFF, ADR 0017)
+  - 토큰(access·refresh)이 브라우저(JS·URL·쿠키 값)로 나가지 않는지. 화면은 Gateway 세션 쿠키(httpOnly)만. 비밀번호·토큰·클라이언트 시크릿이 로그·예외 메시지·`toString` 에 남지 않는지
+  - redirect URI·로그아웃 뒤 주소·`return_to` 가 등록된 정확한 값·같은 출처 경로만인지(open redirect), PKCE·state 를 쓰는지 (P0)
+  - 쿠키로 인증되는 상태 변경에 CSRF 검사가 있는지, 앞단이 들어온 `X-Forwarded-Prefix`·`Host` 를 믿지 않는지 (P1)
 - 동시성
   - 재고·포인트 차감이 동시 요청에서 음수가 되지 않는지 (조건부 UPDATE, 낙관적 락 등)
 - 민감정보

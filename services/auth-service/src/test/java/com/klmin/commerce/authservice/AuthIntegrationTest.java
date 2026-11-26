@@ -1,74 +1,38 @@
 package com.klmin.commerce.authservice;
 
-import com.klmin.commerce.authservice.auth.application.InvalidRefreshTokenException;
-import com.klmin.commerce.authservice.auth.application.port.in.LoginCommand;
-import com.klmin.commerce.authservice.auth.application.port.in.LoginUseCase;
-import com.klmin.commerce.authservice.auth.application.port.in.RefreshTokenUseCase;
+import com.klmin.commerce.authservice.auth.application.DuplicateLoginIdException;
 import com.klmin.commerce.authservice.auth.application.port.in.SignUpCommand;
 import com.klmin.commerce.authservice.auth.application.port.in.SignUpUseCase;
-import com.klmin.commerce.authservice.auth.application.port.in.TokenResult;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jwt.SignedJWT;
-import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Postgres + Redis 를 띄워 가입 → 로그인 → refresh 회전 → 재사용 탐지 → 기기 관리까지 실제 저장소로 확인한다.
- * access token 은 JWKS 로 받은 공개키로 서명을 검증한다 (Gateway·서비스가 할 일과 같다).
+ * Postgres + Redis 를 띄워 가입(outbox)·개발용 시드를 실제 저장소로 확인한다.
+ * 로그인·토큰·SSO 는 {@link OAuthFlowIntegrationTest} (기존 자체 JWT API 는 후속 5-3c 에서 지웠다)
  */
 // outbox relay 는 켜 두되 돌지 않게 (Kafka 없이 outbox 행을 확인한다)
 // 로컬 개발용 키 파일(사용자 홈)을 만들지 않게 임시 키로
-@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h", "auth.jwt.dev-key-file="})
-@AutoConfigureMockMvc
+// 클라이언트 시크릿은 테스트용 값으로 (로컬 개발용 파일을 만들지 않게)
+@SpringBootTest(properties = {"auth.cookie.secure=false", "outbox.relay.fixed-delay=1h", "auth.jwt.dev-key-file=",
+        "auth.oauth.secret-dev-dir=", "auth.oauth.clients.gateway-web.secret=test-web-secret",
+        "auth.oauth.clients.gateway-admin.secret=test-admin-secret"})
 @Import(TestcontainersConfiguration.class)
 @Testcontainers(disabledWithoutDocker = true)
 class AuthIntegrationTest {
 
     @Autowired
-    MockMvc mvc;
-
-    @Autowired
     SignUpUseCase signUp;
-
-    @Autowired
-    LoginUseCase login;
-
-    @Autowired
-    RefreshTokenUseCase refresh;
-
-    @Autowired
-    StringRedisTemplate redis;
 
     @Autowired
     JdbcClient jdbc;
@@ -84,135 +48,7 @@ class AuthIntegrationTest {
     }
 
     @Test
-    void 로그인으로_받은_access_token_을_JWKS_공개키로_검증할_수_있다() throws Exception {
-        long userId = signUp.signUp(new SignUpCommand(loginId, "password1"));
-        assertThat(jdbc.sql("select password_hash from users where id = ?").param(userId).query(String.class).single())
-                .startsWith("$2").doesNotContain("password1");
-
-        MvcResult result = mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginId\":\"%s\",\"password\":\"password1\"}".formatted(loginId)))
-                .andExpect(status().isOk()).andReturn();
-        String accessToken = json(result, "accessToken");
-
-        String jwks = mvc.perform(get("/.well-known/jwks.json")).andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        JWKSet keys = JWKSet.parse(jwks);
-        String kid = SignedJWT.parse(accessToken).getHeader().getKeyID();
-        RSAKey key = (RSAKey) keys.getKeyByKeyId(kid);
-        assertThat(key).isNotNull();
-        assertThat(key.isPrivate()).isFalse();
-        assertThat(jwks).doesNotContain("\"d\"");
-
-        Jwt jwt = NimbusJwtDecoder.withPublicKey(key.toRSAPublicKey()).build().decode(accessToken);
-        assertThat(jwt.getSubject()).isEqualTo(Long.toString(userId));
-        assertThat(jwt.getClaimAsStringList("roles")).containsExactly("USER");
-        assertThat(jwt.getClaimAsString("iss")).isEqualTo("commerce-saga-auth");
-    }
-
-    @Test
-    void 쿠키로_refresh_하면_회전하고_옛_쿠키를_다시_쓰면_family_가_Redis_에서_지워진다() throws Exception {
-        signUp.signUp(new SignUpCommand(loginId, "password1"));
-        String first = refreshCookie(mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"loginId\":\"%s\",\"password\":\"password1\"}".formatted(loginId))).andReturn());
-        String familyKey = "auth:family:" + first.substring(0, first.indexOf('.'));
-
-        String second = refreshCookie(mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", first)))
-                .andExpect(status().isOk()).andReturn());
-        assertThat(second).isNotEqualTo(first);
-        assertThat(redis.hasKey(familyKey)).isTrue();
-        // 서버에는 secret 원문이 없다
-        assertThat(redis.opsForHash().values(familyKey)).noneMatch(v -> !((String) v).isEmpty() && second.endsWith((String) v));
-
-        // 유예(20초)를 지난 것처럼 직전 secret 의 유예를 끝낸다
-        redis.opsForHash().put(familyKey, "previousValidUntil", "0");
-        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", first)))
-                .andExpect(status().isUnauthorized());
-
-        assertThat(redis.hasKey(familyKey)).isFalse();
-        mvc.perform(post("/auth/refresh").header("X-Requested-With", "fetch").cookie(new Cookie("refresh_token", second)))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void 같은_refresh_token_으로_동시에_8번_요청해도_회전은_한_번이고_family_는_살아_있다() throws Exception {
-        signUp.signUp(new SignUpCommand(loginId, "password1"));
-        TokenResult tokens = login.login(new LoginCommand(loginId, "password1", "test"));
-        CountDownLatch start = new CountDownLatch(1);
-        List<Future<TokenResult>> futures = new ArrayList<>();
-        try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
-            for (int i = 0; i < 8; i++) {
-                Callable<TokenResult> task = () -> {
-                    start.await();
-                    return refresh.refresh(tokens.refreshToken());
-                };
-                futures.add(pool.submit(task));
-            }
-            start.countDown();
-            List<TokenResult> results = new ArrayList<>();
-            for (Future<TokenResult> f : futures) {
-                results.add(f.get());
-            }
-
-            List<String> rotated = results.stream().map(TokenResult::refreshToken).filter(t -> t != null).toList();
-            assertThat(rotated).hasSize(1);
-            assertThat(results).allMatch(r -> r.accessToken() != null);
-            assertThat(refresh.refresh(rotated.getFirst()).refreshToken()).isNotNull();
-        }
-    }
-
-    @Test
-    void 기기_목록과_다른_기기_로그아웃_전체_로그아웃() throws Exception {
-        signUp.signUp(new SignUpCommand(loginId, "password1"));
-        TokenResult phone = login.login(new LoginCommand(loginId, "password1", "phone"));
-        TokenResult laptop = login.login(new LoginCommand(loginId, "password1", "laptop"));
-        String other = "o" + loginId.substring(1);
-        signUp.signUp(new SignUpCommand(other, "password1"));
-        TokenResult otherPhone = login.login(new LoginCommand(other, "password1", "other-phone"));
-        String bearer = "Bearer " + laptop.accessToken();
-
-        String sessions = mvc.perform(get("/auth/sessions").header(HttpHeaders.AUTHORIZATION, bearer)
-                        .cookie(new Cookie("refresh_token", laptop.refreshToken())))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        assertThat(sessions).contains("\"agent\":\"phone\"", "\"agent\":\"laptop\"").doesNotContain("other-phone");
-
-        // 남의 기기는 404, 그대로 살아 있다
-        mvc.perform(delete("/auth/sessions/" + familyId(otherPhone)).header(HttpHeaders.AUTHORIZATION, bearer))
-                .andExpect(status().isNotFound());
-        assertThat(refresh.refresh(otherPhone.refreshToken()).refreshToken()).isNotNull();
-
-        // 노트북에서 폰을 로그아웃
-        mvc.perform(delete("/auth/sessions/" + familyId(phone)).header(HttpHeaders.AUTHORIZATION, bearer))
-                .andExpect(status().isNoContent());
-        assertThatThrownBy(() -> refresh.refresh(phone.refreshToken())).isInstanceOf(InvalidRefreshTokenException.class);
-
-        mvc.perform(post("/auth/logout-all").header(HttpHeaders.AUTHORIZATION, bearer)).andExpect(status().isNoContent());
-        assertThatThrownBy(() -> refresh.refresh(laptop.refreshToken())).isInstanceOf(InvalidRefreshTokenException.class);
-    }
-
-    @Test
-    void 다섯_번_틀리면_맞는_비밀번호도_429() throws Exception {
-        signUp.signUp(new SignUpCommand(loginId, "password1"));
-        for (int i = 0; i < 5; i++) {
-            mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"loginId\":\"%s\",\"password\":\"wrong-pass\"}".formatted(loginId)))
-                    .andExpect(status().isUnauthorized());
-        }
-        mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginId\":\"%s\",\"password\":\"password1\"}".formatted(loginId)))
-                .andExpect(status().isTooManyRequests());
-    }
-
-    @Test
-    void 같은_아이디로_가입하면_409() throws Exception {
-        signUp.signUp(new SignUpCommand(loginId, "password1"));
-
-        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginId\":\"%s\",\"password\":\"password2\"}".formatted(loginId.toUpperCase())))
-                .andExpect(status().isConflict());
-    }
-
-    @Test
-    void 개발용_시드_관리자는_ADMIN_이고_같은_id_의_다른_사용자에게는_역할을_주지_않는다() throws Exception {
+    void 개발용_시드_관리자는_ADMIN_이고_같은_id_의_다른_사용자에게는_역할을_주지_않는다() {
         assertThat(roles(100)).containsExactlyInAnyOrder("USER", "ADMIN");
         try {
             // 시드보다 먼저 가입한 일반 사용자가 id 100 을 차지한 DB 를 만든다
@@ -234,16 +70,11 @@ class AuthIntegrationTest {
         return jdbc.sql("select role from user_roles where user_id = ?").param(userId).query(String.class).list();
     }
 
-    private static String familyId(TokenResult tokens) {
-        return tokens.refreshToken().substring(0, tokens.refreshToken().indexOf('.'));
-    }
-
     @Test
-    void 가입하면_같은_트랜잭션에서_UserRegistered_가_outbox_에_남고_중복_가입은_남기지_않는다() throws Exception {
+    void 가입하면_같은_트랜잭션에서_UserRegistered_가_outbox_에_남고_중복_가입은_남기지_않는다() {
         long userId = signUp.signUp(new SignUpCommand(loginId, "password1"));
-        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginId\":\"%s\",\"password\":\"password2\"}".formatted(loginId)))
-                .andExpect(status().isConflict());
+        assertThatThrownBy(() -> signUp.signUp(new SignUpCommand(loginId, "password2")))
+                .isInstanceOf(DuplicateLoginIdException.class);
 
         var rows = jdbc.sql("""
                         select aggregatetype, type, payload::text as payload from outbox
@@ -255,17 +86,5 @@ class AuthIntegrationTest {
         assertThat(rows).hasSize(1);
         assertThat(rows.getFirst()).startsWith("auth.events|UserRegistered|")
                 .contains("\"userId\": " + userId).contains("\"registeredAt\": \"20");
-    }
-
-    private static String refreshCookie(MvcResult result) {
-        String setCookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
-        assertThat(setCookie).startsWith("refresh_token=");
-        return setCookie.substring("refresh_token=".length(), setCookie.indexOf(';'));
-    }
-
-    private static String json(MvcResult result, String field) throws Exception {
-        String body = result.getResponse().getContentAsString();
-        int start = body.indexOf("\"" + field + "\":\"") + field.length() + 4;
-        return body.substring(start, body.indexOf('"', start));
     }
 }

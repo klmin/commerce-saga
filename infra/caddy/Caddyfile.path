@@ -1,0 +1,42 @@
+# 경로 방식 (설계 문서 7-4): 한 호스트에 /, /admin/, /auth/. compose 의 caddy 가 쓴다(CADDY_MODE=path, infra/app-path.env)
+# 앱은 늘 루트에서 돈다: 앞 경로를 떼고 넘긴다. SAS 에는 X-Forwarded-Prefix: /auth 를 붙여 자기 주소에 /auth 를 붙이게 한다
+{
+	auto_https off
+}
+
+http://localhost {
+	# 브라우저가 보낸 값은 버린다 (/auth 에서만 다시 붙인다)
+	request_header -X-Forwarded-Prefix
+
+	# 1. /auth: SAS·로그인·가입 처리 경로만 auth-service 로, 그 밖(/auth/signin·/auth/register·정적 파일)은 인증 화면.
+	#    auth-service 의 관리 엔드포인트(/auth/actuator 등)는 열지 않는다(인증 화면의 SPA fallback 이 된다)
+	redir /auth /auth/
+	handle_path /auth/* {
+		@sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
+		handle @sas {
+			reverse_proxy auth-service:8086 {
+				header_up X-Forwarded-Prefix /auth
+			}
+		}
+		handle {
+			reverse_proxy auth:8080
+		}
+	}
+
+	# 2. Gateway 경로 (그대로)
+	@scg path /api/* /oauth2/authorization/* /login/oauth2/code/* /logout
+	handle @scg {
+		reverse_proxy gateway:8000
+	}
+
+	# 3. 관리자 화면 (/admin 을 뗀다. <base href> 가 /admin/ 이라 끝 / 가 있어야 자산이 맞는다)
+	redir /admin /admin/
+	handle_path /admin/* {
+		reverse_proxy admin:8080
+	}
+
+	# 4. 사용자 화면
+	handle {
+		reverse_proxy web:8080
+	}
+}

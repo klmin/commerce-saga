@@ -1,6 +1,6 @@
 # ADR 0008. 인증: 자체 auth-service 가 JWT(RS256 + JWKS)를 발급하고, refresh token 은 회전(RTR)하며 재사용하면 그 기기 세션을 버린다
 
-- 상태: 채택 (후속 2 A-1 auth-service PR #30, A-2 Gateway·서비스 JWT 검증)
+- 상태: 일부 대체됨 → [ADR 0017](0017-auth-sas-gateway-bff-spa.md) (후속 5: 발급자·refresh token·토큰 전달·`/auth/*` API. 서명 키·검증·`sub`·`roles`·로그인 제한은 유지). 처음 채택: 후속 2 A-1 auth-service PR #30, A-2 Gateway·서비스 JWT 검증
 - 날짜: 2026-11-23
 
 ## 배경

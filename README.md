@@ -14,8 +14,8 @@
 flowchart LR
     client([client]) -- "POST /api/orders\nBearer JWT" --> gw[gateway\nJWT 1차 검증 · rate limit]
     gw -- "/orders (JWT 재검증)" --> order
-    client -- "/auth/login" --> gw
-    gw --> auth[auth-service\nauth_db · Redis\nJWT 발급 · JWKS]
+    client -- "로그인 (OIDC)" --> auth[auth-service · SAS\nauth_db · Redis\n토큰 발급 · JWKS]
+    gw -- "토큰 교환·갱신 (BFF)" --> auth
     gw -- "/products (공개 조회)\n/admin/products" --> product[product-service\nproduct_db\n상품 · 가격 · 가격 이력]
     product -. "products 테이블 CDC\n(Debezium, ADR 0010)" .-> kafka
     gw -- "/search (공개)" --> search[search-service\nElasticsearch\n상품 검색]
@@ -73,13 +73,24 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
 ./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
 ./gradlew :services:search-service:bootRun                 # 8089 상품 검색 (후속 4-2, Elasticsearch 9200 + product-cdc 커넥터 등록)
-./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
-(cd frontend && npm ci && npm run dev)                 # 화면 http://localhost:3500. frontend/README.md
+./gradlew :services:gateway:bootRun                        # 8000 API Gateway (BFF 로그인 /oauth2/**, /api/**)
+(cd frontend && pnpm install && pnpm dev:web)          # 사용자 화면 SPA http://localhost:5173 (BFF 로그인). frontend/README.md
+(cd frontend && pnpm dev:admin)                        # 관리자 화면 SPA http://localhost:5174
+(cd frontend && pnpm dev:auth)                         # 인증 화면 SPA http://localhost:5175 (로그인·가입. 로컬 issuer 라 로그인하려면 필요)
+```
+
+앱까지 컨테이너로 한 번에 띄우려면(후속 5-3d): 밖으로는 Caddy(:80) 하나, 화면·Gateway·SAS 를 경로로 나눈다
+
+```bash
+./gradlew bootJar
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build --wait
+# 호스트 방식(기본): 사용자 http://localhost, 관리자 http://admin.localhost, 로그인 http://auth.localhost
+docker compose --env-file infra/app-path.env -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build --wait
+# 경로 방식: http://localhost/, /admin/, /auth/
 ```
 
 ```bash
-TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/json' \
-  -d '{"loginId":"user1","password":"local-dev-pass"}' | sed -nE 's/.*"accessToken":"([^"]+)".*/\1/p')   # 개발용 시드 사용자 1
+TOKEN=$(source scripts/lib/auth.sh && access_token 1)     # 개발용 시드 사용자 1 (SAS 의 스크립트용 클라이언트로 로그인, scripts/lib/auth.sh)
 curl -X POST localhost:8000/api/orders -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":39000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
@@ -90,7 +101,6 @@ scripts/smoke-saga.sh                                      # 정상·품절·결
 scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메시지와 원인 (replay 로 재처리)
 scripts/smoke-tracing.sh                                   # 주문 한 건 = trace 하나 + 그 trace 의 로그 (Grafana → Explore → Tempo, span 의 Related logs → Loki)
 scripts/smoke-alerts.sh                                    # 장애 → 경보 firing (Grafana 대시보드 commerce-saga)
-scripts/smoke-auth.sh                                      # 가입·로그인·refresh 회전·재사용 탐지 (auth-service 를 AUTH_REFRESH_GRACE=2s 로 띄우면 GRACE_WAIT=3 로 빨리)
 scripts/smoke-gateway.sh                                   # Gateway·서비스 JWT 검증, 남의 주문 404, 관리자 역할, rate limit
 scripts/smoke-idempotency.sh                               # 같은 Idempotency-Key 재요청·동시 요청에도 주문 하나, 다른 본문 422, 내 주문·결제 목록
 scripts/smoke-signup-points.sh                             # 가입 → auth.events → 포인트 계정(가입 축하 1,000P) → 그 포인트로 주문
@@ -124,6 +134,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 15 | [PG 장애가 이어지면 서킷 브레이커가 열려 결제 즉시 실패·보상, 복구 후 시험 호출로 닫힘](docs/scenarios/15-pg-circuit-breaker.md) | CI `e2e` |
 | 16 | [상품 테이블 CDC: products 변경이 product.cdc.products 로 (키 = 상품 id, 변경 후 행, 헤더 __lsn)](docs/scenarios/16-product-cdc.md) | CI `e2e`·`k8s` |
 | 17 | [상품 검색: 가격 변경·판매 중지가 몇 초 안에 검색에 반영, 옛 변경 무시, ES 중단 중 검색만 503 → 재개 후 따라잡음](docs/scenarios/17-product-search.md) | CI `e2e`·`k8s` |
+| 18 | [인기 상품 재고 락: 한 상품에 몰린 예약은 약 150건/s 에서 막히고 인스턴스를 늘려도 그대로(락 대기), 상품이 나뉘면 늘어남 → 비관적 락 유지](docs/scenarios/18-hot-stock-lock.md) | 측정 (로컬) |
 
 ## 설계 결정 (ADR)
 
@@ -149,7 +160,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 ```
 services/      order(오케스트레이터), inventory, point, payment(가짜 PG), notification, auth(회원·로그인·JWT 발급), gateway(Spring Cloud Gateway)
 libs/          messaging-contract(메시지 스키마), outbox(저장 + relay)
-frontend/      Next.js 화면 (로그인·회원가입, 상품·주문·내 주문·주문 상세 Saga 타임라인, 포인트·결제·알림, 로그인 기기, 관리자)
+frontend/      화면 SPA (Vite + React, ADR 0017): apps/web 사용자(상품·장바구니·주문·Saga 타임라인·포인트·결제·알림), apps/admin 관리자(상품 관리·결제 장애 주입), nginx 이미지
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)

@@ -1,0 +1,33 @@
+{
+  "name": "@commerce/bff",
+  "private": true,
+  "type": "module",
+  "description": "화면 SPA 들이 Gateway(BFF)를 부르는 공용 코드: /api 호출(CSRF·401 → 로그인), 앞 경로(<base href>), 지금 사용자, 로그인 확인·로그아웃. 빌드 없이 소스를 내보낸다",
+  "exports": {
+    "./api": "./src/api.ts",
+    "./base": "./src/base.ts",
+    "./me": "./src/me.ts",
+    "./session": "./src/session.tsx",
+    "./uuid": "./src/uuid.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@commerce/ui": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.108.4",
+    "@types/react": "^19",
+    "jsdom": "^31.0.1",
+    "react": "19.3.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.2"
+  }
+}

@@ -1,6 +1,7 @@
-node_modules
-.next
-.env*
-!.env.example
+**/node_modules
+**/dist
+**/playwright-report
+**/test-results
+next
 Dockerfile
 README.md

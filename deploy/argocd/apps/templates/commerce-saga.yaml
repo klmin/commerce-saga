@@ -12,6 +12,10 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    # ArgoCD Notifications → Discord (deploy/argocd/notifications.yaml). 알림을 켜지 않은 클러스터에서는 아무 일도 없다
+    notifications.argoproj.io/subscribe.on-deployed.discord: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.discord: ""
+    notifications.argoproj.io/subscribe.on-health-degraded.discord: ""
 spec:
   project: default
   source:

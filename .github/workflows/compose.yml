@@ -1,0 +1,93 @@
+name: compose
+
+# 앱까지 컨테이너로 띄우는 전체 실행 (infra/docker-compose.app.yml, 후속 5-3d). 밖으로는 Caddy(:80) 하나.
+# 경로 방식(http://localhost/, /admin/, /auth/)과 호스트 방식(localhost·admin.localhost·auth.localhost) 각각
+# 브라우저 없이 BFF 로그인 한 바퀴(scripts/smoke-bff-login.sh)를 돈다: 화면 → Gateway → SAS 로그인 폼 → 콜백 → /api/me
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**', 'frontend/**', 'services/**', 'libs/**', 'build-logic/**', 'deploy/docker/**', 'scripts/smoke-bff-login.sh', '.github/workflows/compose.yml']
+  pull_request:
+    paths: ['infra/**', 'frontend/**', 'services/**', 'libs/**', 'build-logic/**', 'deploy/docker/**', 'scripts/smoke-bff-login.sh', '.github/workflows/compose.yml']
+
+permissions:
+  contents: read
+
+# PR 은 새 push 가 오면 앞 실행을 취소한다. main(push·schedule 등)은 실행마다 그룹이 달라 취소되지 않는다
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE: docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: bootJar
+        run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:product-service:bootJar :services:search-service:bootJar :services:gateway:bootJar
+
+      - name: 경로 방식으로 기동
+        run: $COMPOSE --env-file infra/app-path.env up -d --build --wait --wait-timeout 600
+
+      - name: 경로 방식 화면·SAS·로그인
+        run: |
+          # 사용자 / , 관리자 /admin/, 인증 화면 /auth/ (<base href> 가 앞 경로), /admin → /admin/, SAS issuer 에 /auth
+          curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
+          curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
+          curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'
+          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/auth)" = http://localhost/auth/ ]
+          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
+          curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
+          # SAS·로그인 경로만 auth-service 로: 관리 엔드포인트는 밖에서 열리지 않는다(인증 화면의 SPA fallback)
+          if curl -s http://localhost/auth/actuator/prometheus | grep -q jvm_; then echo "관리 엔드포인트가 밖에 열림: http://localhost/auth/actuator/prometheus" >&2; exit 1; fi
+          # 브라우저가 보낸 X-Forwarded-Prefix 는 버린다 (로그인 화면 주소가 위조한 앞 경로로 바뀌지 않는다)
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' -H 'X-Forwarded-Prefix: /evil' 'http://localhost/auth/oauth2/authorize?response_type=code&client_id=gateway-web&scope=openid&redirect_uri=http://localhost/login/oauth2/code/gateway-web&state=s&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
+          echo "authorize → $loc"
+          [ "$loc" = http://localhost/auth/signin ]
+          BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
+
+      - name: 상품 CDC 커넥터·검색 색인
+        run: |
+          # connectors-init 이 product-cdc 를 등록했고, 시드 상품이 검색 색인까지 온다
+          [ "$($COMPOSE ps -a --format '{{.ExitCode}}' connectors-init)" = 0 ]
+          CONNECT_URL=http://localhost:8088 CONNECTORS=product-cdc bash scripts/register-connectors.sh status | grep -q 'product-cdc: RUNNING RUNNING'
+          for i in $(seq 1 60); do
+            curl -sf 'http://localhost/api/search/products?q=%EB%A7%88%EC%9A%B0' | grep -q '"id":' && exit 0
+            sleep 2
+          done
+          echo "검색에 시드 상품이 안 나옴" >&2; exit 1
+
+      # 같은 볼륨(DB·시크릿·서명 키) 그대로 설정만 바꿔 다시 띄운다: 바뀐 서비스(auth-service·gateway·admin·auth·caddy)만 다시 만든다
+      - name: 호스트 방식으로 다시 기동
+        run: $COMPOSE up -d --wait --wait-timeout 600
+
+      - name: 호스트 방식 화면·SAS·로그인
+        run: |
+          curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
+          curl -sf http://admin.localhost/products/1 | grep -q '<base href="/" />'
+          curl -sf http://auth.localhost/.well-known/openid-configuration | grep -q '"issuer":"http://auth.localhost"'
+          curl -sf http://auth.localhost/signin | grep -q '<base href="/" />'
+          if curl -s http://auth.localhost/actuator/prometheus | grep -q jvm_; then echo "관리 엔드포인트가 밖에 열림: http://auth.localhost/actuator/prometheus" >&2; exit 1; fi
+          # 관리자 호스트에서 로그인을 시작하면 gateway-admin
+          curl -s -o /dev/null -w '%{redirect_url}' http://admin.localhost/oauth2/authorization/auto | grep -q 'client_id=gateway-admin'
+          BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
+
+      - name: 상태·로그
+        if: always()
+        run: |
+          $COMPOSE ps -a || true
+          for s in oauth-secrets-init auth-service gateway caddy web admin auth order-service; do
+            echo "===== $s"
+            $COMPOSE logs --no-color --tail=80 $s || true
+          done

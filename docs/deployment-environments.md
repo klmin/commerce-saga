@@ -98,7 +98,7 @@ docker compose -f infra/docker-compose.yml up -d --wait
 ```
 kind create cluster --name commerce-saga
 scripts/k8s-deploy.sh
-  ├─ ./gradlew bootJar → docker build (백엔드 서비스 9개 + frontend + connect)
+  ├─ ./gradlew bootJar → docker build (백엔드 서비스 9개 + 화면 web·admin + connect)
   ├─ kind load docker-image commerce-saga/<이름>:dev-<시각>   ← 노드에 이미지 직접
   ├─ helm upgrade --install strimzi oci://quay.io/strimzi-helm/...   ← Kafka 오퍼레이터
   └─ helm upgrade --install commerce deploy/helm/commerce-saga --set image.tag=dev-<시각>
@@ -166,11 +166,11 @@ deploy/helm/commerce-saga/   ← 폴더 이름은 자유
 ├─ templates/                ← 이름 고정. 안의 파일을 전부 렌더링한다 (파일 이름은 자유)
 │   ├─ _helpers.tpl          ← _ 로 시작: 렌더링 결과를 k8s 로 보내지 않는다. 공용 함수(define)만 둔다
 │   ├─ services.yaml         ← 백엔드 서비스 (values 의 services: 목록을 range 로 돌며 하나씩)
-│   ├─ frontend.yaml         ← 화면(Next)
+│   ├─ screens.yaml          ← 화면 SPA(web·admin, nginx)
 │   ├─ postgres.yaml         ← Postgres StatefulSet, 서비스별 DB 초기화
 │   ├─ redis.yaml
 │   ├─ elasticsearch.yaml    ← 상품 검색용 Elasticsearch
-│   ├─ auth-jwt-key.yaml     ← auth-service 서명 키 Secret 을 한 번 만드는 hook Job
+│   ├─ auth-jwt-key.yaml     ← auth-service 서명 키·OAuth 클라이언트 시크릿 Secret 을 한 번 만드는 hook Job
 │   ├─ kafka.yaml            ← Strimzi Kafka·KafkaNodePool·KafkaTopic CR (브로커 Pod 는 Strimzi 가 띄움)
 │   ├─ debezium.yaml         ← Strimzi KafkaConnect·KafkaConnector (outbox relay)
 │   ├─ observability.yaml    ← Alloy·Tempo·Loki·Prometheus·Alertmanager·Grafana
@@ -292,7 +292,7 @@ Application commerce-saga-root
             Git 같은 <커밋> : deploy/helm/commerce-saga  ← Chart.yaml → Helm
             values.yaml ← commerceValues(GHCR, LB …) ← image.tag = <커밋>
                 │ 렌더링 (templates/*.yaml 전부, _helpers.tpl 제외)
-                ├─ Deployment 백엔드 서비스 + frontend   → Pod, 이미지 ghcr.io/klmin/commerce-saga/<이름>:<커밋>
+                ├─ Deployment 백엔드 서비스 + 화면(web·admin) → Pod, 이미지 ghcr.io/klmin/commerce-saga/<이름>:<커밋>
                 ├─ StatefulSet postgres, Deployment redis
                 ├─ Kafka·KafkaTopic·KafkaConnect CR  → Strimzi 오퍼레이터가 브로커·Connect Pod 생성
                 ├─ 관측성 Deployment들
@@ -350,7 +350,7 @@ image: {{ include "commerce.image" ... }}       image: ghcr.io/klmin/commerce-sa
 | `deploy/argocd/apps` | `commerce-saga.yaml`, `platform.yaml`, `repositories.yaml` | ArgoCD **Application**(= "이 차트를 설치하라" 는 지시서)과 저장소 Secret | 설치 목록 |
 | `deploy/helm/commerce-saga` | `services.yaml`, `kafka.yaml`, `postgres.yaml` … | **Deployment·StatefulSet·Service·Kafka CR** 등 실제 리소스 → Pod | compose 의 `services:` |
 
-- **우리 이미지(백엔드 서비스 + 화면)는 `deploy/helm/commerce-saga/templates/services.yaml`·`frontend.yaml` 에 정의되어 있다.** `argocd/apps/templates/commerce-saga.yaml` 에는 이미지가 없고, "저 차트를 설치하라" 는 경로(`path: deploy/helm/commerce-saga`)와 넘겨 줄 값만 있다
+- **우리 이미지(백엔드 서비스 + 화면)는 `deploy/helm/commerce-saga/templates/services.yaml`·`screens.yaml` 에 정의되어 있다.** `argocd/apps/templates/commerce-saga.yaml` 에는 이미지가 없고, "저 차트를 설치하라" 는 경로(`path: deploy/helm/commerce-saga`)와 넘겨 줄 값만 있다
 - ArgoCD 는 commerce-saga Application 의 `path` 로 가서 → `Chart.yaml` 을 보고 Helm 차트로 인식 → 그 차트의 `templates/` 를 **다시** 전부 렌더링한다. 그래서 차트를 두 번 거친다 (apps 차트 → Application, 앱 차트 → Pod)
 
 ### "커밋 해시" 란

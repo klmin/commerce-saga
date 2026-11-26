@@ -138,3 +138,35 @@ prometheus.relabel "kubelet" {
   }
 }
 {{- end -}}
+
+{{/* 화면·인증 공개 주소 (설계 문서 7-3·7-4). edge 를 켤 때만 쓴다. 끝 / 없는 주소들을 JSON 으로:
+     web·admin·auth(= AUTH_ISSUER), adminClientHost(호스트 방식만), webHome·adminHome(로그인 뒤·로그아웃 뒤 기본으로 갈 곳),
+     webPostLogout(SAS 에 등록하는 gateway-web 의 로그아웃 뒤 주소. 경로 방식은 관리자 화면도 gateway-web 이라 /admin/ 도), secure */}}
+{{- define "commerce.publicUrls" -}}
+{{- $e := .Values.edge -}}
+{{- if and (eq $e.mode "path") (not $e.path.url) -}}
+{{- /* 공개 주소를 아직 모른다(EKS 처음 배포: LB 가 생겨야 주소를 안다). edge·화면은 띄우고 로그인 설정만 뺀다 → 빈 값 */ -}}
+{}
+{{- else if eq $e.mode "path" -}}
+{{- $base := $e.path.url | trimSuffix "/" -}}
+{{- dict "web" $base "admin" (printf "%s/admin" $base) "auth" (printf "%s/auth" $base)
+      "adminClientHost" "" "webHome" "/" "adminHome" "/admin/"
+      "webPostLogout" (printf "%s/,%s/admin/" $base $base)
+      "secure" (hasPrefix "https://" $base) | toJson -}}
+{{- else if eq $e.mode "host" -}}
+{{- $web := required "edge.mode=host 면 edge.host.web 이 필요하다" $e.host.web | trimSuffix "/" -}}
+{{- $admin := required "edge.mode=host 면 edge.host.admin 이 필요하다" $e.host.admin | trimSuffix "/" -}}
+{{- $auth := required "edge.mode=host 면 edge.host.auth 가 필요하다" $e.host.auth | trimSuffix "/" -}}
+{{- dict "web" $web "admin" $admin "auth" $auth
+      "adminClientHost" (lower (urlParse $admin).host) "webHome" (printf "%s/" $web) "adminHome" (printf "%s/" $admin)
+      "webPostLogout" (printf "%s/" $web)
+      "secure" (hasPrefix "https://" $web) | toJson -}}
+{{- else -}}
+{{- fail (printf "edge.mode 는 host 또는 path 다: %s" $e.mode) -}}
+{{- end -}}
+{{- end -}}
+
+{{/* 주소의 호스트 (포트 빼고). HTTPRoute hostnames 용 */}}
+{{- define "commerce.hostOf" -}}
+{{- (split ":" (urlParse .).host)._0 -}}
+{{- end -}}

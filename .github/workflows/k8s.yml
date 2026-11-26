@@ -18,8 +18,10 @@ permissions:
   contents: read
   pull-requests: read
 
+# PR 은 새 push 가 오면 앞 실행을 취소한다. main(push·schedule 등)은 실행마다 그룹이 달라 취소되지 않는다
+# (release 가 이 커밋의 main CI 결과를 기다린다. 같은 그룹이면 대기 중인 실행도 다음 실행에 밀려 취소된다)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -138,10 +140,13 @@ jobs:
           SKIP_OUTAGE: "true"
         run: bash scripts/smoke-search.sh
 
-      - name: 화면이 Gateway 를 거쳐 뜨는지
+      # 화면 SPA(nginx)가 정적 파일을 내는지. 로그인은 edge 가 있는 argocd job 에서 본다
+      - name: 화면 SPA
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3500/login)
-          [ "$code" = 200 ] || { echo "frontend /login → $code"; exit 1; }
+          for port in 5173 5174; do
+            curl -sf -o /dev/null http://localhost:$port/healthz
+            curl -sf http://localhost:$port/orders/1 | grep -q '<base href="/" />'
+          done
 
       # 클러스터 안 관측성: 서비스 → alloy → tempo·loki (port-forward 로 compose 와 같은 포트)
       - name: 분산 트레이싱·로그 (시나리오 11)
@@ -169,7 +174,7 @@ jobs:
           # Strimzi 는 Deployment 대신 StrimziPodSet 으로 Pod 를 띄운다
           kubectl -n commerce logs -l strimzi.io/kind=KafkaConnect --tail=80 || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
-          for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+          for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway web admin auth; do
             echo "===== $d"
             kubectl -n commerce logs deployment/$d --tail=80 || true
           done
@@ -180,13 +185,21 @@ jobs:
 
   # 후속 3 K-3: 같은 구성을 ArgoCD(GitOps)로. root Application 하나만 apply 하면 ArgoCD 가 이 PR 의 커밋을 GitHub 에서 가져와
   # Strimzi·Envoy Gateway·commerce-saga 를 sync 한다. 외부 입구는 edge(Gateway API) 하나이고 화면만 연다
+  #
+  # 이미지와 차트를 같은 커밋으로: ArgoCD 는 GitHub 의 브랜치 커밋(PR 이면 head)에서 차트를 가져오므로 이미지도 그 커밋으로 빌드한다.
+  # 기본 checkout(PR 이면 main 과 합친 merge 커밋)으로 빌드하면 PR 이 main 보다 뒤처졌을 때 새 이미지가 옛 차트로 떠서 깨진다.
+  # main 과 합친 결과는 kind 잡이 merge 커밋으로 본다
   argocd:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REVISION }}
 
       - uses: actions/setup-java@v6
         with:
@@ -219,22 +232,78 @@ jobs:
           cluster_name: commerce-saga
 
       # ArgoCD 는 GitHub 에서 가져온다. PR 이면 PR 의 head 커밋(같은 저장소 브랜치라 공개 저장소에 있다)
+      # ArgoCD Notifications(deploy/argocd/notifications.yaml)를 EKS 와 같은 설정으로 켜고, Discord 대신 클러스터 안 수신 Pod 로 보낸다.
+      # 수신 Pod 는 받은 본문을 JSON 으로 파싱해 한 줄로 찍는다(파싱 실패면 INVALID) → 아래 "알림 확인" 이 로그를 본다
+      - name: 알림 수신 Pod
+        run: |
+          set -euo pipefail
+          kubectl create namespace argocd
+          kubectl -n argocd create secret generic argocd-notifications-secret \
+            --from-literal=discord-webhook-url=http://notify-sink.argocd.svc:8080/webhook
+          kubectl -n argocd create configmap notify-sink --from-literal=sink.py='
+          import http.server, json
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
+                  try:
+                      print("RECEIVED " + json.dumps(json.loads(body), ensure_ascii=False), flush=True)
+                  except ValueError:
+                      print("INVALID " + body.replace("\n", " "), flush=True)
+                  self.send_response(204)
+                  self.end_headers()
+          http.server.HTTPServer(("", 8080), H).serve_forever()
+          '
+          kubectl -n argocd create deployment notify-sink --image=python:3.13-alpine --port=8080 \
+            -- python -u /sink/sink.py
+          kubectl -n argocd patch deployment notify-sink --type=json -p='[
+            {"op":"add","path":"/spec/template/spec/volumes","value":[{"name":"sink","configMap":{"name":"notify-sink"}}]},
+            {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts","value":[{"name":"sink","mountPath":"/sink"}]}]'
+          kubectl -n argocd expose deployment notify-sink --port=8080
+          kubectl -n argocd rollout status deployment/notify-sink --timeout=3m
+
+      # REVISION(잡 env) = 위에서 checkout 해 이미지를 빌드한 커밋 = ArgoCD 가 차트를 가져올 커밋
       - name: ArgoCD 로 배포 (이미지 → kind, root Application → sync)
         env:
-          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+          ARGOCD_NOTIFY: 'true'
         run: bash scripts/k8s-argocd.sh
 
-      # edge 로 화면이 열리는지. Envoy 의 Service 를 로컬로 연결한다 (kind 에는 LoadBalancer 가 없다)
-      - name: edge 로 화면
+      # commerce-saga 가 Synced·Healthy 가 되면 on-deployed 가 한 번 온다. 본문이 JSON 으로 파싱되고 제목·revision 이 맞는지
+      - name: 알림 확인 (ArgoCD → 수신 Pod)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            logs=$(kubectl -n argocd logs deployment/notify-sink)
+            grep -q '^RECEIVED .*ArgoCD 배포 완료: commerce-saga' <<< "$logs" && break
+            sleep 3
+          done
+          echo "$logs"
+          line=$(grep '^RECEIVED .*ArgoCD 배포 완료: commerce-saga' <<< "$logs" | head -1)
+          [ -n "$line" ] || { echo "배포 완료 알림이 오지 않음"; kubectl -n argocd logs deployment/argocd-notifications-controller --tail=50 || true; exit 1; }
+          ! grep -q '^INVALID' <<< "$logs" || { echo "JSON 이 아닌 본문이 왔다"; exit 1; }
+          grep -q "${REVISION:0:7}" <<< "$line" || { echo "알림의 revision 이 $REVISION 이 아님"; exit 1; }
+
+      # edge(경로 방식, deploy/argocd/apps/values.yaml): Envoy 의 Service 를 로컬 80 으로 연결한다(kind 에는 LoadBalancer 가 없다).
+      # 80 이어야 한다: Envoy 가 붙이는 X-Forwarded-Proto 를 Spring 이 읽으면 X-Forwarded-Port 가 없을 때 포트를 스킴 기본값으로
+      # 되돌려, 다른 포트로 열면 SAS 가 돌려보내는 주소에서 포트가 빠진다(실제 배포는 80·443 이라 상관없다). 80 은 sudo 로 연다
+      # 차트가 공개 주소 http://localhost 로 SAS issuer·redirect URI 를 만들었다 → 브라우저처럼 로그인 한 바퀴
+      - name: edge 로 화면·로그인 (경로 방식)
         run: |
           svc=$(kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o name | head -1)
           [ -n "$svc" ] || { echo "edge Service 없음"; exit 1; }
-          kubectl -n envoy-gateway-system port-forward "$svc" 18080:80 > /dev/null 2>&1 &
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:18080/login && break; sleep 1; done
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/login)
-          [ "$code" = 200 ] || { echo "edge /login → $code"; exit 1; }
-          # Spring Gateway(/api, /auth)는 edge 로 나가지 않는다: Next 의 화면 경로로만 처리된다
-          curl -s -o /dev/null -w 'edge /api/orders → %{http_code}\n' http://localhost:18080/api/orders
+          sudo -E env "PATH=$PATH" kubectl --kubeconfig "$HOME/.kube/config" -n envoy-gateway-system port-forward "$svc" 80:80 > /dev/null 2>&1 &
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost/ && break; sleep 1; done
+          # 사용자 화면 /, 관리자 화면 /admin/ (앞 경로를 떼고 넘김, <base href> 는 /admin/), /admin → /admin/
+          curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
+          curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
+          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
+          # 인증 화면 /auth/ (로그인·가입 화면, <base href> 는 /auth/), /auth → /auth/
+          curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'
+          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/auth)" = http://localhost/auth/ ]
+          # SAS 는 /auth 아래 (issuer 에 경로가 붙는다)
+          curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
+          # SAS·로그인 경로만 연다: 관리 엔드포인트는 밖에서 보이지 않는다
+          if curl -s http://localhost/auth/actuator/prometheus | grep -q jvm_; then echo "관리 엔드포인트가 밖에 열림: http://localhost/auth/actuator/prometheus" >&2; exit 1; fi
+          BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
 
       - name: port-forward
         run: bash scripts/k8s-port-forward.sh
@@ -253,3 +322,11 @@ jobs:
           kubectl -n argocd get application commerce-saga -o jsonpath='{.status.conditions}{"\n"}{.status.operationState.message}{"\n"}' || true
           kubectl -n commerce get pods,kafka,kafkaconnector,gateway,httproute -o wide || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -30 || true
+          # Ready 가 아닌 Pod 는 종료 사유(OOMKilled·Error·probe)와 직전 컨테이너 로그까지
+          for p in $(kubectl -n commerce get pods --no-headers | awk '{split($2, r, "/")} r[1] != r[2] && $3 != "Completed" {print $1}'); do
+            echo "===== $p"
+            kubectl -n commerce get pod "$p" -o jsonpath='{range .status.containerStatuses[*]}{.name} restarts={.restartCount} last={.lastState.terminated.reason}({.lastState.terminated.exitCode}){"\n"}{end}' || true
+            kubectl -n commerce logs "$p" --previous --tail=60 || kubectl -n commerce logs "$p" --tail=60 || true
+          done
+          kubectl -n argocd logs deployment/argocd-notifications-controller --tail=30 || true
+          kubectl -n argocd logs deployment/notify-sink --tail=30 || true

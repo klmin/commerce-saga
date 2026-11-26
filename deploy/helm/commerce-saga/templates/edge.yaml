@@ -1,6 +1,9 @@
 {{- if .Values.edge.enabled }}
-# edge: 클러스터 밖으로 여는 유일한 입구 (Gateway API, 후속 3 K-3).
-# 화면(Next)만 연다. 브라우저는 Next 만 보고 Next 서버만 Spring Gateway 를 부른다(ADR 0011) → Spring Gateway·서비스·DB·Kafka 는 내부망
+# edge: 클러스터 밖으로 여는 유일한 입구 (Gateway API, 후속 3 K-3). 화면 SPA·Spring Gateway(BFF)·auth-service(SAS)의
+# 정해진 경로만 연다 (설계 문서 7-1 표 그대로). 서비스·DB·Kafka 는 내부망. 두 방식 (edge.mode, 설계 문서 7-0·7-4):
+#   host: 화면마다 호스트 (web·admin·auth). 같은 경로
+#   path: 호스트 하나에 / (사용자), /admin/ (관리자), /auth/ (SAS). 앞 경로를 떼고 넘긴다
+# 브라우저가 보낸 X-Forwarded-Prefix 는 모든 규칙에서 지운다(/auth 경로에서만 다시 붙인다). 위조하면 SAS 의 리다이렉트 주소·쿠키 Path 가 바뀐다
 {{- if .Values.edge.gatewayClass.create }}
 # Envoy Gateway 가 만드는 Envoy 의 Service 타입. 클라우드는 LoadBalancer, kind 는 LoadBalancer 가 없어 ClusterIP
 # (LoadBalancer 로 두면 주소를 못 받아 Gateway 가 Programmed 가 되지 않는다)
@@ -38,27 +41,153 @@ metadata:
 spec:
   gatewayClassName: {{ .Values.edge.gatewayClass.name }}
   listeners:
+    # 호스트는 HTTPRoute 가 고른다
     - name: http
       protocol: HTTP
       port: 80
-      {{- with .Values.edge.hostname }}
-      hostname: {{ . | quote }}
-      {{- end }}
+{{- $urls := include "commerce.publicUrls" . | fromJson }}
+{{- $gw := dict "name" "gateway" "port" .Values.services.gateway.port }}
+{{- $sas := dict "name" "auth-service" "port" (index .Values.services "auth-service").port }}
+{{- $scgPaths := list "/api" "/oauth2/authorization" "/login/oauth2/code" "/logout" }}
+{{- /* auth-service 로 보내는 경로: SAS 표준 엔드포인트 + 로그인·가입 처리 + CSRF (설계 문서 7-1 "인증 쪽"). 그 밖은 인증 화면 */}}
+{{- $sasPaths := list "/oauth2" "/.well-known" "/userinfo" "/connect/logout" "/login" "/signup" "/csrf" }}
+{{- if eq .Values.edge.mode "host" }}
+{{- range $screen := list "web" "admin" }}
 ---
+# {{ $screen }} 호스트: Gateway 경로 → Spring Gateway, 그 밖 → 화면 (설계 문서 7-1 "화면 쪽")
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ .Release.Name }}-frontend
+  name: {{ $.Release.Name }}-{{ $screen }}
 spec:
   parentRefs:
-    - name: {{ .Release.Name }}-edge
-  {{- with .Values.edge.hostname }}
-  hostnames: [{{ . | quote }}]
-  {{- end }}
+    - name: {{ $.Release.Name }}-edge
+  hostnames: [{{ include "commerce.hostOf" (index $urls $screen) | quote }}]
   rules:
+    - matches:
+        {{- range $scgPaths }}
+        - path: { type: PathPrefix, value: {{ . }} }
+        {{- end }}
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: {{ $gw.name }}, port: {{ $gw.port }} }
     - matches:
         - path: { type: PathPrefix, value: / }
       backendRefs:
-        - name: frontend
-          port: {{ .Values.frontend.port }}
+        - { name: {{ $screen }}, port: 80 }
+{{- end }}
+---
+# auth 호스트: SAS 경로 → auth-service, 그 밖(/signin·/register·정적 파일) → 인증 화면 (설계 문서 7-1 "인증 쪽")
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-auth
+spec:
+  parentRefs:
+    - name: {{ .Release.Name }}-edge
+  hostnames: [{{ include "commerce.hostOf" $urls.auth | quote }}]
+  rules:
+    # SAS·로그인·가입 처리에 필요한 경로만 auth-service 로 (설계 문서 7-1 "인증 쪽")
+    - matches:
+        {{- range $sasPaths }}
+        - path: { type: PathPrefix, value: {{ . }} }
+        {{- end }}
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: {{ $sas.name }}, port: {{ $sas.port }} }
+    # 그 밖 → 인증 화면. auth-service 의 관리 엔드포인트(/actuator 등)는 여기로 와 화면의 SPA fallback 이 된다(열리지 않는다)
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - { name: auth, port: 80 }
+{{- else }}
+---
+# 경로 방식: 한 호스트에 앞 경로로 나눈다 (설계 문서 7-4 "경로 방식 프록시 규칙"). 가장 긴 경로가 먼저 맞는다
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-path
+spec:
+  parentRefs:
+    - name: {{ .Release.Name }}-edge
+  {{- with $urls.web }}
+  hostnames: [{{ include "commerce.hostOf" . | quote }}]
+  {{- end }}
+  rules:
+    # 1. /auth/<SAS 경로> → SAS. /auth 를 떼고 X-Forwarded-Prefix: /auth (SAS 가 만드는 주소·쿠키 Path 에 붙는다).
+    #    정해진 경로만 넘긴다: 관리 엔드포인트(/auth/actuator 등)는 열지 않는다
+    {{- range $sasPaths }}
+    - matches:
+        - path: { type: PathPrefix, value: {{ printf "/auth%s" . }} }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: {{ . }} }
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set: [{ name: X-Forwarded-Prefix, value: /auth }]
+      backendRefs:
+        - { name: {{ $sas.name }}, port: {{ $sas.port }} }
+    {{- end }}
+    # 1-1. /auth → /auth/ (인증 화면의 <base href> 가 /auth/ 라 끝 / 가 있어야 자산이 맞는다)
+    - matches:
+        - path: { type: Exact, value: /auth }
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path: { type: ReplaceFullPath, replaceFullPath: /auth/ }
+            statusCode: 302
+    # 1-2. /auth/… 그 밖(/auth/signin·/auth/register·정적 파일) → 인증 화면. /auth 를 뗀다
+    - matches:
+        - path: { type: PathPrefix, value: /auth }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: auth, port: 80 }
+    # 2. Gateway 경로 → Spring Gateway (그대로)
+    - matches:
+        {{- range $scgPaths }}
+        - path: { type: PathPrefix, value: {{ . }} }
+        {{- end }}
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: {{ $gw.name }}, port: {{ $gw.port }} }
+    # 3. /admin → /admin/ (화면의 <base href> 가 /admin/ 이라 끝 / 가 있어야 자산이 맞는다)
+    - matches:
+        - path: { type: Exact, value: /admin }
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path: { type: ReplaceFullPath, replaceFullPath: /admin/ }
+            statusCode: 302
+    # 4. /admin/… → 관리자 화면. /admin 을 뗀다 (/admin 자체는 위 Exact 가 먼저 맞는다)
+    - matches:
+        - path: { type: PathPrefix, value: /admin }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: admin, port: 80 }
+    # 5. 그 밖 → 사용자 화면
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: web, port: 80 }
+{{- end }}
 {{- end }}

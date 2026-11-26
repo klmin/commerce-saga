@@ -1,0 +1,59 @@
+{{- if .Values.screens.enabled }}
+# 화면 SPA (frontend/Dockerfile: nginx 가 정적 파일을 낸다, ADR 0017). web = 사용자, admin = 관리자, auth = 인증(로그인·가입).
+# 같은 이미지를 두 방식에 쓴다: 경로 방식이면 BASE_PATH 로 <base href> 를 바꾼다(설계 문서 7-4)
+{{- range $name, $screen := .Values.screens.apps }}
+{{- $labels := include "commerce.labels" (dict "name" $name "root" $) }}
+{{- $basePath := "/" }}
+{{- if and $.Values.edge.enabled (eq $.Values.edge.mode "path") }}
+{{- $basePath = $screen.pathPrefix }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      # 롤아웃 중 내려가는 Pod 로 가는 요청이 실패하지 않게 (values gracefulTermination)
+      terminationGracePeriodSeconds: {{ $.Values.gracefulTermination.terminationGracePeriodSeconds }}
+      containers:
+        - name: app
+          image: {{ include "commerce.image" (dict "name" $name "root" $) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          lifecycle:
+            preStop:
+              sleep: { seconds: {{ $.Values.gracefulTermination.preStopSleepSeconds }} }
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # 이 화면의 앞 경로 (호스트 방식 /, 경로 방식 /admin/ 등). / 로 끝나야 한다
+            - name: BASE_PATH
+              value: {{ $basePath | quote }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          resources: {{- toYaml $.Values.screens.resources | nindent 12 }}
+{{- end }}
+{{- end }}

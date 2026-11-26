@@ -2,6 +2,11 @@
 # 서비스마다 자기 DB·계정만 받는다 (다른 서비스 DB 비밀번호를 갖지 않는다)
 {{- $root := . }}
 {{- $kafka := include "commerce.kafkaBootstrap" . }}
+{{- /* edge 를 켜면 브라우저가 보는 공개 주소 (설계 문서 7-3·7-4, _helpers.tpl commerce.publicUrls) */}}
+{{- $urls := dict }}
+{{- if .Values.edge.enabled }}
+{{- $urls = include "commerce.publicUrls" . | fromJson }}
+{{- end }}
 {{- range $name, $svc := .Values.services }}
 {{- $jwtKey := and (eq $name "auth-service") $root.Values.authJwtKey.enabled }}
 {{- $labels := include "commerce.labels" (dict "name" $name "root" $root) }}
@@ -82,8 +87,45 @@ spec:
               containerPort: {{ $svc.port }}
           env:
             {{- range $k, $v := $root.Values.common.env }}
+            {{- if not (and $urls (eq $k "AUTH_ISSUER")) }}
             - name: {{ $k }}
               value: {{ $v | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $urls }}
+            # 토큰 iss = 브라우저가 가는 SAS 공개 주소 (edge). 서비스·Gateway 는 이 문자열로 검증한다
+            - name: AUTH_ISSUER
+              value: {{ $urls.auth | quote }}
+            {{- if eq $name "auth-service" }}
+            # 고정 클라이언트의 redirect URI·로그아웃 뒤 주소 (시작할 때 DB 에 upsert), 저장된 인가 요청이 없을 때 갈 화면
+            - name: WEB_HOME
+              value: {{ printf "%s/" $urls.web | quote }}
+            - name: WEB_REDIRECT_URI
+              value: {{ printf "%s/login/oauth2/code/gateway-web" $urls.web | quote }}
+            - name: WEB_POST_LOGOUT_REDIRECT_URIS
+              value: {{ $urls.webPostLogout | quote }}
+            - name: ADMIN_REDIRECT_URI
+              value: {{ printf "%s/login/oauth2/code/gateway-admin" $urls.admin | quote }}
+            - name: ADMIN_POST_LOGOUT_REDIRECT_URIS
+              value: {{ printf "%s/" $urls.admin | quote }}
+            - name: AUTH_COOKIE_SECURE
+              value: {{ $urls.secure | quote }}
+            {{- end }}
+            {{- if eq $name "gateway" }}
+            # BFF 로그인: 화면별 클라이언트·돌아올 곳. 경로 방식은 ADMIN_CLIENT_HOST 를 비워 늘 gateway-web (설계 문서 7-4)
+            - name: WEB_REDIRECT_URI
+              value: {{ printf "%s/login/oauth2/code/gateway-web" $urls.web | quote }}
+            - name: ADMIN_REDIRECT_URI
+              value: {{ printf "%s/login/oauth2/code/gateway-admin" $urls.admin | quote }}
+            - name: ADMIN_CLIENT_HOST
+              value: {{ $urls.adminClientHost | quote }}
+            - name: WEB_HOME
+              value: {{ $urls.webHome | quote }}
+            - name: ADMIN_HOME
+              value: {{ $urls.adminHome | quote }}
+            - name: GATEWAY_COOKIE_SECURE
+              value: {{ $urls.secure | quote }}
+            {{- end }}
             {{- end }}
             # trace·로그는 클러스터 안 alloy 로 (templates/observability.yaml). 관측성을 끄면 내보내지 않는다(보내면 실패 로그만 쌓인다)
             {{- if $root.Values.observability.enabled }}
@@ -120,8 +162,9 @@ spec:
               value: {{ $kafka | quote }}
             {{- end }}
             {{- if ne $name "auth-service" }}
-            - name: AUTH_JWKS_URI
-              value: "http://auth-service:{{ (index $root.Values.services "auth-service").port }}/.well-known/jwks.json"
+            # SAS 내부 주소 (JWKS·토큰 교환). 공개 주소 AUTH_ISSUER 와 나눈다 (설계 문서 7-3)
+            - name: AUTH_INTERNAL_URL
+              value: "http://auth-service:{{ (index $root.Values.services "auth-service").port }}"
             {{- end }}
             {{- if or (eq $name "auth-service") (eq $name "gateway") }}
             - name: REDIS_HOST
@@ -157,6 +200,17 @@ spec:
                 secretKeyRef: { name: {{ $root.Values.authJwtKey.secretName }}, key: kid }
             # 로컬 개발용 키 파일(앱이 띄울 때 만들어 재사용)을 끈다. k8s 는 위 Secret 만 쓴다
             - name: AUTH_JWT_DEV_KEY_FILE
+              value: ""
+            {{- end }}
+            {{- if or (eq $name "auth-service") (eq $name "gateway") }}
+            # OAuth 클라이언트(Gateway BFF) 시크릿은 Secret 에서 (values oauthClientSecrets, ADR 0017). auth-service 와 Gateway 가 같은 값을 읽는다.
+            # 로컬 개발용 파일을 끈다: 시크릿이 없으면 두 앱 모두 기동 실패한다(조용히 만들면 서로 값이 어긋난다)
+            {{- range $client := list "gateway-web" "gateway-admin" }}
+            - name: {{ $client | replace "-" "_" | upper }}_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ $root.Values.oauthClientSecrets.secretName }}, key: {{ $client }} }
+            {{- end }}
+            - name: OAUTH_CLIENT_SECRET_DEV_DIR
               value: ""
             {{- end }}
             {{- range $k, $v := $svc.env }}

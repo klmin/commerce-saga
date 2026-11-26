@@ -92,6 +92,19 @@ K-4 는 태그 = ArgoCD 가 sync 하는 커밋 해시 하나라, 서비스 하�
   - 서비스마다 Application(ApplicationSet): 서비스별 sync·롤백이 되지만 차트·values 를 서비스별로 나눠야 한다. 지금은 한 차트로 충분하다
 - 감수한 것: `release/eks` 의 최신 커밋이 main 커밋이 아니라 봇 커밋이다(어느 main 커밋인지는 메시지 `release: <커밋>` 과 `releasedCommit`). 로컬·CI 의 kind 검증은 `image.tags` 없이 공통 태그로 돌아 이미지별 태그 경로는 렌더링(`helm template`)으로만 확인한다
 
+## 배포 전 main CI 대기 (2026-11-25, 바뀐 서비스만 배포 다음)
+
+release 는 main CI 와 동시에 돌고 main CI 는 다음 머지에 취소됐다(concurrency). 배포 전 검증이 PR CI 하나뿐이라, squash 머지로 PR 이 main 최신이 아니었던 경우 합친 결과가 검증 없이 배포될 수 있었다.
+
+- 결정: **release 첫 잡(`ci`)이 main CI 통과를 기다린다**(`scripts/release-ci-gate.sh`). 실패·취소가 있으면 이미지를 만들지 않고 멈춘다
+- **판정 범위는 마지막 배포 이후의 main 커밋 전부이고, 커밋마다 모든 실행이 통과해야 한다.** CI 가 경로 필터로 돌고 backend 는 바뀐 모듈만 빌드해서, 이번 커밋만 보거나 뒤 커밋의 같은 워크플로 통과로 앞 실패를 대신하면 앞 커밋에서 깨진 모듈이 검증 없이 배포된다(바뀐 서비스만 배포와 같은 이유로 "마지막 배포 커밋" 기준). 뒤 커밋이 고쳤다면 사람이 확인하고 수동 실행 입력 `ci_from`(그 커밋부터만 판정)으로 넘긴다
+- 실행이 아직 API 에 안 보이는 것과 경로 필터로 안 도는 것을 구분하려고, 문서만 바꾼 게 아닌 커밋은 codeql 실행(그런 push 마다 항상 돈다)이 보일 때까지 기다린다. 한 push 의 워크플로 실행은 함께 만들어진다
+- **main 의 CI 는 취소하지 않는다**: concurrency 그룹을 PR 은 브랜치, 그 밖은 실행 id 로 나눈다. 그룹이 같으면 `cancel-in-progress: false` 여도 대기 중인 실행이 다음 실행에 밀려 취소된다
+- 고르지 않은 것
+  - 필수 status check + "브랜치 최신 상태 요구": 머지 전에 막을 수 있지만 경로 필터를 job 안 판단으로 바꿔야 하고 PR 마다 rebase 가 필요하다. 지금은 배포만 막는다
+  - `workflow_run` 으로 release 를 CI 완료 뒤에 시작: CI 워크플로가 여럿이고 경로로 일부만 돌아 "다 끝났다"를 알려면 결국 같은 조회가 필요하다
+- 감수한 것: 배포가 main CI 시간(10~15분)만큼 늦어지고, 대기하는 동안 러너 하나를 쓴다. main CI 가 깨지면 다른 서비스 배포도 멈추고, 고친 뒤에는 `ci_from` 으로 수동 실행해야 한다(자동으로 넘기지 않는다). 일시 실패는 CI 와 release 를 다시 돌려야 한다
+
 ## 관측성 추가 결정 (2026-11-24, ADR 0013 로그·수집기 다음)
 
 - 차트 `templates/observability.yaml` 에 compose 와 같은 구성을 둔다: alloy(수집기: trace·로그 → tempo·loki, 메트릭을 긁어 → prometheus), prometheus(저장·경보 규칙), grafana(데이터 소스·대시보드). `observability.enabled` 기본 true. 메트릭 수집을 Alloy 로 옮긴 것은 2026-11-25 (ADR 0013 "메트릭도 Alloy 로")

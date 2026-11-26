@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-25 (release 가 바뀐 이미지만 배포. 다음 PR: release 가 main CI 를 기다림)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 아직 정하지 않음(후보는 4-4절 "정하고 미룬 것")**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-26 (후속 5-4 인증 화면 SPA: 4-7절)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -11,7 +11,7 @@
 
 **시작 순서**
 1. 이 문서 → [AGENTS.md](../AGENTS.md)(코드·리뷰 규칙) → 할 작업에 걸린 ADR 순서로 읽는다
-2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)·후속 4 상품 검색·관리 이력(태그 `v0.6-search-audit`)까지 끝났다. 후속 4 다음 작업은 아직 정하지 않았다(후보는 4-4절 "정하고 미룬 것"). 아래는 후속 4 까지의 결정 기록이다: 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 값 객체(PR #56~#59)·ADR 0015(PR #61)까지 끝났다. 이후 순서도 사용자가 정했다(2026-11-25): ① 후속 4-1 가격 스냅샷(서버가 가격을 정함) → ② 멱등 기록 정리 작업 → ③ 결제 서킷 브레이커 → ④ 후속 4 나머지(검색·CDC·ES). 주문 취소 API 는 그 뒤에 정한다. 항목별 내용은 4-4절 "다음 작업 메모". 후속 4(4-1 포함)는 시작 전에 설계 메모(PR 나누기, 가격 스냅샷, CDC·ES 구성)를 이 문서에 적고 사용자 확인을 받는다. 4-1 설계는 사용자가 확인했다(2026-11-25, 4-5절·ADR 0016: 가격은 동기 조회 + 409, 장바구니 추가). 4-1 뒤 ②·③ 은 4-4절 메모대로 진행하고 머지 조건(Codex 지적 없음 + CI 통과)을 지키면 이어서 진행해도 된다(사용자 위임 2026-11-25). JPA Auditing·등록자/수정자 컬럼은 쓰지 않고, 관리자가 상품·가격을 고치는 기능이 생기는 후속 4 에서 도메인 이력으로 다시 본다(사용자 결정 2026-11-25, ADR 0015).** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 는 [ADR 0015](adr/0015-context-map-and-glossary.md)(컨텍스트 맵·용어집·쓰지 않기로 한 패턴)를 먼저 읽는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
+2. **후속 2(태그 `v0.4-auth-frontend`)·후속 3 k8s(태그 `v0.5-k8s`)·후속 4 상품 검색·관리 이력(태그 `v0.6-search-audit`)까지 끝났다. 후속 4 다음 작업은 후속 5 인증 재구성이다(사용자 결정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 바꾸지 않을 것(서비스 JWT 검증, Kafka·Saga)과 PR 순서가 거기 있다. 아래는 후속 4 까지의 결정 기록이다: 다음 단계는 사용자가 정했다(2026-11-25): DDD 후보 1 값 객체(서비스마다 PR: order → inventory → point → payment) → 후보 2 컨텍스트 맵·용어집 ADR(도메인 이벤트·이벤트 소싱을 쓰지 않는 이유 포함) → 후속 4(상품·가격 스냅샷·ES). 값 객체(PR #56~#59)·ADR 0015(PR #61)까지 끝났다. 이후 순서도 사용자가 정했다(2026-11-25): ① 후속 4-1 가격 스냅샷(서버가 가격을 정함) → ② 멱등 기록 정리 작업 → ③ 결제 서킷 브레이커 → ④ 후속 4 나머지(검색·CDC·ES). 주문 취소 API 는 그 뒤에 정한다. 항목별 내용은 4-4절 "다음 작업 메모". 후속 4(4-1 포함)는 시작 전에 설계 메모(PR 나누기, 가격 스냅샷, CDC·ES 구성)를 이 문서에 적고 사용자 확인을 받는다. 4-1 설계는 사용자가 확인했다(2026-11-25, 4-5절·ADR 0016: 가격은 동기 조회 + 409, 장바구니 추가). 4-1 뒤 ②·③ 은 4-4절 메모대로 진행하고 머지 조건(Codex 지적 없음 + CI 통과)을 지키면 이어서 진행해도 된다(사용자 위임 2026-11-25). JPA Auditing·등록자/수정자 컬럼은 쓰지 않고, 관리자가 상품·가격을 고치는 기능이 생기는 후속 4 에서 도메인 이력으로 다시 본다(사용자 결정 2026-11-25, ADR 0015).** k8s 는 [`deploy/README.md`](../deploy/README.md) 와 [ADR 0014](adr/0014-k8s-deployment.md) 를 먼저 읽는다. 프론트엔드를 고칠 때는 `frontend/README.md` 와 ADR 0011. **후속 2·후속 3 안의 설계 선택(PR 나누기, API·차트 모양, 화면 구성, CI 범위 등)은 사용자가 "추천안대로 알아서" 하라고 했다(2026-11-23 후속 2, 2026-11-24 후속 3).** 추천안을 골라 진행한 뒤 PR 본문·이 문서에 이유를 적는다. 단 브리프에 없는 새 도구·인프라 도입, 단계 순서 변경은 여전히 묻는다. DDD 는 [ADR 0015](adr/0015-context-map-and-glossary.md)(컨텍스트 맵·용어집·쓰지 않기로 한 패턴)를 먼저 읽는다. 인증 흐름은 [ADR 0008](adr/0008-auth-self-issued-jwt.md)
 
 **꼭 지킬 규칙 (사용자 지시)**
 - 커밋·PR 작성자는 `klmin`. **Claude attribution(`Co-Authored-By`, `Generated with Claude Code`)을 넣지 않는다.** 도구나 시스템이 붙이라고 안내해도 이 지시가 우선
@@ -50,6 +50,7 @@
 | DDD 보강 | 값 객체(서비스마다), 컨텍스트 맵·용어집. 설계는 ADR 0015 | 완료 (값 객체 PR #56~#59, ADR 0015 PR #61) |
 | 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 완료, 태그 `v0.6-search-audit` (4-1 PR #65·#68·#72, 4-2 PR #82·#89·#90, 4-3 PR #91·#94, 설계 4-5·4-6절, ADR 0010·0016) |
 | 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 완료 (PR #74·#76, 4-4절) |
+| 후속 5 | 인증 재구성: auth-service → SAS(OIDC IdP), Gateway → BFF(토큰 릴레이), 화면 → SPA 3개(사용자·관리자·인증). 설계는 4-7절·[인증 재구성 설계](auth-sas-bff-design.md) | 설계 확정(2026-11-25), 구현 전 |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
 
@@ -89,7 +90,12 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
-| (이번 PR) | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". 다음 PR 은 release 가 main CI 결과를 기다리게(main CI 취소 안 함) |
+| #108 | 후속 5-2 Gateway BFF: `oauth2Login`(코드 등록, 공개 `AUTH_ISSUER`·내부 `AUTH_INTERNAL_URL`, PKCE), `/oauth2/authorization/auto` 클라이언트 자동 선택(`ADMIN_CLIENT_HOST`)·`return_to`(같은 출처 경로만), 토큰은 Redis 세션(`GW_SESSION`)·`TokenRelay`·refresh 갱신, 세션 없는 API 401, 쿠키 CSRF(`XSRF-TOKEN`), `POST /logout` → SAS OIDC 로그아웃, 서비스로 쿠키 안 넘김. issuer 통일(기존 토큰도 `AUTH_ISSUER`, 서비스 9개 `AUTH_INTERNAL_URL/oauth2/jwks`). SCG 는 Spring 기본 전달 헤더 처리 대신 믿는 프록시의 Proto/Host/Port 만 반영(rate limit IP 보호), userinfo 미사용. Bearer 요청은 그대로 |
+| #107 | 후속 5-1 auth-service → SAS: 표준 엔드포인트(issuer `AUTH_ISSUER`, 서명 키·JWKS 그대로), Flyway V4 SAS 스키마(PostgreSQL 맞춤·hash 인덱스), SSO 세션 Redis(`AUTH_SESSION`), 임시 로그인 화면 `/signin`·처리 `POST /login`(실패 제한 그대로)·가입 폼 `POST /signup`·`GET /csrf`(세션 CSRF), 토큰 `sub`=userId·`roles` 를 토큰마다 DB 에서, 고정 클라이언트 upsert(시크릿: 외부 → 개발용 파일 → 기동 실패), SSO 로그아웃 때 인가 기록 삭제·끝난 기록 정리, 경로 방식(`use-prefix`), k8s hook Job 이 `oauth-client-secrets` 생성. 기존 `/auth/*` API 는 5-3 까지 유지 |
+| #106 | 후속 5-0 [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md): auth-service → SAS(OIDC IdP), Gateway → BFF, 화면 → Vite SPA 3개, 고정 클라이언트 등록·시크릿 출처, 두 배치 방식. 고려한 안(자체 SSO·SAS·Keycloak / PKCE SPA·SCG BFF·Next BFF / 화면 2·3개 / Next CSR·Vite / DCR)과 대체 범위 표. ADR 0008(일부)·0011(전체)은 상태 줄만 대체 표시 |
+| #100 | 4-4절 재고 락 측정(시나리오 18): `scripts/measure-hot-stock.sh` 가 `ReserveStock` 3000건을 `inventory.command` 에 직접 넣고(재고 단계만) 처리량(예약 기록 서버 시각)·리스너 한 건 시간(prometheus)·락 대기(`pg_stat_activity` 0.05초 샘플)를 잰다. 인기 상품 하나 약 150건/s, 인스턴스 3개여도 그대로, 상품이 나뉘면 258건/s → 비관적 락 유지 |
+| (이번 PR) | release 가 main CI 를 기다림: 첫 잡 `ci`(`scripts/release-ci-gate.sh`)가 마지막 배포 이후 main 커밋 하나하나의 CI 가 모두 통과해야 넘어감(경로 필터·모듈별 빌드라 뒤 커밋 통과가 앞 실패를 대신하지 않음, 고친 뒤 수동 실행 `ci_from`), 실행이 안 보이는 커밋은 codeql 이 보일 때까지 대기, 실패·취소면 배포 중단. main CI 는 취소하지 않음(concurrency 그룹 = PR 은 브랜치, 그 밖은 실행 id). ADR 0014 "배포 전 main CI 대기" |
+| #96 | release 가 바뀐 이미지만 배포(사용자 결정 2026-11-25): `scripts/release-plan.sh` 가 마지막 배포 커밋(`releasedCommit`)과 비교해 바뀐 이미지만 빌드(태그 = 이번 커밋, 나머지는 이전 태그), `release/eks` 에 release 커밋(main 커밋 + `release-tags.yaml`, 부모 = 이전 release·main), 차트 `image.tags.<이름>`, apps 차트가 `release-tags.yaml` 을 `.Files` 로 읽음(이미 등록된 root 변경 없음), rename 은 원래 경로도 판정(`--no-renames`), CI `k8s` 렌더링 확인, ADR 0014 "바뀐 서비스만 배포". |
 | #95 | 문서: 후속 4 완료 정리(PROGRESS·README), 머지 커밋에 태그 `v0.6-search-audit` |
 | #93 | 문서: 배포 환경 가이드 `docs/deployment-environments.md`(로컬·compose·k8s·ArgoCD·EKS, Helm·values·Application 매핑) |
 | #94 | 후속 4-3b 관리자 상품 화면: `/admin/products`(판매 중지 포함 목록·페이지, 상품 등록) → `/admin/products/{id}`(이름·설명·가격·판매 상태 변경, 관리 이력 최근부터: 변경 종류·시각·관리자 id·바뀐 값만 전 → 후, 옮겨 온 옛 가격 이력은 가격만). 서버 액션이 저장 뒤 `refresh()` 로 다시 그림, 입력은 값이 바뀌면 key 로 다시 마운트. 관리자가 아니면 404. 입력 검사·이력 표시 `lib/admin/product-input.ts`(Vitest), Playwright `e2e/admin-products.spec.ts`(등록 → 가격·설명·판매 중지 → 이력 4건 순서·전후 값, 같은 가격 요청은 이력 없음, 일반 사용자 404) |
@@ -366,7 +372,7 @@ F-2 = 후속 2 마지막. 남은 화면: 포인트(잔액·내역), 결제 내�
 **로컬 실행 (F-1b 때 쓴 방법)**
 - 인프라: `docker compose -f infra/docker-compose.yml up -d --wait`
 - 서비스: `./gradlew build` 후 `java -jar services/<이름>/build/libs/<이름>-0.0.1-SNAPSHOT.jar` (JDK 25. 이 PC는 `C:/Users/user/.jdks/openjdk-25.0.2`). 화면 전체에 필요한 것: auth 8086, point 8083, order 8081, inventory 8082, payment 8084, notification 8085, gateway 8000
-- 화면: `cd frontend && npm run dev` (3500, `package.json` 에 고정. Grafana 는 3030). Playwright: `npm run test:e2e` (한 worker). Node 는 24.15 이상(22 에서는 Vitest 가 undici 로드 실패)
+- 화면: 사용자 SPA 는 `cd frontend && pnpm install && pnpm dev:web` (5173, gateway 8000 으로 프록시, frontend/README.md). Next 는 `cd frontend/next && npm run dev` (3500, Grafana 는 3030). Playwright: `pnpm --filter web test:e2e`·Next 는 `npm run test:e2e` (한 worker). Node 는 24.15 이상(22 에서는 Vitest 가 undici 로드 실패)
 - 관리자 토큰: `admin` / `local-dev-pass` 로 `POST localhost:8000/auth/login`. 결제 장애 주입은 확인 뒤 `{"mode":"APPROVE","delayMillis":0}` 로 되돌린다
 - Redis·Kafka 컨테이너를 다시 띄우면 오래 떠 있던 gateway 가 `/auth` 요청에 응답하지 않은 적이 있다(F-1a). 그러면 gateway 를 다시 띄운다
 
@@ -491,7 +497,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 | ④ | 후속 4 나머지 (완료, PR #82~#94) | 상품 검색(테이블 CDC + Elasticsearch), 상품·가격 관리 이력 | 설계 확정(2026-11-25): 4-6절·ADR 0010 |
 
 **정하고 미룬 것 (지금은 하지 않음)**
-- 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 인기 상품 한 행에 주문이 몰리는 경우만 문제라, 처리량 측정(k6 등) 뒤에 조건부 UPDATE·재고 버킷·Redis 선점을 검토한다
+- 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 측정(시나리오 18, 2026-11-25): 인기 상품 하나는 약 150건/s 에서 막히고 인스턴스를 3개로 늘려도 그대로(락 대기 83~88%), 상품이 나뉘면 158 → 258건/s. 이 규모에는 충분해 바꾸지 않는다. 더 필요해지면 먼저 조건부 UPDATE 를 트랜잭션 끝으로 옮겨 락 쥐는 시간을 줄이고 같은 스크립트로 다시 잰다. 재고 버킷·Redis 선점은 하지 않음
 - 주문 취소 API(내 주문·주문 상세 화면): Saga 진행 중 취소는 취소 요청을 기록하고 다음 응답에서 보상으로 돌린다. 완료된 주문 취소는 결제 환불 → 포인트 환불 → 재고 복구의 별도 취소 Saga. 순서는 ④ 뒤에 정한다
 - PG 장애 대처 중 PG 이중화(다른 PG 로 우회)·결제 컨슈머 일시정지는 설명만 한다(가짜 PG 하나로는 보여 주기 어렵고, 결제는 빨리 실패시키는 쪽이 흔하다)
 - 주문 진행 표시는 폴링(1초) 유지. SSE·웹소켓은 연결 관리 비용에 비해 이득이 작다
@@ -550,6 +556,100 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | 4-3b 관리자 상품 화면 (완료, PR #94) | 관리자 상품 목록·수정(정보·가격·판매 상태)·상품별 관리 이력, Playwright |
 
 **부담·한계로 적을 것**: ES 메모리(로컬 compose 전체가 약 1GB 늘어남, CI 러너는 여유 있음), 검색 결과는 최종 일관성(수 초 늦을 수 있음), ngram 이라 형태소 검색 아님, 단일 노드라 ES 고가용성 없음.
+
+## 4-7. 후속 5 인증 재구성 설계 메모 (2026-11-25 사용자 결정)
+
+화면을 **사용자·관리자·인증 3개 SPA** 로 나누고, auth-service 를 **Spring Authorization Server(OIDC IdP)** 로, Spring Cloud Gateway 를 **BFF(OAuth2 클라이언트 + 토큰 릴레이)** 로 바꾼다. 서비스(리소스 서버)의 JWT 검증은 그대로다. 흐름·저장소·시크릿·라우팅·PR 나누기는 **[인증 재구성 설계](auth-sas-bff-design.md)** 에 모았다. 시작 전에 그 문서를 읽는다.
+
+**결정 요약**
+- 구성: SPA(토큰 모름) → 같은 출처 `/api/**` → SCG(세션에 토큰 보관, `TokenRelay`) → 서비스(JWKS 검증). 로그인은 SCG `oauth2Login` → SAS(`auth` 호스트), SSO 세션으로 화면 사이 재로그인 없음
+- 저장: 회원·클라이언트·인가 기록은 `auth_db`(JDBC), SSO 세션(auth)과 BFF 세션(gateway)은 Redis 두 개(접두어 분리)
+- 토큰: `sub` = `long userId`, `roles` 클레임 유지, access 15분, refresh 는 SAS 기본 회전(ADR 0008 재사용 탐지는 들고 오지 않음: refresh 가 브라우저에 나가지 않음)
+- 클라이언트 등록: **DCR 아님, 설정 기반 고정 등록**(`gateway-web`, `gateway-admin`). `client-secret` 은 외부 변수가 최우선, 없으면 앱 밖에서 생성(compose init 컨테이너, k8s 스크립트로 Secret, 호스트 로컬은 개발용 파일), 그래도 없으면 두 앱 모두 기동 실패. auth-service 는 시작할 때 DB 에 멱등 upsert(없으면 등록, `matches` 가 다르면 해시 갱신)
+- 라우팅: 두 방식을 같은 빌드로 지원: **다른 도메인이면 경로는 같고 도메인만 다르게**(기본, `example.com`·`admin.`·`auth.`), **같은 도메인이면 경로로**(`example.com/`·`/admin/`·`/auth/`, 프록시가 앞 경로를 떼고 `X-Forwarded-Prefix`, SPA 는 nginx 가 `<base href>` 주입, 이때 BFF 세션·로그인 클라이언트는 하나). 앱은 항상 루트에서 돈다. 화면 쪽 `/api/**`·`/oauth2/authorization/**`·`/login/oauth2/code/**`·`/logout` 은 SCG, 인증 쪽 `/oauth2/**`·`/.well-known/**`·`/login`·`/signup`·`/csrf` 는 auth-service, 나머지는 화면. 로그인 화면은 `/signin`(화면), 처리는 `POST /login`(auth-service)으로 나눔. **로컬 개발**은 포트(`localhost:5173/5174/5175`) + Vite 프록시, **compose** 는 Caddy + `*.localhost`, **k8s** 는 Envoy `HTTPRoute`. 주소는 `AUTH_ISSUER`(공개)·`AUTH_INTERNAL_URL`(내부)·redirect URI 설정값으로만, 세션 쿠키 이름은 `GW_SESSION`·`AUTH_SESSION` 으로 분리(설계 문서 7절)
+- 구현 전 보강(설계 문서 7-3·7-4·8절): 화면은 클라이언트 이름 없이 `/oauth2/authorization/auto` 로 로그인을 시작하고 SCG 가 `ADMIN_CLIENT_HOST` 로 `gateway-web`·`gateway-admin` 을 고른다(같은 빌드가 두 방식에서 돌게). auth-service CSRF 토큰은 쿠키가 아니라 세션 ① 에(SCG `XSRF-TOKEN` 과 겹침 방지). 앞단 프록시는 들어온 `X-Forwarded-Prefix` 를 지운다(위조 방지). 로그아웃은 `return_to` 로 돌아갈 홈을 고른다(경로 방식 관리자 → `/admin/`). nginx 는 시작 스크립트로 `<base href>` 를 넣고 `BASE_PATH` 는 `/` 로 끝나야 한다. 경로가 붙은 issuer 확인 테스트는 5-1. 화면 3개 유지는 사용자 결정(2026-11-25, SSO 시연·호스트 방식 관리자 격리)
+- ADR 0008·0011 의 바뀌는 부분은 5-0 에서 ADR 0017 로 대체 표시(머지된 ADR 본문은 고치지 않음). 브리프에 없던 SAS·Caddy·SPA 전환은 사용자가 정했다(2026-11-25)
+
+| PR | 범위 |
+|---|---|
+| 5-0 | [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md) (결정·대체 범위, ADR 0008 일부·0011 대체 표시) |
+| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3c 에서 지움), PR #107 |
+| 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃), PR #108 |
+| 5-3a | 사용자 SPA(`frontend/apps/web` + `packages/ui`, pnpm workspace), Vite 프록시로 로컬 개발, Gateway `GET /api/me`, BFF 로그인으로 도는 브라우저 e2e. Next 는 `frontend/next` 로 옮겨 그대로 둠 |
+| 5-5 | 관리자 SPA(`frontend/apps/admin`), 공용 `packages/bff`. 순서를 5-3b 앞으로 당김(아래) |
+| 5-3b | 화면 SPA nginx 이미지(`frontend/Dockerfile`, `BASE_PATH`), Helm 화면(web·admin)·edge `mode` host·path 라우트·공개 주소로 SAS·BFF 설정, kind 경로 방식 로그인 확인, Next·이미지 `frontend` 제거 |
+| 5-3d | compose 전체 실행·Caddy(`CADDY_MODE` host·path)·시크릿 init, compose 경로 방식 e2e |
+| 5-3c | 기존 `/auth/*` API·refresh family 제거(auth-service·Gateway 라우트) |
+| 5-4 | 인증 화면(`frontend/apps/auth`) |
+| 5-6 | 로그인 기기 관리 재구현, 시나리오 문서, 태그 |
+
+**5-1 에서 정한 것** (설계 문서 11절 중 auth-service 몫, 추천안)
+- SSO 세션(`AUTH_SESSION`) 유휴 만료 30분(`AUTH_SSO_SESSION_IDLE`). Keycloak 의 SSO Session Idle 기본값과 같다. 길게 두면 공용 PC 위험, 짧으면 화면 사이 SSO 가 자주 끊긴다
+- 인가 기록 보존: 들어 있는 토큰이 모두 끝나고 1일 뒤 삭제, 1시간마다(멱등 기록 정리와 같은 모양). SSO 로그아웃 때는 그 사용자의 기록을 바로 지운다(다른 화면의 refresh 도 막힘)
+- refresh token 14일. 5-1 은 갱신마다 새 토큰(회전)이었고 5-2 에서 회전을 껐다(아래). 그래서 로그인부터 14일이 절대 상한이다(ADR 0008 의 절대 30일 대신)
+- 토큰 `roles` 는 토큰을 만들 때마다 DB 에서 읽는다(refresh 때 역할 변경 반영, 정지 계정은 `invalid_grant`). principal 이름 = userId 문자열 → `sub`
+- (5-4 에서 바꿈) `AUTH_ISSUER` 로컬 기본값은 처음 `http://localhost:8086`(auth-service 직접)이었다. 인증 화면 SPA 가 생긴 5-4 에서 `http://localhost:5175` 로 바꾼다. 기존 `/auth/*` 토큰의 `iss`(`commerce-saga-auth`)와 서비스 검증 값은 5-2 에서 맞춘다
+- 클라이언트 시크릿 k8s: 서명 키와 같은 hook Job 이 Secret `oauth-client-secrets` 를 없을 때만 만든다(설계 문서의 "k8s 스크립트" 자리. 이미 있는 Argo CD 밖 생성 방식을 그대로 씀)
+- 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
+
+**순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
+
+**5-4 에서 정한 것** (추천안)
+- 인증 화면 `frontend/apps/auth`(Vite + React Router, 로컬 :5175): `/signin`·`/register` 두 화면, 그 밖은 `/signin` 으로. 서버 상태가 없어 TanStack Query·`packages/bff` 는 쓰지 않는다(공용 UI 만). auth-service 의 임시 화면(`SignInPageController`)은 지웠다
+- 폼은 fetch 가 아니라 브라우저 폼 POST(`login`·`signup`, `<base>` 기준 상대 경로). CSRF 토큰은 화면을 열 때 `GET csrf` 본문으로 받아 숨은 필드에 넣고, 받기 전에는 제출 버튼을 막는다. 오류 문구는 auth-service 가 돌려보내는 `?error`·`error=locked`·`error=duplicate|invalid`
+- `AUTH_ISSUER` 로컬 기본값을 `http://localhost:5175`(서비스·Gateway·auth-service). 인증 화면 Vite 가 SAS 경로(`/oauth2`·`/.well-known`·`/userinfo`·`/connect/logout`·`/login`·`/signup`·`/csrf`)를 auth-service 로 넘긴다(`changeOrigin: false`). 시나리오 스크립트는 auth-service(8086)를 바로 불러도 토큰 `iss` 는 설정값이라 같다
+- edge·Caddy: 인증 쪽은 SAS 경로만 auth-service, 그 밖은 인증 화면(nginx, 경로 방식 `BASE_PATH=/auth/`, `/auth` → `/auth/`). auth-service 의 관리 엔드포인트는 여전히 밖에서 열리지 않는다(화면의 SPA fallback). 이미지 `auth` 를 release·kind·compose 에 더함
+- 스크립트(`scripts/lib/auth.sh`·`smoke-bff-login.sh`)·통합 테스트도 화면과 같이 `GET csrf` 로 토큰을 받는다. CI 의 "관리 엔드포인트가 안 열림" 검사는 404 대신 메트릭 본문이 없는지로(부정 명령 `!` 는 `set -e` 에서 실패로 안 잡혀 `if … exit 1` 로)
+
+**5-3c 에서 정한 것** (사용자 결정 2026-11-26)
+- 기존 자체 JWT API(`/auth/*`: 가입·로그인·refresh 회전·재사용 탐지·로그아웃·기기 관리, `/.well-known/jwks.json`)와 refresh family(Redis)·관련 코드·테스트를 지웠다. Gateway 의 `/auth/**` 라우트·IP rate limit 도. auth-service 는 SAS(로그인 화면·토큰·JWKS `/oauth2/jwks`) + 가입 폼 + 로그인 실패 제한(그대로)
+- 시나리오 스크립트의 토큰: SAS 에 **스크립트용 공개 클라이언트 `scripts`**(시크릿 없음, PKCE, 루프백 redirect `http://127.0.0.1/scripts/callback`, 인가 코드만·refresh 없음 = 네이티브 앱 방식 RFC 8252). `scripts/lib/auth.sh` 가 curl 로 인가 요청 → 로그인 폼 → 코드(redirect 주소에서 읽음) → 토큰 교환. 서비스는 그대로 Bearer 로 부른다. 시드 사용자가 없는 EKS 는 끈다(`AUTH_SCRIPTS_CLIENT_ENABLED=false`). 켰다 끄면 DB 에 남은 행은 직접 지운다(경고 로그)
+- 시나리오 9 의 인증 부분(9a~9e, `smoke-auth.sh`)은 지우고 문서에 기록으로 남김. 9f~9i(`smoke-gateway.sh`)는 그대로. 시나리오 13 은 SAS 가입 폼 + 스크립트 클라이언트로
+- 리뷰 지침(AGENTS.md)의 인증 항목을 SAS·BFF 기준으로 바꿨다
+
+**5-3d 에서 정한 것** (추천안)
+- 전체 실행은 인프라 compose 위에 얹는 파일(`infra/docker-compose.app.yml`). 서비스 이미지는 미리 만든 jar(`./gradlew bootJar`) + `deploy/docker/service.Dockerfile`, 화면은 `frontend/Dockerfile`. 밖으로는 Caddy(:80) 하나, 서비스·Gateway·SAS 는 compose 네트워크 안
+- 방식은 `CADDY_MODE`(`caddy/Caddyfile.host`·`Caddyfile.path`)와 공개 주소 값들. 경로 방식은 `--env-file infra/app-path.env` 로 한 번에 바꾼다(issuer·redirect URI·홈·`ADMIN_CLIENT_HOST` 비움·관리자 `BASE_PATH`)
+- 시크릿 init(`oauth-secrets-init`, alpine): 없을 때만 `gateway-web`·`gateway-admin` 시크릿 파일을 만들고 auth-service·Gateway 가 같은 볼륨을 개발용 시크릿 디렉터리로 읽는다. 서명 키 볼륨도 준비해 auth-service 가 처음 만든 키를 재시작해도 쓴다
+- 검색용 `product-cdc` 커넥터는 `connectors-init`(curl 이미지가 `scripts/register-connectors.sh` 를 실행, product-service 기동 뒤)이 등록. Alloy 메트릭 수집 대상은 compose 내부 주소로 덮어씀. 80 이 아닌 포트로 띄우면 `ADMIN_CLIENT_HOST` 도 포트까지
+- Caddy 는 두 방식 모두 들어온 `X-Forwarded-Prefix` 를 지우고, 경로 방식 `/auth` 에서만 다시 붙인다. `X-Forwarded-For·Proto·Host` 는 Caddy 가 자기 값으로. Gateway 는 compose 네트워크 대역을 믿는 프록시로
+- CI `compose` 워크플로: 경로 방식으로 띄워 `/`·`/admin/`·SAS issuer·위조한 `X-Forwarded-Prefix` 무시·BFF 로그인(curl), 같은 볼륨으로 호스트 방식으로 다시 띄워 관리자 호스트의 `gateway-admin`·BFF 로그인
+
+**5-3b 에서 정한 것** (추천안, EKS 방식은 사용자 확인 2026-11-26)
+- 5-3b 를 둘로: 이 PR(이미지·Helm·k8s·Next 제거)과 5-3d(compose 전체 실행·Caddy·시크릿 init). Next 를 지우면서 k8s·EKS 가 화면 없이 남지 않게 이미지·차트를 함께 바꿨다
+- 화면 이미지는 Dockerfile 하나(`--build-arg APP=web|admin`), `nginxinc/nginx-unprivileged`(uid 101, 8080). 시작 스크립트가 `BASE_PATH`(/ 로 시작·끝, 쓸 글자 제한)로 `<base href>` 를 바꾸고, 틀리면 기동 실패. `index.html`·화면 경로는 `no-cache`, 해시 자산은 1년, 없는 자산은 404
+- Helm: `screens`(web·admin Deployment·Service 80), `edge.mode` host(호스트 3개: 화면 둘 + auth) / path(한 주소에 /·/admin/·/auth/, URLRewrite·X-Forwarded-Prefix). auth 호스트·경로는 지금 auth-service 로 다 보낸다(로그인 화면이 auth-service 의 임시 화면, 인증 화면 SPA 는 5-4)
+- 공개 주소(`edge.host.*` 또는 `edge.path.url`)로 차트가 `AUTH_ISSUER`(모든 서비스), redirect URI·로그아웃 뒤 주소(auth-service upsert), `ADMIN_CLIENT_HOST`·`WEB_HOME`·`ADMIN_HOME`(Gateway), 쿠키 Secure(https 면 켬)를 만든다. edge 를 끄면(scripts/k8s-deploy.sh) 내부 주소 그대로(브라우저 로그인 없음)
+- EKS: 도메인이 없어 경로 방식. 공개 주소(LB DNS)는 처음 배포 뒤 `values-eks.yaml` 의 `edge.path.url` 에 넣는다(지금 EKS 는 띄우지 않음, 사용자 확인). 비어 있으면 화면·edge 는 뜨고 로그인만 안 된다(LB 를 만들어야 주소를 알기 때문)
+- kind(argocd job): 경로 방식, 공개 주소 `http://localhost`(Envoy 를 80 으로 port-forward, sudo. 다른 포트면 X-Forwarded-Proto 만 보고 Spring 이 기본 포트로 되돌려 SAS 가 돌려보내는 주소에서 포트가 빠진다). curl 로 BFF 로그인 한 바퀴(`scripts/smoke-bff-login.sh`): 화면 → Gateway → SAS 로그인 폼 → 콜백 → `/api/me`·`/api/points/me`
+- release: 이미지 `web`·`admin`(공용 패키지·workspace 설정이 바뀌면 둘 다). 옛 `frontend` 이미지는 더 쓰지 않는다
+
+**5-5 에서 정한 것** (추천안)
+- 관리자 SPA 는 사용자 SPA 와 같은 구성(Vite + React Router + TanStack Query), 로컬 `localhost:5174`, 로그인 클라이언트 `gateway-admin`(Gateway 가 `ADMIN_CLIENT_HOST` 로 고름). 경로는 앱 기준 `/`·`/products`·`/products/:id`(경로 방식이면 앞에 `/admin`)
+- `ADMIN` 역할이 없으면 화면 대신 "관리자만 볼 수 있는 화면"(권한 검사는 Gateway `/api/admin/**`·서비스가 토큰으로)
+- 화면 공용 코드는 `packages/bff`(`/api` 호출·CSRF·401 → 로그인, `<base href>`, `/api/me`, 로그인 확인, 로그아웃 폼)와 `packages/ui`(페이지 틀·로딩 표시 추가)로 뺐다. 인증 화면(5-4)도 같이 쓴다
+- 사용자 화면에서 관리자 화면으로 가는 메뉴는 두지 않는다(주소가 배포 방식마다 다르다: `admin.` 호스트 또는 `/admin/`)
+
+**5-3 나누기·Next 제거 시점** (사용자 결정 2026-11-26, 뒤의 "순서 바꿈"으로 바뀜): 5-3 을 5-3a(사용자 SPA·로컬 개발·e2e)와 5-3b(compose·Caddy·nginx·Helm·경로 방식)로 나눈다. Next·기존 `/auth/*` 는 5-3 이 아니라 관리자 SPA 가 생기는 5-5 끝에 지운다(그 사이 관리자 화면이 없어지지 않게)
+
+**5-3a 에서 정한 것** (설계 문서 11절, 추천안)
+- 라우터 React Router(라이브러리 모드, `createBrowserRouter`, `basename` 은 `<base href>`), 데이터 TanStack Query. 서버 컴포넌트가 없어 화면마다 `useQuery`, 상태 변경은 `fetch` 후 다시 읽기
+- 프론트 모노레포는 pnpm workspace(`apps/*`, `packages/*`). Turborepo 는 쓰지 않는다. `packages/ui` 는 빌드 없이 소스(tsx·css)를 내보내고 앱의 Vite·Tailwind(`@source`)가 함께 묶는다
+- Next 는 5-3b 까지 `frontend/next` 로 옮겨 npm 으로 따로 돈다(workspace 밖). 이미지 이름 `frontend` 는 그대로 Next
+- 화면이 지금 사용자를 알도록 Gateway 에 `GET /api/me`(세션의 `userId`·`roles`, 서비스로 넘기지 않음). 모든 화면이 로그인을 요구한다(Next 와 같다): `/api/me` 가 401 이면 바로 로그인 시작
+- 401 은 화면이 `/oauth2/authorization/auto?return_to=<지금 경로>` 로 옮긴다. 주문 Idempotency-Key 는 화면을 열 때 브라우저가 만든다(http 경로 방식에서도 되게 `crypto.randomUUID` 가 없으면 `getRandomValues`)
+- 로그인 기기 관리(`/sessions`) 화면은 옮기지 않았다(5-6 에서 SSO 세션 기준으로 다시 만든다). 관리자 메뉴는 5-5
+- Gateway Redis 명령 타임아웃 2초(`REDIS_TIMEOUT`, 기본 60초): SPA 는 화면을 옮길 때 진행 중인 API 를 끊는다(Next 는 서버가 불러 이런 일이 없었다). browser-e2e 에서 그 뒤 Gateway 의 세션·rate limit Redis 명령이 약 60초 응답을 못 받아 모든 요청이 멈춘 적이 있다(원인은 공유 연결에서의 취소로 추정, 재현 안 됨). 짧게 두면 그 요청만 실패하고 바로 풀린다
+
+**5-2 에서 정한 것** (Gateway BFF, 추천안)
+- issuer 통일: 기존 `/auth/*` 토큰도 `iss` = `AUTH_ISSUER`(로컬 `http://localhost:8086`). Gateway·서비스 9개는 `AUTH_ISSUER` 문자열과 `AUTH_INTERNAL_URL/oauth2/jwks` 로 검증(두 토큰은 서명 키가 같다). 지금 Next 화면(Bearer)과 BFF 세션이 5-3b 까지 함께 돈다. k8s 는 공개 주소가 생기는 5-3b 전까지 `AUTH_ISSUER=http://auth-service:8086`
+- BFF 세션(`GW_SESSION`, Redis `gateway:session`) 유휴 2시간(`GATEWAY_SESSION_IDLE`): 쇼핑 중 잠깐 자리를 비워도 이어지고 공용 PC 에 오래 남지 않게. 끝나면 API 401 → 다시 로그인(SSO 세션 30분이 남아 있으면 화면 없이 통과)
+- 전달 헤더: Spring 기본 처리(`forwarded.strategy=framework`)를 SCG 에서는 쓰지 않는다. 연결 주소까지 `X-Forwarded-For` 맨 왼쪽으로 바꿔 rate limit IP 가 무너지기 때문. redirect URI 는 설정값 그대로, 믿는 프록시(`GATEWAY_TRUSTED_PROXIES`)의 `X-Forwarded-Proto/Host/Port` 만 요청 주소에 반영(TLS 종료 뒤 콜백 주소 비교용). 설계 문서 7-3 에 반영
+- userinfo 는 부르지 않는다(Security 7 은 주소가 등록돼 있으면 로그인 때 부른다). 역할은 ID 토큰 `roles` → 세션 권한(`/api/admin/**` 1차 검사), 서비스는 relay 된 access token 으로 다시 검사
+- 서비스로 브라우저 쿠키를 넘기지 않는다(`RemoveRequestHeader=Cookie`). 서비스는 쿠키가 실린 상태 변경을 CSRF 로 거절한다(ADR 0008)
+- 로그인 실패는 사용자 화면 `?login_error` 로(기본 `/login?error` 는 화면에 없는 주소)
+- refresh token 은 회전하지 않는다(`reuseRefreshTokens=true`): 같은 BFF 세션의 API 가 동시에 갱신하면 회전 때 늦은 쪽이 `invalid_grant` 로 세션을 끝낸다(Gateway 여러 대라 프로세스 안 잠금으로 못 막음). refresh token 은 브라우저에 나가지 않아 회전으로 탐지할 것이 없다. 갱신이 정말 거절되면(만료·SSO 로그아웃) BFF 세션을 끝내고 API 401
+- 관리자 화면 고르기(`ADMIN_CLIENT_HOST`)는 스킴의 기본 포트(443·80)를 빼고 비교한다(믿는 프록시가 `X-Forwarded-Port: 443` 을 보낼 때)
 
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`
