@@ -16,6 +16,7 @@ RUN npm install -g pnpm@12.23.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY apps/admin/package.json apps/admin/
+COPY apps/auth/package.json apps/auth/
 COPY packages/ui/package.json packages/ui/
 COPY packages/bff/package.json packages/bff/
 RUN pnpm install --frozen-lockfile
