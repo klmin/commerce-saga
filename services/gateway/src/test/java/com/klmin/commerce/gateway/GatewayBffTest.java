@@ -164,6 +164,26 @@ class GatewayBffTest {
     }
 
     @Test
+    void 같은_세션으로_API_를_동시에_불러도_세션이_유지된다() throws Exception {
+        login("/", "localhost:5173");
+        get("/api/orders/abc", "localhost:5173");
+        String xsrf = cookie("XSRF-TOKEN").getValue();
+        // 화면은 한 번에 API 를 여러 개 부른다 (홈: 내 정보·포인트·상품·재고 여러 개, 주문 버튼 연타)
+        List<java.util.concurrent.CompletableFuture<HttpResponse<String>>> calls = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            HttpRequest.Builder request = request("/api/orders/c" + i, "localhost:5173");
+            calls.add(browser.sendAsync(i % 2 == 0 ? request.GET().build()
+                            : request.header("X-XSRF-TOKEN", xsrf).POST(HttpRequest.BodyPublishers.ofString("{}")).build(),
+                    HttpResponse.BodyHandlers.ofString()));
+        }
+        for (var call : calls) {
+            HttpResponse<String> response = call.get();
+            assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        }
+        assertThat(get("/api/me", "localhost:5173").statusCode()).isEqualTo(200);
+    }
+
+    @Test
     void 바깥_주소_return_to_는_버리고_클라이언트의_홈으로() throws Exception {
         assertThat(login("//evil.example/x", "localhost:5173")).isEqualTo("http://localhost:5173/");
         newBrowser();

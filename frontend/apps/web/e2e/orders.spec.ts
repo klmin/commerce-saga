@@ -56,15 +56,14 @@ test("주문 버튼을 여러 번 눌러도 주문은 한 건이다 (Idempotency
   await signUpFresh(page);
   await page.goto("/orders/new?productId=3");
   const submit = page.getByRole("button", { name: "주문하기" });
-  // 응답 전에 연달아 제출한다 (버튼이 잠기기 전에 같은 폼을 세 번 보낸다)
-  await page
-    .locator("form")
-    .last()
-    .evaluate((form: HTMLFormElement) => {
-      form.requestSubmit();
-      form.requestSubmit();
-      form.requestSubmit();
-    });
+  // 주문 폼이 그려질 때까지 기다린다(재고를 읽는 동안은 자리 표시만 있다). 헤더의 로그아웃 폼과 헷갈리지 않게
+  // 주문하기 버튼이 든 폼을 고른다. 응답 전에 연달아 제출한다 (버튼이 잠기기 전에 같은 폼을 세 번 보낸다)
+  await expect(submit).toBeVisible();
+  await page.locator("form", { has: submit }).evaluate((form: HTMLFormElement) => {
+    form.requestSubmit();
+    form.requestSubmit();
+    form.requestSubmit();
+  });
   await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}$/, { timeout: 15_000 });
   await expect(submit).toHaveCount(0);
 
