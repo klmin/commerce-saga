@@ -27,7 +27,7 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:8086}/oauth2/jwks
-          issuer-uri: ${AUTH_ISSUER:http://localhost:8086}
+          issuer-uri: ${AUTH_ISSUER:http://localhost:5175}
   cloud:
     gateway:
       server:
@@ -109,7 +109,7 @@ gateway:
   # rate limit IP(ClientIpResolver)가 무너진다. 그래서 redirect URI 는 요청 주소로 만들지 않고 아래 설정값을 쓴다
   bff:
     # 공개 주소 (브라우저가 가는 인가·로그아웃 주소, 토큰 iss). auth-service 의 auth.issuer 와 같다. 끝에 / 없이
-    issuer: ${AUTH_ISSUER:http://localhost:8086}
+    issuer: ${AUTH_ISSUER:http://localhost:5175}
     # 내부 주소 (Gateway 가 부르는 토큰 교환·JWKS)
     internal-url: ${AUTH_INTERNAL_URL:http://localhost:8086}
     # 이 Host(포트 포함)로 로그인을 시작하면 gateway-admin. 경로 방식은 비운다(늘 gateway-web)

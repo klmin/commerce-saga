@@ -41,8 +41,9 @@ import java.util.Map;
  * <ol>
  *   <li><b>SAS 표준 엔드포인트</b> ({@code /oauth2/*}, {@code /.well-known/openid-configuration}, {@code /userinfo},
  *       {@code /connect/logout}). 로그인이 안 된 브라우저는 로그인 화면 {@code /signin} 으로</li>
- *   <li><b>로그인 화면·처리</b>: 화면 {@code /signin}·{@code /register}, 처리 {@code POST /login}·{@code POST /signup},
- *       CSRF 토큰 {@code GET /csrf}. SSO 로그인 세션(Spring Session Redis, 쿠키 {@code AUTH_SESSION})에 로그인 상태와
+ *   <li><b>로그인·가입 처리</b>: 처리 {@code POST /login}·{@code POST /signup},
+ *       CSRF 토큰 {@code GET /csrf}. 화면 {@code /signin}·{@code /register} 는 인증 화면 SPA({@code frontend/apps/auth}, 후속 5-4)가
+ *       그리고 앞단 프록시가 그쪽으로 보낸다. SSO 로그인 세션(Spring Session Redis, 쿠키 {@code AUTH_SESSION})에 로그인 상태와
  *       CSRF 토큰을 둔다</li>
  * </ol>
  * 주소는 앱 기준 경로다. 경로 방식({@code example.com/auth/...})이면 앞단 프록시가 {@code /auth} 를 떼고
@@ -140,7 +141,7 @@ public class AuthorizationServerConfig {
         failure.setExceptionMappings(Map.of(LockedException.class.getName(), "/signin?error=locked"));
         return http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, "/signin", "/register", "/csrf").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/signup").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/error").permitAll()

@@ -173,6 +173,7 @@ screens:
   apps:
     web: { pathPrefix: / }
     admin: { pathPrefix: /admin/ }
+    auth: { pathPrefix: /auth/ }
   resources:
     requests: { cpu: 10m, memory: 16Mi }
     limits: { memory: 64Mi }

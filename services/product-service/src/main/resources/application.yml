@@ -10,7 +10,7 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:8086}/oauth2/jwks
-          issuer-uri: ${AUTH_ISSUER:http://localhost:8086}
+          issuer-uri: ${AUTH_ISSUER:http://localhost:5175}
           authorities-claim-name: roles
           authority-prefix: ROLE_
   # 계정·비밀번호 기본값은 infra/docker-compose.yml 의 로컬 개발용 값

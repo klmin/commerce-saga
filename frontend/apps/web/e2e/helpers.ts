@@ -4,7 +4,7 @@ import { expect, type Page } from "@playwright/test";
 export const DEV_PASSWORD = process.env.E2E_DEV_PASSWORD ?? "local-dev-pass";
 
 /**
- * 화면을 열면 세션이 없어 Gateway 로그인 → SAS 로그인 화면(/signin, auth-service)으로 간다 (ADR 0017).
+ * 화면을 열면 세션이 없어 Gateway 로그인 → SAS 로그인 화면(/signin, 인증 화면 SPA)으로 간다 (ADR 0017).
  * 로그인하면 돌아가려던 화면으로 돌아온다
  */
 export async function login(page: Page, path = "/", loginId = "user1") {

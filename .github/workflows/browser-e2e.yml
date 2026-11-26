@@ -44,7 +44,7 @@ jobs:
         run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:product-service:bootJar :services:search-service:bootJar :services:gateway:bootJar
 
       # 버전은 frontend/package.json 의 packageManager 와 같게
-      - name: 화면 SPA 빌드 (사용자·관리자)
+      - name: 화면 SPA 빌드 (사용자·관리자·인증)
         working-directory: frontend
         run: |
           npm install -g pnpm@12.23.0
@@ -64,12 +64,14 @@ jobs:
           # 사용자 SPA(:5173). vite preview 가 /api·로그인 경로를 Gateway(:8000)로 넘긴다 (Vite 프록시, 설계 문서 7-2)
           (cd frontend/apps/web && nohup pnpm preview > ../../../logs/web.log 2>&1 &)
           (cd frontend/apps/admin && nohup pnpm preview > ../../../logs/admin.log 2>&1 &)
+          # 인증 화면(:5175 = 로컬 AUTH_ISSUER). 로그인 화면 /signin·/register 를 그리고 SAS 경로를 auth-service(:8086)로 넘긴다
+          (cd frontend/apps/auth && nohup pnpm preview > ../../../logs/auth.log 2>&1 &)
           for url in 8086 8087 8089 8081 8082 8083 8084 8085 8000; do
             url=http://localhost:$url/actuator/health
             for i in $(seq 1 60); do curl -sf "$url" | grep -q UP && break; sleep 2; done
             curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }
           done
-          for port in 5173 5174; do
+          for port in 5173 5174 5175; do
             for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:$port/ && break; sleep 1; done
             curl -sf -o /dev/null http://localhost:$port/
           done
