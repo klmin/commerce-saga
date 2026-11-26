@@ -182,13 +182,21 @@ jobs:
 
   # 후속 3 K-3: 같은 구성을 ArgoCD(GitOps)로. root Application 하나만 apply 하면 ArgoCD 가 이 PR 의 커밋을 GitHub 에서 가져와
   # Strimzi·Envoy Gateway·commerce-saga 를 sync 한다. 외부 입구는 edge(Gateway API) 하나이고 화면만 연다
+  #
+  # 이미지와 차트를 같은 커밋으로: ArgoCD 는 GitHub 의 브랜치 커밋(PR 이면 head)에서 차트를 가져오므로 이미지도 그 커밋으로 빌드한다.
+  # 기본 checkout(PR 이면 main 과 합친 merge 커밋)으로 빌드하면 PR 이 main 보다 뒤처졌을 때 새 이미지가 옛 차트로 떠서 깨진다.
+  # main 과 합친 결과는 kind 잡이 merge 커밋으로 본다
   argocd:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REVISION }}
 
       - uses: actions/setup-java@v6
         with:
@@ -250,16 +258,14 @@ jobs:
           kubectl -n argocd expose deployment notify-sink --port=8080
           kubectl -n argocd rollout status deployment/notify-sink --timeout=3m
 
+      # REVISION(잡 env) = 위에서 checkout 해 이미지를 빌드한 커밋 = ArgoCD 가 차트를 가져올 커밋
       - name: ArgoCD 로 배포 (이미지 → kind, root Application → sync)
         env:
-          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
           ARGOCD_NOTIFY: 'true'
         run: bash scripts/k8s-argocd.sh
 
       # commerce-saga 가 Synced·Healthy 가 되면 on-deployed 가 한 번 온다. 본문이 JSON 으로 파싱되고 제목·revision 이 맞는지
       - name: 알림 확인 (ArgoCD → 수신 Pod)
-        env:
-          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
