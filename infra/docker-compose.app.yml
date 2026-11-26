@@ -8,7 +8,8 @@
 #     경로 방식: http://localhost/, /admin/, /auth/
 #
 # *.localhost 는 크롬·엣지·파이어폭스가 hosts 수정 없이 127.0.0.1 로 연다. 80 포트를 못 쓰면 CADDY_PORT 를 바꾸고
-# 아래 PUBLIC_* 주소에도 같은 포트를 넣는다(브라우저가 보는 주소가 SAS issuer·redirect URI 다).
+# 아래 PUBLIC_* 주소·GATEWAY_*_HOME·WEB_POST_LOGOUT_REDIRECT_URIS 에도 같은 포트를 넣는다(브라우저가 보는 주소가 SAS issuer·redirect URI 다).
+# 호스트 방식이면 ADMIN_CLIENT_HOST 도 포트까지(예: admin.localhost:8080). Gateway 는 요청 호스트:포트와 그대로 비교해 관리자 클라이언트를 고른다.
 # 계정·비밀번호는 로컬 개발용 값이다(서비스 기본값과 같다).
 
 x-service: &service
@@ -90,6 +91,39 @@ services:
       ADMIN_POST_LOGOUT_REDIRECT_URIS: ${PUBLIC_ADMIN_URL:-http://admin.localhost}/
       # http 라 쿠키 Secure 를 끈다
       AUTH_COOKIE_SECURE: "false"
+
+  # 검색용 상품 테이블 CDC 커넥터 등록 (ADR 0010). outbox 는 서비스의 스케줄러 relay 라 product-cdc 만.
+  # product-service 의 Flyway 가 products 테이블을 만든 뒤에 등록한다(publication 이 테이블 기준). 다시 띄워도 된다(PUT, 멱등)
+  connectors-init:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      connect: { condition: service_healthy }
+      product-service: { condition: service_healthy }
+    volumes:
+      - ../scripts/register-connectors.sh:/work/register-connectors.sh:ro
+      - ./connect:/work/connect:ro
+    working_dir: /work
+    environment:
+      CONNECT_URL: http://connect:8083
+      CONNECTOR_DIR: /work/connect
+      CONNECTORS: product-cdc
+      TIMEOUT_SECONDS: 120
+    entrypoint: ["sh", "/work/register-connectors.sh"]
+    restart: "no"
+
+  # 메트릭 수집 대상: 서비스가 호스트가 아니라 compose 네트워크 안에 있다 (인프라 파일의 host.docker.internal 을 덮어씀)
+  alloy:
+    environment:
+      METRICS_SERVICE_TARGETS: >-
+        [{"__address__":"order-service:8081","service":"order-service"},
+        {"__address__":"inventory-service:8082","service":"inventory-service"},
+        {"__address__":"point-service:8083","service":"point-service"},
+        {"__address__":"payment-service:8084","service":"payment-service"},
+        {"__address__":"notification-service:8085","service":"notification-service"},
+        {"__address__":"auth-service:8086","service":"auth-service"},
+        {"__address__":"product-service:8087","service":"product-service"},
+        {"__address__":"search-service:8089","service":"search-service"},
+        {"__address__":"gateway:8000","service":"gateway"}]
 
   product-service:
     <<: *service

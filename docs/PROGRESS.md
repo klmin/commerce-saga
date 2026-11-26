@@ -598,6 +598,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 전체 실행은 인프라 compose 위에 얹는 파일(`infra/docker-compose.app.yml`). 서비스 이미지는 미리 만든 jar(`./gradlew bootJar`) + `deploy/docker/service.Dockerfile`, 화면은 `frontend/Dockerfile`. 밖으로는 Caddy(:80) 하나, 서비스·Gateway·SAS 는 compose 네트워크 안
 - 방식은 `CADDY_MODE`(`caddy/Caddyfile.host`·`Caddyfile.path`)와 공개 주소 값들. 경로 방식은 `--env-file infra/app-path.env` 로 한 번에 바꾼다(issuer·redirect URI·홈·`ADMIN_CLIENT_HOST` 비움·관리자 `BASE_PATH`)
 - 시크릿 init(`oauth-secrets-init`, alpine): 없을 때만 `gateway-web`·`gateway-admin` 시크릿 파일을 만들고 auth-service·Gateway 가 같은 볼륨을 개발용 시크릿 디렉터리로 읽는다. 서명 키 볼륨도 준비해 auth-service 가 처음 만든 키를 재시작해도 쓴다
+- 검색용 `product-cdc` 커넥터는 `connectors-init`(curl 이미지가 `scripts/register-connectors.sh` 를 실행, product-service 기동 뒤)이 등록. Alloy 메트릭 수집 대상은 compose 내부 주소로 덮어씀. 80 이 아닌 포트로 띄우면 `ADMIN_CLIENT_HOST` 도 포트까지
 - Caddy 는 두 방식 모두 들어온 `X-Forwarded-Prefix` 를 지우고, 경로 방식 `/auth` 에서만 다시 붙인다. `X-Forwarded-For·Proto·Host` 는 Caddy 가 자기 값으로. Gateway 는 compose 네트워크 대역을 믿는 프록시로
 - CI `compose` 워크플로: 경로 방식으로 띄워 `/`·`/admin/`·SAS issuer·위조한 `X-Forwarded-Prefix` 무시·BFF 로그인(curl), 같은 볼륨으로 호스트 방식으로 다시 띄워 관리자 호스트의 `gateway-admin`·BFF 로그인
 
