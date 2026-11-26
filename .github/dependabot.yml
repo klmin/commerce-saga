@@ -23,16 +23,6 @@ updates:
       dev-tools:
         dependency-type: development
 
-  # Next 화면 (frontend/next, 5-3b 에서 지움)
-  - package-ecosystem: npm
-    directory: /frontend/next
-    schedule:
-      interval: weekly
-    groups:
-      runtime:
-        dependency-type: production
-      dev-tools:
-        dependency-type: development
 
   - package-ecosystem: github-actions
     directory: /

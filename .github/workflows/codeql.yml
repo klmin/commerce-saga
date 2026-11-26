@@ -29,7 +29,7 @@ jobs:
             build-mode: none
           - language: actions
             build-mode: none
-          # frontend. Next 서버가 토큰을 httpOnly 쿠키로 들고 Gateway 를 부른다 (ADR 0011)
+          # frontend. 화면 SPA (토큰은 모르고 Gateway BFF 세션 쿠키로 /api 를 부른다, ADR 0017)
           - language: javascript-typescript
             build-mode: none
     steps:

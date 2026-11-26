@@ -8,7 +8,6 @@
 | `apps/admin` | 관리자 화면: 상품 관리·관리 이력, 결제 장애 주입(로컬 :5174, 로그인 클라이언트 `gateway-admin`). 5-5 |
 | `packages/bff` | 화면들이 Gateway(BFF)를 부르는 공용 코드: `/api` 호출(CSRF·401 → 로그인), `<base href>` 앞 경로, `/api/me`, 로그인 확인(`SessionGate`), 로그아웃 폼 |
 | `packages/ui` | 화면들이 같이 쓰는 shadcn/ui 컴포넌트와 테마. 빌드 없이 소스를 내보내고 각 앱의 Vite 가 함께 묶는다 |
-| `next/` | Next 화면(ADR 0011). 배포를 SPA 이미지로 바꾸는 5-3b 에서 지운다. workspace 밖이고 npm 으로 따로 돈다([next/README.md](next/README.md)) |
 
 인증 화면(`apps/auth`)은 5-4 에서 더한다.
 
@@ -47,5 +46,14 @@ Vite 개발 서버가 설계 문서 7-1 "화면 쪽" 경로(`/api`, `/oauth2/aut
 - `pnpm typecheck` - `tsc --noEmit` (앱·패키지마다)
 - `pnpm test` - Vitest (앱마다)
 - `pnpm --filter web test:e2e`·`pnpm --filter admin test:e2e` - Playwright. 관리자 e2e 는 사용자 화면(`E2E_WEB_URL`, 기본 :5173)도 쓴다. 백엔드와 화면이 떠 있어야 한다(기본 http://localhost:5173, 다른 주소는 `E2E_BASE_URL`). 프로덕션 빌드로 보려면 `pnpm --filter web build && pnpm --filter web preview`(같은 프록시, :5173)
+
+## 이미지 (nginx)
+
+```bash
+docker build --build-arg APP=web -t commerce-saga/web frontend      # 저장소 루트에서
+docker run -p 8080:8080 -e BASE_PATH=/admin/ commerce-saga/admin      # 경로 방식이면 앞 경로
+```
+
+정적 파일만 낸다(`nginx/default.conf`: 화면 경로는 `index.html`, `/healthz`). `/api` 등 Gateway 경로와 앞 경로 떼기는 앞단(k8s edge·compose Caddy)이 한다. `BASE_PATH` 는 / 로 시작하고 끝나야 하고 틀리면 기동하지 않는다(`nginx/40-base-path.sh`). k8s 는 `deploy/helm/commerce-saga/templates/screens.yaml`.
 
 CI(`.github/workflows/frontend.yml` 의 `web`)는 format·lint·typecheck·test·build 를, `browser-e2e.yml` 은 백엔드 전체 + `vite preview` 로 `apps/web/e2e` 를 돈다.

@@ -23,7 +23,7 @@ TAGS_PATH=deploy/argocd/apps/release-tags.yaml
 
 # 이미지 이름 = 차트의 image.tags 키 (release.yml 의 SERVICES 와 같아야 한다)
 BACKEND="auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway"
-IMAGES="$BACKEND frontend connect"
+IMAGES="$BACKEND web admin connect"
 
 declare -A prev_tags=()
 base=""
@@ -64,8 +64,10 @@ else
   for s in $BACKEND; do
     if has "^services/$s/"; then build[$s]=1; fi
   done
-  # frontend 이미지 = Next 화면(frontend/next, 5-3b 에서 지움)
-  if has '^frontend/next/'; then build[frontend]=1; fi
+  # 화면 SPA 이미지(frontend/Dockerfile). 공용 패키지·workspace 설정이 바뀌면 둘 다, 앱 폴더면 그 앱만
+  if has '^frontend/(packages/|nginx/|Dockerfile$|\.dockerignore$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)'; then build[web]=1; build[admin]=1; fi
+  if has '^frontend/apps/web/'; then build[web]=1; fi
+  if has '^frontend/apps/admin/'; then build[admin]=1; fi
   if has '^deploy/docker/connect\.Dockerfile$'; then build[connect]=1; fi
   # 이전 태그가 없는 이미지(새로 생긴 서비스 등)
   for i in $IMAGES; do
