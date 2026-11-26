@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-2 Gateway BFF: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-3a 사용자 화면 SPA: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -372,7 +372,7 @@ F-2 = 후속 2 마지막. 남은 화면: 포인트(잔액·내역), 결제 내�
 **로컬 실행 (F-1b 때 쓴 방법)**
 - 인프라: `docker compose -f infra/docker-compose.yml up -d --wait`
 - 서비스: `./gradlew build` 후 `java -jar services/<이름>/build/libs/<이름>-0.0.1-SNAPSHOT.jar` (JDK 25. 이 PC는 `C:/Users/user/.jdks/openjdk-25.0.2`). 화면 전체에 필요한 것: auth 8086, point 8083, order 8081, inventory 8082, payment 8084, notification 8085, gateway 8000
-- 화면: `cd frontend && npm run dev` (3500, `package.json` 에 고정. Grafana 는 3030). Playwright: `npm run test:e2e` (한 worker). Node 는 24.15 이상(22 에서는 Vitest 가 undici 로드 실패)
+- 화면: 사용자 SPA 는 `cd frontend && pnpm install && pnpm dev:web` (5173, gateway 8000 으로 프록시, frontend/README.md). Next 는 `cd frontend/next && npm run dev` (3500, Grafana 는 3030). Playwright: `pnpm --filter web test:e2e`·Next 는 `npm run test:e2e` (한 worker). Node 는 24.15 이상(22 에서는 Vitest 가 undici 로드 실패)
 - 관리자 토큰: `admin` / `local-dev-pass` 로 `POST localhost:8000/auth/login`. 결제 장애 주입은 확인 뒤 `{"mode":"APPROVE","delayMillis":0}` 로 되돌린다
 - Redis·Kafka 컨테이너를 다시 띄우면 오래 떠 있던 gateway 가 `/auth` 요청에 응답하지 않은 적이 있다(F-1a). 그러면 gateway 를 다시 띄운다
 
@@ -573,11 +573,12 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | PR | 범위 |
 |---|---|
 | 5-0 | [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md) (결정·대체 범위, ADR 0008 일부·0011 대체 표시) |
-| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-3 까지 유지), PR #107 |
+| 5-1 | auth-service → SAS (기존 `/auth/*` API 는 5-5 까지 유지, 5-3 에서 미룸), PR #107 |
 | 5-2 | SCG BFF(`oauth2Login`·`TokenRelay`·Redis 세션·CSRF·OIDC 로그아웃), PR #108 |
-| 5-3 | 사용자 SPA(`frontend/apps/web` + `packages/ui`), compose Caddy·시크릿 init, Helm 호스트 라우트, e2e. 끝나면 Next·기존 `/auth/*` 제거 |
+| 5-3a | 사용자 SPA(`frontend/apps/web` + `packages/ui`, pnpm workspace), Vite 프록시로 로컬 개발, Gateway `GET /api/me`, BFF 로그인으로 도는 브라우저 e2e. Next 는 `frontend/next` 로 옮겨 그대로 둠 |
+| 5-3b | compose 전체 실행·Caddy(`CADDY_MODE` host·path)·시크릿 init, nginx 이미지(`BASE_PATH`), Helm `edge.mode` 라우트, k8s 공개 `AUTH_ISSUER`·`GATEWAY_TRUSTED_PROXIES`, 경로 방식 e2e |
 | 5-4 | 인증 화면(`frontend/apps/auth`) |
-| 5-5 | 관리자 SPA(`frontend/apps/admin`), SSO 확인 |
+| 5-5 | 관리자 SPA(`frontend/apps/admin`), SSO 확인. 끝나면 Next(`frontend/next`)·기존 `/auth/*` 제거 |
 | 5-6 | 로그인 기기 관리 재구현, 시나리오 문서, 태그 |
 
 **5-1 에서 정한 것** (설계 문서 11절 중 auth-service 몫, 추천안)
@@ -589,8 +590,18 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 클라이언트 시크릿 k8s: 서명 키와 같은 hook Job 이 Secret `oauth-client-secrets` 를 없을 때만 만든다(설계 문서의 "k8s 스크립트" 자리. 이미 있는 Argo CD 밖 생성 방식을 그대로 씀)
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
+**5-3 나누기·Next 제거 시점** (사용자 결정 2026-11-26): 5-3 을 5-3a(사용자 SPA·로컬 개발·e2e)와 5-3b(compose·Caddy·nginx·Helm·경로 방식)로 나눈다. Next·기존 `/auth/*` 는 5-3 이 아니라 관리자 SPA 가 생기는 5-5 끝에 지운다(그 사이 관리자 화면이 없어지지 않게)
+
+**5-3a 에서 정한 것** (설계 문서 11절, 추천안)
+- 라우터 React Router(라이브러리 모드, `createBrowserRouter`, `basename` 은 `<base href>`), 데이터 TanStack Query. 서버 컴포넌트가 없어 화면마다 `useQuery`, 상태 변경은 `fetch` 후 다시 읽기
+- 프론트 모노레포는 pnpm workspace(`apps/*`, `packages/*`). Turborepo 는 쓰지 않는다. `packages/ui` 는 빌드 없이 소스(tsx·css)를 내보내고 앱의 Vite·Tailwind(`@source`)가 함께 묶는다
+- Next 는 5-5 까지 `frontend/next` 로 옮겨 npm 으로 따로 돈다(workspace 밖). 이미지 이름 `frontend` 는 그대로 Next
+- 화면이 지금 사용자를 알도록 Gateway 에 `GET /api/me`(세션의 `userId`·`roles`, 서비스로 넘기지 않음). 모든 화면이 로그인을 요구한다(Next 와 같다): `/api/me` 가 401 이면 바로 로그인 시작
+- 401 은 화면이 `/oauth2/authorization/auto?return_to=<지금 경로>` 로 옮긴다. 주문 Idempotency-Key 는 화면을 열 때 브라우저가 만든다(http 경로 방식에서도 되게 `crypto.randomUUID` 가 없으면 `getRandomValues`)
+- 로그인 기기 관리(`/sessions`) 화면은 옮기지 않았다(5-6 에서 SSO 세션 기준으로 다시 만든다). 관리자 메뉴는 5-5
+
 **5-2 에서 정한 것** (Gateway BFF, 추천안)
-- issuer 통일: 기존 `/auth/*` 토큰도 `iss` = `AUTH_ISSUER`(로컬 `http://localhost:8086`). Gateway·서비스 9개는 `AUTH_ISSUER` 문자열과 `AUTH_INTERNAL_URL/oauth2/jwks` 로 검증(두 토큰은 서명 키가 같다). 지금 Next 화면(Bearer)과 BFF 세션이 5-3 까지 함께 돈다. k8s 는 공개 주소가 생기는 5-3 전까지 `AUTH_ISSUER=http://auth-service:8086`
+- issuer 통일: 기존 `/auth/*` 토큰도 `iss` = `AUTH_ISSUER`(로컬 `http://localhost:8086`). Gateway·서비스 9개는 `AUTH_ISSUER` 문자열과 `AUTH_INTERNAL_URL/oauth2/jwks` 로 검증(두 토큰은 서명 키가 같다). 지금 Next 화면(Bearer)과 BFF 세션이 5-5 까지 함께 돈다. k8s 는 공개 주소가 생기는 5-3b 전까지 `AUTH_ISSUER=http://auth-service:8086`
 - BFF 세션(`GW_SESSION`, Redis `gateway:session`) 유휴 2시간(`GATEWAY_SESSION_IDLE`): 쇼핑 중 잠깐 자리를 비워도 이어지고 공용 PC 에 오래 남지 않게. 끝나면 API 401 → 다시 로그인(SSO 세션 30분이 남아 있으면 화면 없이 통과)
 - 전달 헤더: Spring 기본 처리(`forwarded.strategy=framework`)를 SCG 에서는 쓰지 않는다. 연결 주소까지 `X-Forwarded-For` 맨 왼쪽으로 바꿔 rate limit IP 가 무너지기 때문. redirect URI 는 설정값 그대로, 믿는 프록시(`GATEWAY_TRUSTED_PROXIES`)의 `X-Forwarded-Proto/Host/Port` 만 요청 주소에 반영(TLS 종료 뒤 콜백 주소 비교용). 설계 문서 7-3 에 반영
 - userinfo 는 부르지 않는다(Security 7 은 주소가 등록돼 있으면 로그인 때 부른다). 역할은 ID 토큰 `roles` → 세션 권한(`/api/admin/**` 1차 검사), 서비스는 relay 된 access token 으로 다시 검사

@@ -151,6 +151,19 @@ class GatewayBffTest {
     }
 
     @Test
+    void api_me_는_세션의_사용자와_역할을_Gateway_가_답하고_없으면_401() throws Exception {
+        assertThat(get("/api/me", "localhost:5173").statusCode()).isEqualTo(401);
+
+        ROLES.set(List.of("USER", "ADMIN"));
+        login("/", "localhost:5173");
+        HttpResponse<String> me = get("/api/me", "localhost:5173");
+        assertThat(me.statusCode()).isEqualTo(200);
+        assertThat(me.body()).isEqualTo("{\"userId\":8,\"roles\":[\"ADMIN\",\"USER\"]}");
+        // 서비스로 넘기지 않는다
+        assertThat(LAST_API.get()).isNull();
+    }
+
+    @Test
     void 바깥_주소_return_to_는_버리고_클라이언트의_홈으로() throws Exception {
         assertThat(login("//evil.example/x", "localhost:5173")).isEqualTo("http://localhost:5173/");
         newBrowser();
