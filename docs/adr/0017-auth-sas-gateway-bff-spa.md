@@ -1,6 +1,6 @@
 # ADR 0017. 인증 재구성: auth-service 를 Spring Authorization Server(OIDC IdP)로, Gateway 를 BFF 로, 화면을 SPA 3개로
 
-- 상태: 채택 (후속 5, 구현은 5-1 ~ 5-6)
+- 상태: 채택 (후속 5, 구현은 5-1 ~ 5-6). 5-2 에서 결정 3 의 refresh 회전을 끔(`reuseRefreshTokens=true`, 이유는 설계 문서 5절)
 - 날짜: 2026-11-25
 - 대체: [ADR 0008](0008-auth-self-issued-jwt.md) 의 발급자·refresh token·토큰 전달 부분, [ADR 0011](0011-frontend-nextjs-bff-session.md) 전체(Next 서버 BFF). 아래 "대체 범위" 표
 - 자세한 흐름·경로·설정값: [인증 재구성 설계](../auth-sas-bff-design.md) (이 ADR 은 결정과 이유, 설계 문서는 구현 기준)

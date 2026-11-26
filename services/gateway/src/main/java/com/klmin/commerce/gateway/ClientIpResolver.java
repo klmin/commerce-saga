@@ -29,13 +29,20 @@ final class ClientIpResolver {
                 .toList();
     }
 
+    /** 연결이 믿는 프록시에서 왔나 (그 프록시가 넘긴 X-Forwarded-* 를 믿어도 되나) */
+    boolean fromTrustedProxy(ServerHttpRequest request) {
+        InetSocketAddress remote = request.getRemoteAddress();
+        return remote != null && remote.getAddress() != null
+                && trustedProxies.stream().anyMatch(cidr -> cidr.contains(remote.getAddress()));
+    }
+
     String resolve(ServerHttpRequest request) {
         InetSocketAddress remote = request.getRemoteAddress();
         if (remote == null || remote.getAddress() == null) {
             return "unknown";
         }
         InetAddress peer = remote.getAddress();
-        if (trustedProxies.stream().anyMatch(cidr -> cidr.contains(peer))) {
+        if (fromTrustedProxy(request)) {
             String forwarded = lastForwarded(request.getHeaders().get("X-Forwarded-For"));
             if (forwarded != null) {
                 return forwarded;

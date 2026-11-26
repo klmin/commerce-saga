@@ -18,7 +18,8 @@ storageClass: ""
 # 서비스 공통 환경변수
 common:
   env:
-    AUTH_JWT_ISSUER: commerce-saga-auth
+    # 토큰 iss (auth-service 가 발급, Gateway·서비스가 문자열로 검증). 공개 주소가 생기는 5-3 에서 auth 호스트로 바꾼다
+    AUTH_ISSUER: http://auth-service:8086
 
 postgres:
   image: postgres:18-alpine

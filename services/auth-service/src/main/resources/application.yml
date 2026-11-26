@@ -94,7 +94,8 @@ auth:
     login-max-failures: ${AUTH_LOGIN_MAX_FAILURES:5}
     login-lock: ${AUTH_LOGIN_LOCK:15m}
   jwt:
-    issuer: ${AUTH_JWT_ISSUER:commerce-saga-auth}
+    # 기존 /auth/* 토큰도 SAS 와 같은 issuer (후속 5-2. 서비스·Gateway 가 한 값으로 두 토큰을 검증한다)
+    issuer: ${auth.issuer}
     # 서명 키(PKCS#8 PEM)를 고르는 순서 (ADR 0008)
     # 1. 주입받은 키: private-key-location + key-id (k8s 는 Secret 을 파일로 마운트)
     # 2. 로컬 개발용 키 파일: 있으면 쓰고 없으면 만들어 저장한다. 재시작해도 이전 토큰이 검증된다
