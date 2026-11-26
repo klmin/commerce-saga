@@ -221,10 +221,57 @@ jobs:
           cluster_name: commerce-saga
 
       # ArgoCD 는 GitHub 에서 가져온다. PR 이면 PR 의 head 커밋(같은 저장소 브랜치라 공개 저장소에 있다)
+      # ArgoCD Notifications(deploy/argocd/notifications.yaml)를 EKS 와 같은 설정으로 켜고, Discord 대신 클러스터 안 수신 Pod 로 보낸다.
+      # 수신 Pod 는 받은 본문을 JSON 으로 파싱해 한 줄로 찍는다(파싱 실패면 INVALID) → 아래 "알림 확인" 이 로그를 본다
+      - name: 알림 수신 Pod
+        run: |
+          set -euo pipefail
+          kubectl create namespace argocd
+          kubectl -n argocd create secret generic argocd-notifications-secret \
+            --from-literal=discord-webhook-url=http://notify-sink.argocd.svc:8080/webhook
+          kubectl -n argocd create configmap notify-sink --from-literal=sink.py='
+          import http.server, json
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
+                  try:
+                      print("RECEIVED " + json.dumps(json.loads(body), ensure_ascii=False), flush=True)
+                  except ValueError:
+                      print("INVALID " + body.replace("\n", " "), flush=True)
+                  self.send_response(204)
+                  self.end_headers()
+          http.server.HTTPServer(("", 8080), H).serve_forever()
+          '
+          kubectl -n argocd create deployment notify-sink --image=python:3.13-alpine --port=8080 \
+            -- python -u /sink/sink.py
+          kubectl -n argocd patch deployment notify-sink --type=json -p='[
+            {"op":"add","path":"/spec/template/spec/volumes","value":[{"name":"sink","configMap":{"name":"notify-sink"}}]},
+            {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts","value":[{"name":"sink","mountPath":"/sink"}]}]'
+          kubectl -n argocd expose deployment notify-sink --port=8080
+          kubectl -n argocd rollout status deployment/notify-sink --timeout=3m
+
       - name: ArgoCD 로 배포 (이미지 → kind, root Application → sync)
         env:
           REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+          ARGOCD_NOTIFY: 'true'
         run: bash scripts/k8s-argocd.sh
+
+      # commerce-saga 가 Synced·Healthy 가 되면 on-deployed 가 한 번 온다. 본문이 JSON 으로 파싱되고 제목·revision 이 맞는지
+      - name: 알림 확인 (ArgoCD → 수신 Pod)
+        env:
+          REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            logs=$(kubectl -n argocd logs deployment/notify-sink)
+            grep -q '^RECEIVED .*ArgoCD 배포 완료: commerce-saga' <<< "$logs" && break
+            sleep 3
+          done
+          echo "$logs"
+          line=$(grep '^RECEIVED .*ArgoCD 배포 완료: commerce-saga' <<< "$logs" | head -1)
+          [ -n "$line" ] || { echo "배포 완료 알림이 오지 않음"; kubectl -n argocd logs deployment/argocd-notifications-controller --tail=50 || true; exit 1; }
+          ! grep -q '^INVALID' <<< "$logs" || { echo "JSON 이 아닌 본문이 왔다"; exit 1; }
+          grep -q "${REVISION:0:7}" <<< "$line" || { echo "알림의 revision 이 $REVISION 이 아님"; exit 1; }
 
       # edge 로 화면이 열리는지. Envoy 의 Service 를 로컬로 연결한다 (kind 에는 LoadBalancer 가 없다)
       - name: edge 로 화면

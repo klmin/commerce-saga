@@ -1,0 +1,65 @@
+# ArgoCD Notifications → Discord (argo-cd Helm 차트 values). scripts/eks-argocd.sh 가 웹훅 Secret 이 있을 때 이 파일로 켠다.
+# CI(k8s 워크플로 argocd 잡)는 같은 파일로 켜고 웹훅 대신 클러스터 안 수신 Pod 로 보내 실제로 오는지 본다.
+#
+# 구독: commerce-saga Application 의 annotation (deploy/argocd/apps/templates/commerce-saga.yaml).
+#   root 도 release 마다 sync 하지만 서비스 Pod 를 굴리는 건 commerce-saga 라 거기에만 건다(알림이 두 번 오지 않게)
+# 웹훅 URL: Secret argocd-notifications-secret 의 discord-webhook-url (저장소에 두지 않는다, 차트가 Secret 을 만들지 않음)
+#   넣기: scripts/eks-argocd.sh 를 ARGOCD_DISCORD_WEBHOOK 와 함께 (deploy/README.md)
+notifications:
+  enabled: true
+  secret:
+    create: false
+
+  notifiers:
+    service.webhook.discord: |
+      url: $discord-webhook-url
+      headers:
+        - name: Content-Type
+          value: application/json
+
+  # 본문은 Discord 웹훅 embed. 문자열은 toJson 으로 감싸 따옴표·줄바꿈이 JSON 을 깨지 않게 한다
+  templates:
+    template.app-deployed: |
+      webhook:
+        discord:
+          method: POST
+          body: |
+            {"embeds": [{
+              "title": {{ printf "ArgoCD 배포 완료: %s" .app.metadata.name | toJson }},
+              "description": {{ printf "release 커밋 %s 이 Synced·Healthy (새 Pod 로 롤링 끝)" (trunc 7 .app.status.operationState.syncResult.revision) | toJson }},
+              "url": {{ printf "%s/commit/%s" (trimSuffix ".git" .app.spec.source.repoURL) .app.status.operationState.syncResult.revision | toJson }},
+              "color": 3066993}]}
+    template.app-sync-failed: |
+      webhook:
+        discord:
+          method: POST
+          body: |
+            {"embeds": [{
+              "title": {{ printf "ArgoCD sync 실패: %s" .app.metadata.name | toJson }},
+              "description": {{ printf "%s, revision %s\n%s" (dig "status" "operationState" "phase" "" .app) (trunc 7 (dig "status" "sync" "revision" "" .app)) (trunc 1500 (dig "status" "operationState" "message" "" .app)) | toJson }},
+              "color": 15158332}]}
+    template.app-health-degraded: |
+      webhook:
+        discord:
+          method: POST
+          body: |
+            {"embeds": [{
+              "title": {{ printf "ArgoCD Degraded: %s" .app.metadata.name | toJson }},
+              "description": {{ printf "revision %s, health %s" (trunc 7 (dig "status" "sync" "revision" "" .app)) (dig "status" "health" "status" "" .app) | toJson }},
+              "color": 15158332}]}
+
+  # 조건이 거짓 → 참이 될 때 한 번 보낸다. on-deployed 는 revision 마다 한 번(selfHeal 로 같은 revision 을 다시 sync 해도 안 보냄)
+  triggers:
+    trigger.on-deployed: |
+      - description: 새 revision 이 sync 되고 Healthy
+        oncePer: app.status.operationState?.syncResult?.revision
+        send: [app-deployed]
+        when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+    trigger.on-sync-failed: |
+      - description: sync 가 실패(재시도까지 끝남)
+        send: [app-sync-failed]
+        when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+    trigger.on-health-degraded: |
+      - description: Application 이 Degraded
+        send: [app-health-degraded]
+        when: app.status.health.status == 'Degraded'

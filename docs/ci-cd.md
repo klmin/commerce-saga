@@ -94,6 +94,21 @@ git push origin <옛 release 커밋>:refs/heads/release/eks --force
 - `workflow_run` 은 main 에 있는 `notify.yml` 기준으로 돈다. 이 파일을 바꾼 PR 은 머지 뒤부터 적용된다
 - 포크 PR 은 알리지 않는다(PR 이벤트는 시크릿이 없고, 워크플로 결과는 PR 번호가 비어 있다). 운영 경보(Alertmanager → Discord)는 별도 웹훅이라 채널을 나누는 편이 낫다
 
+### EKS 배포 결과 (ArgoCD Notifications → Discord)
+
+`release` 성공 알림은 `release/eks` 에 커밋을 얹은 시점이다. 클러스터에 실제로 반영됐는지는 클러스터 안의 ArgoCD 가 보낸다
+(CI 에는 클러스터 권한이 없다). 설정은 [deploy/argocd/notifications.yaml](../deploy/argocd/notifications.yaml), 구독은 `commerce-saga` Application 에만 건다(root 까지 걸면 release 마다 두 번 온다).
+
+| 트리거 | 언제 | 내용 |
+|---|---|---|
+| `on-deployed` | 새 revision 이 sync 되고 Healthy (revision 마다 한 번) | "ArgoCD 배포 완료", release 커밋 링크 |
+| `on-sync-failed` | sync 실패(재시도 20번까지 끝남) | 단계, revision, ArgoCD 메시지 |
+| `on-health-degraded` | Application 이 Degraded | revision, health |
+
+- 웹훅 URL 은 저장소가 아니라 클러스터 Secret `argocd/argocd-notifications-secret` 의 `discord-webhook-url` 에 둔다. 넣고 켜기: `read -rs ARGOCD_DISCORD_WEBHOOK && export ARGOCD_DISCORD_WEBHOOK && scripts/eks-argocd.sh` (Secret 이 있으면 다음 실행부터는 주지 않아도 켜진 채)
+- 채널은 `DISCORD_WEBHOOK_MAIN` 과 같은 웹훅을 써도 된다(release 성공 → 배포 완료가 이어서 온다)
+- CI(`k8s` 의 argocd 잡)는 같은 설정으로 켜고 Discord 대신 클러스터 안 수신 Pod 로 보내, 배포 완료 알림이 JSON 으로 오고 revision 이 맞는지 본다
+
 ## Dependabot
 
 `.github/dependabot.yml`. 매주 Gradle(루트·`build-logic`, Spring 묶음과 나머지 묶음), `frontend/` npm(런타임 묶음과 개발 도구 묶음), GitHub Actions, `infra/` docker-compose 이미지(PostgreSQL 메이저 제외) 업데이트 PR 을 연다. Dependabot 이 push 한 커밋에는 secret 이 전달되지 않아 Codex 재리뷰 요청은 건너뛴다.
