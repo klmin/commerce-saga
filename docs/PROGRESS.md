@@ -583,7 +583,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 **5-1 에서 정한 것** (설계 문서 11절 중 auth-service 몫, 추천안)
 - SSO 세션(`AUTH_SESSION`) 유휴 만료 30분(`AUTH_SSO_SESSION_IDLE`). Keycloak 의 SSO Session Idle 기본값과 같다. 길게 두면 공용 PC 위험, 짧으면 화면 사이 SSO 가 자주 끊긴다
 - 인가 기록 보존: 들어 있는 토큰이 모두 끝나고 1일 뒤 삭제, 1시간마다(멱등 기록 정리와 같은 모양). SSO 로그아웃 때는 그 사용자의 기록을 바로 지운다(다른 화면의 refresh 도 막힘)
-- refresh token 14일, 갱신마다 새 토큰(회전). ADR 0008 의 "처음 로그인부터 절대 30일" 상한은 SAS 기본에 없어 들고 오지 않았다(한계)
+- refresh token 14일. 5-1 은 갱신마다 새 토큰(회전)이었고 5-2 에서 회전을 껐다(아래). 그래서 로그인부터 14일이 절대 상한이다(ADR 0008 의 절대 30일 대신)
 - 토큰 `roles` 는 토큰을 만들 때마다 DB 에서 읽는다(refresh 때 역할 변경 반영, 정지 계정은 `invalid_grant`). principal 이름 = userId 문자열 → `sub`
 - `AUTH_ISSUER` 로컬 기본값은 `http://localhost:8086`(auth-service 직접). 인증 화면 SPA 가 생기는 5-4 에서 `http://localhost:5175` 로 바꾼다. 기존 `/auth/*` 토큰의 `iss`(`commerce-saga-auth`)와 서비스 검증 값은 5-2 에서 맞춘다
 - 클라이언트 시크릿 k8s: 서명 키와 같은 hook Job 이 Secret `oauth-client-secrets` 를 없을 때만 만든다(설계 문서의 "k8s 스크립트" 자리. 이미 있는 Argo CD 밖 생성 방식을 그대로 씀)
@@ -596,6 +596,8 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - userinfo 는 부르지 않는다(Security 7 은 주소가 등록돼 있으면 로그인 때 부른다). 역할은 ID 토큰 `roles` → 세션 권한(`/api/admin/**` 1차 검사), 서비스는 relay 된 access token 으로 다시 검사
 - 서비스로 브라우저 쿠키를 넘기지 않는다(`RemoveRequestHeader=Cookie`). 서비스는 쿠키가 실린 상태 변경을 CSRF 로 거절한다(ADR 0008)
 - 로그인 실패는 사용자 화면 `?login_error` 로(기본 `/login?error` 는 화면에 없는 주소)
+- refresh token 은 회전하지 않는다(`reuseRefreshTokens=true`): 같은 BFF 세션의 API 가 동시에 갱신하면 회전 때 늦은 쪽이 `invalid_grant` 로 세션을 끝낸다(Gateway 여러 대라 프로세스 안 잠금으로 못 막음). refresh token 은 브라우저에 나가지 않아 회전으로 탐지할 것이 없다. 갱신이 정말 거절되면(만료·SSO 로그아웃) BFF 세션을 끝내고 API 401
+- 관리자 화면 고르기(`ADMIN_CLIENT_HOST`)는 스킴의 기본 포트(443·80)를 빼고 비교한다(믿는 프록시가 `X-Forwarded-Port: 443` 을 보낼 때)
 
 
 - 결제 취소 응답(주문 취소)과 실제 PG 환불 사이에 시간 차가 있다(보정 주기 + 늦은 승인까지). 환불이 계속 실패하면 경고 로그와 경보(`PaymentRefundPending`). `UNKNOWN`이 오래가면 `PaymentResultUnknown`

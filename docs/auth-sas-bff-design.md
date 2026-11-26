@@ -79,7 +79,7 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 
 **API 호출**: SPA → `/api/**`(세션 쿠키 + CSRF 헤더) → SCG 가 세션 ② 에서 access token 을 꺼내 `Bearer` 로 붙여 서비스로. **요청마다 auth-service 를 부르지 않는다.** 서비스는 JWKS 로 검증.
 
-**토큰 갱신**: access token 이 만료되면 SCG 가 refresh token 으로 SAS 에서 새로 받는다(회전, 옛 refresh 는 무효). 브라우저는 모른다.
+**토큰 갱신**: access token 이 만료되면 SCG 가 refresh token 으로 SAS 에서 새로 받는다. refresh token 은 회전하지 않는다(5-2: 같은 세션의 동시 요청이 옛 토큰으로 갱신하다 거절돼 세션이 끝나는 것을 막는다. 수명은 로그인부터 14일 고정). 브라우저는 모른다.
 
 **로그아웃**: SCG 세션 ② 삭제 → OIDC RP-initiated logout 으로 SAS 의 세션 ① 과 그 사용자의 인가 기록 정리 → 화면으로. "이 화면만 로그아웃"이 아니라 SSO 전체 로그아웃이 기본.
 
@@ -90,7 +90,7 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 - `iss`: `AUTH_ISSUER`(auth 공개 주소, 환경별 값은 7-3). 서비스·SCG 는 `issuer` 문자열로 검사하고 공개키는 **내부 주소** `AUTH_INTERNAL_URL` 의 JWKS 로 받는다(컨테이너 안에서 공개 주소가 자기 자신을 가리키는 문제 회피)
 - `sub`: 지금처럼 `long userId` (SAS `OAuth2TokenCustomizer`). 서비스의 `@CurrentUserId long` 그대로
 - `roles`: 지금 클레임 그대로. 역할 변경은 토큰 갱신 때 반영(지금과 같음)
-- access 15분 유지. refresh 는 SAS 기본 회전(`reuseRefreshTokens=false`)
+- access 15분 유지. refresh 는 회전하지 않는다(`reuseRefreshTokens=true`, 5-2. 처음 설계는 SAS 기본 회전이었다). refresh token 이 브라우저에 나가지 않아 회전으로 탐지할 것이 없고, 회전하면 같은 BFF 세션의 동시 갱신 중 늦은 쪽이 `invalid_grant` 로 세션을 끝낸다(Gateway 여러 대면 프로세스 안 잠금으로도 못 막는다). 로그인부터 14일이 절대 상한이 된다
 
 ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 **들고 오지 않는다.** refresh token 이 브라우저에 나가지 않고 SCG 세션(서버)에만 있어 탈취 경로가 크게 줄었고, 동시 refresh 도 SCG 한 곳에서 일어난다. 필요해지면 SAS 커스터마이징으로 다시 더한다(한계에 적음).
 

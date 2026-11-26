@@ -111,18 +111,17 @@ class OAuthFlowIntegrationTest {
     }
 
     @Test
-    void refresh_는_회전하고_역할_변경을_반영하며_옛_refresh_token_은_거절된다() throws Exception {
+    void refresh_는_같은_refresh_token_을_다시_써도_되고_역할_변경을_반영한다() throws Exception {
         Tokens first = loginAndExchange();
         jdbc.sql("insert into user_roles (user_id, role) values (?, 'ADMIN')").param(userId).update();
 
         JsonNode refreshed = json(mvc.perform(refresh(first.refreshToken())).andExpect(status().isOk()).andReturn());
-        String newRefresh = refreshed.get("refresh_token").asString();
-        assertThat(newRefresh).isNotEqualTo(first.refreshToken());
+        // 회전하지 않는다: 같은 BFF 세션의 동시 요청이 옛 토큰으로 갱신해도 거절되지 않게 (5-2)
+        assertThat(refreshed.get("refresh_token").asString()).isEqualTo(first.refreshToken());
         assertThat(decode(refreshed.get("access_token").asString()).getClaimAsStringList("roles"))
                 .containsExactly("ADMIN", "USER");
 
-        mvc.perform(refresh(first.refreshToken())).andExpect(status().isBadRequest());
-        mvc.perform(refresh(newRefresh)).andExpect(status().isOk());
+        mvc.perform(refresh(first.refreshToken())).andExpect(status().isOk());
     }
 
     @Test

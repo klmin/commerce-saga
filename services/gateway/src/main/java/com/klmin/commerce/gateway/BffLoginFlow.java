@@ -86,10 +86,23 @@ final class BffLoginFlow {
         if (properties.adminClientHost().isEmpty()) {
             return BffProperties.WEB;
         }
-        URI uri = exchange.getRequest().getURI();
-        String authority = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT)
-                + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
-        return authority.equals(properties.adminClientHost()) ? BffProperties.ADMIN : BffProperties.WEB;
+        return authority(exchange.getRequest().getURI()).equals(properties.adminClientHost().toLowerCase(Locale.ROOT))
+                ? BffProperties.ADMIN : BffProperties.WEB;
+    }
+
+    /**
+     * 호스트(소문자) + 포트. 스킴의 기본 포트(https 443, http 80)는 뺀다: 믿는 프록시가 {@code X-Forwarded-Port: 443} 을
+     * 보내면 요청 주소에 {@code :443} 이 남는다. 로컬 개발의 5173·5174 같은 다른 포트는 그대로 구분한다
+     */
+    static String authority(URI uri) {
+        if (uri.getHost() == null) {
+            return "";
+        }
+        int port = uri.getPort();
+        boolean defaultPort = port == -1
+                || (port == 443 && "https".equalsIgnoreCase(uri.getScheme()))
+                || (port == 80 && "http".equalsIgnoreCase(uri.getScheme()));
+        return uri.getHost().toLowerCase(Locale.ROOT) + (defaultPort ? "" : ":" + port);
     }
 
     private Mono<Void> rememberReturnTo(ServerWebExchange exchange) {

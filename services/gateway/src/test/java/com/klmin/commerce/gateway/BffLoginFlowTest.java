@@ -50,6 +50,10 @@ class BffLoginFlowTest {
         assertThat(flow.chooseClient(exchange("https://admin.example.com/oauth2/authorization/auto"))).isEqualTo("gateway-admin");
         assertThat(flow.chooseClient(exchange("https://example.com/oauth2/authorization/auto"))).isEqualTo("gateway-web");
         assertThat(flow.chooseClient(exchange("https://ADMIN.example.com/oauth2/authorization/auto"))).isEqualTo("gateway-admin");
+        // 믿는 프록시가 X-Forwarded-Port 로 기본 포트를 보내도 같은 호스트. 다른 포트는 다른 호스트
+        assertThat(flow.chooseClient(exchange("https://admin.example.com:443/oauth2/authorization/auto"))).isEqualTo("gateway-admin");
+        assertThat(flow.chooseClient(exchange("http://admin.example.com:80/oauth2/authorization/auto"))).isEqualTo("gateway-admin");
+        assertThat(flow.chooseClient(exchange("https://admin.example.com:8443/oauth2/authorization/auto"))).isEqualTo("gateway-web");
     }
 
     @Test
