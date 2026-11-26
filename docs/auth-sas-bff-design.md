@@ -79,7 +79,7 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 
 **API 호출**: SPA → `/api/**`(세션 쿠키 + CSRF 헤더) → SCG 가 세션 ② 에서 access token 을 꺼내 `Bearer` 로 붙여 서비스로. **요청마다 auth-service 를 부르지 않는다.** 서비스는 JWKS 로 검증.
 
-**토큰 갱신**: access token 이 만료되면 SCG 가 refresh token 으로 SAS 에서 새로 받는다(회전, 옛 refresh 는 무효). 브라우저는 모른다.
+**토큰 갱신**: access token 이 만료되면 SCG 가 refresh token 으로 SAS 에서 새로 받는다. refresh token 은 회전하지 않는다(5-2: 같은 세션의 동시 요청이 옛 토큰으로 갱신하다 거절돼 세션이 끝나는 것을 막는다. 수명은 로그인부터 14일 고정). 브라우저는 모른다.
 
 **로그아웃**: SCG 세션 ② 삭제 → OIDC RP-initiated logout 으로 SAS 의 세션 ① 과 그 사용자의 인가 기록 정리 → 화면으로. "이 화면만 로그아웃"이 아니라 SSO 전체 로그아웃이 기본.
 
@@ -90,7 +90,7 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 - `iss`: `AUTH_ISSUER`(auth 공개 주소, 환경별 값은 7-3). 서비스·SCG 는 `issuer` 문자열로 검사하고 공개키는 **내부 주소** `AUTH_INTERNAL_URL` 의 JWKS 로 받는다(컨테이너 안에서 공개 주소가 자기 자신을 가리키는 문제 회피)
 - `sub`: 지금처럼 `long userId` (SAS `OAuth2TokenCustomizer`). 서비스의 `@CurrentUserId long` 그대로
 - `roles`: 지금 클레임 그대로. 역할 변경은 토큰 갱신 때 반영(지금과 같음)
-- access 15분 유지. refresh 는 SAS 기본 회전(`reuseRefreshTokens=false`)
+- access 15분 유지. refresh 는 회전하지 않는다(`reuseRefreshTokens=true`, 5-2. 처음 설계는 SAS 기본 회전이었다). refresh token 이 브라우저에 나가지 않아 회전으로 탐지할 것이 없고, 회전하면 같은 BFF 세션의 동시 갱신 중 늦은 쪽이 `invalid_grant` 로 세션을 끝낸다(Gateway 여러 대면 프로세스 안 잠금으로도 못 막는다). 로그인부터 14일이 절대 상한이 된다
 
 ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 **들고 오지 않는다.** refresh token 이 브라우저에 나가지 않고 SCG 세션(서버)에만 있어 탈취 경로가 크게 줄었고, 동시 refresh 도 SCG 한 곳에서 일어난다. 필요해지면 SAS 커스터마이징으로 다시 더한다(한계에 적음).
 
@@ -225,13 +225,13 @@ ClientRegistration.withRegistrationId("gateway-web")
     .clientId("gateway-web").clientSecret(secret)               // 6절 시크릿 순서
     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-    .redirectUri("{baseUrl}/login/oauth2/code/{registrationId}") // forward headers 로 화면 호스트가 들어감
+    .redirectUri(WEB_REDIRECT_URI)                               // 설정값 그대로 (5-2: 요청 주소로 만들지 않음, 아래)
     .scope("openid")
     .issuerUri(AUTH_ISSUER)                                      // ID 토큰 iss 검사 기준 (공개 주소)
     .authorizationUri(AUTH_ISSUER + "/oauth2/authorize")         // 브라우저 → 공개
     .tokenUri(AUTH_INTERNAL_URL + "/oauth2/token")                // SCG → 내부
     .jwkSetUri(AUTH_INTERNAL_URL + "/oauth2/jwks")
-    .userInfoUri(AUTH_INTERNAL_URL + "/userinfo")
+    // userInfoUri 는 두지 않는다 (5-2: Security 7 은 있으면 로그인 때 부른다. 필요한 값은 ID 토큰에)
     .userNameAttributeName("sub")
     .providerConfigurationMetadata(Map.of(
         "end_session_endpoint", AUTH_ISSUER + "/connect/logout")) // 브라우저가 가므로 공개 주소
@@ -243,7 +243,7 @@ ClientRegistration.withRegistrationId("gateway-web")
 
 - 확인(5-2 테스트·시나리오): 로그아웃 뒤 다시 로그인하면 **로그인 화면이 나와야** 한다(SAS 세션 ① 이 끝났는지)
 
-- **SCG·auth-service 가 원래 호스트를 알게 한다**: 둘 다 `server.request.header.forwarded.strategy=framework` + `use-prefix=true`(Boot 4 이름. 옛 `server.forward-headers-strategy` 이고 `X-Forwarded-Prefix` 는 `use-prefix` 를 켜야 읽는다, 5-1 에서 확인. auth-service 는 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). Caddy·Envoy·Vite 프록시가 넘긴 `Host`·`X-Forwarded-*` 로 redirect URI(`{baseUrl}/login/oauth2/code/{registrationId}`)를 만들고, 호스트에 맞는 클라이언트(`gateway-web`/`gateway-admin`)를 고른다
+- **원래 호스트를 알게 한다**: auth-service 는 `server.request.header.forwarded.strategy=framework` + `use-prefix=true`(Boot 4 이름. 옛 `server.forward-headers-strategy` 이고 `X-Forwarded-Prefix` 는 `use-prefix` 를 켜야 읽는다, 5-1 에서 확인. 로그인 화면 `/signin` 으로 보내는 주소를 공개 주소로 만들려고). **SCG 는 이 기본 처리를 쓰지 않는다(5-2)**: 켜면 아무 연결의 헤더나 믿고 연결 주소까지 `X-Forwarded-For` 맨 왼쪽(브라우저가 쓸 수 있는 값)으로 바꿔 rate limit IP 판단이 무너진다. 대신 (1) redirect URI 는 설정값(`WEB_REDIRECT_URI`·`ADMIN_REDIRECT_URI`, auth-service 등록값과 같음)을 그대로 쓰고, (2) 믿는 프록시(`GATEWAY_TRUSTED_PROXIES`, rate limit 과 같은 목록)에서 온 요청만 `X-Forwarded-Proto`·`-Host`·`-Port` 를 요청 주소에 반영한다(`TrustedForwardedHeadersFilter`. 로그인 콜백은 요청 주소가 redirect URI 와 같아야 하는데 TLS 를 앞단에서 끝내면 Gateway 는 http 로 받기 때문). 클라이언트는 그 요청 주소의 호스트(포트 포함)로 고른다
 - **프록시는 들어온 `X-Forwarded-*` 를 믿지 않는다**: `framework` 전략은 헤더를 그대로 믿으므로, 브라우저가 직접 넣은 `X-Forwarded-Prefix`·`X-Forwarded-Host` 가 지나가면 auth-service 의 리다이렉트 주소·쿠키 `Path` 와 SCG 의 redirect URI·클라이언트 선택이 조작된다. 앞단(Caddy·Envoy)은 **두 방식 모두** 들어온 `X-Forwarded-Prefix` 를 지우고(경로 방식 `/auth` 경로에서만 자기가 다시 붙임), `X-Forwarded-Host`·`-Proto`·`-For` 는 자기 값으로 덮어쓴다(Caddy `request_header -X-Forwarded-Prefix`, Envoy `RequestHeaderModifier` 의 `remove`/`set`). SCG·auth-service 는 앞단을 거치지 않고는 닿지 않게 둔다(k8s 는 Service 만, 외부 노출은 Envoy 하나)
 - **클라이언트 고르기**: 화면은 클라이언트 이름을 몰라 항상 `/oauth2/authorization/auto` 로 시작한다(같은 빌드가 두 방식에서 돌아야 하므로). SCG 의 인가 요청 resolver 가 `auto` 를 실제 등록 id 로 바꾼다: 요청 호스트가 `ADMIN_CLIENT_HOST`(호스트 방식 `admin.example.com`) 면 `gateway-admin`, 아니면 `gateway-web`. 경로 방식은 `ADMIN_CLIENT_HOST` 를 비워 항상 `gateway-web`(7-4). 콜백 `/login/oauth2/code/{registrationId}` 는 고른 id 그대로라 라우팅(7-1)은 바뀌지 않는다
 - **로그아웃 뒤 돌아갈 곳**: 화면은 `POST /logout`(폼, `_csrf`) 에 `return_to` 로 자기 홈 경로를 보낸다. SCG 는 이를 그 클라이언트의 허용 목록(`WEB_HOME`·`ADMIN_HOME` 중 하나)과 비교해 `post_logout_redirect_uri` 를 정하고, 목록에 없으면 클라이언트 기본 홈. SAS 는 등록된 정확한 절대 주소만 받으므로 상대 값(`/admin/`)은 `{baseUrl}` 을 붙여 절대 주소로 만들고, 경로 방식에서는 `gateway-web` 에 `{origin}/`·`{origin}/admin/` 둘 다 등록한다(auth-service upsert 가 설정값에서)

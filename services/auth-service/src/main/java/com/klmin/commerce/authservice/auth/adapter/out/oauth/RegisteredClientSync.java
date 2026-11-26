@@ -88,7 +88,10 @@ class RegisteredClientSync implements ApplicationRunner {
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenTimeToLive(properties.accessTokenTtl())
                         .refreshTokenTimeToLive(properties.refreshTokenTtl())
-                        .reuseRefreshTokens(false)
+                        // 회전하지 않는다. refresh token 은 브라우저에 나가지 않고 Gateway 세션에만 있어 회전으로 탐지할 것이 없고,
+                        // 회전하면 같은 세션의 동시 요청이 옛 토큰으로 갱신하다 거절돼 세션이 끝난다(Gateway 여러 대여도 같다).
+                        // 수명은 로그인 때부터 refreshTokenTtl 로 고정된다(절대 상한)
+                        .reuseRefreshTokens(true)
                         .idTokenSignatureAlgorithm(SignatureAlgorithm.RS256)
                         .build())
                 .build();

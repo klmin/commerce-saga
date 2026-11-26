@@ -109,7 +109,7 @@ class AuthIntegrationTest {
         Jwt jwt = NimbusJwtDecoder.withPublicKey(key.toRSAPublicKey()).build().decode(accessToken);
         assertThat(jwt.getSubject()).isEqualTo(Long.toString(userId));
         assertThat(jwt.getClaimAsStringList("roles")).containsExactly("USER");
-        assertThat(jwt.getClaimAsString("iss")).isEqualTo("commerce-saga-auth");
+        assertThat(jwt.getClaimAsString("iss")).isEqualTo("http://localhost:8086");
     }
 
     @Test
