@@ -58,8 +58,8 @@ outbox:
 auth:
   # OIDC 인가 서버(SAS) 공개 주소 = 토큰 iss, 브라우저가 가는 주소 (ADR 0017, 설계 문서 7-3). 끝에 / 를 붙이지 않는다.
   # 호스트 방식 https://auth.example.com, 경로 방식 https://example.com/auth.
-  # 로컬 기본값은 auth-service 를 바로 보는 주소다. 인증 화면 SPA(5175)가 생기는 5-4 에서 http://localhost:5175 로 바꾼다
-  issuer: ${AUTH_ISSUER:http://localhost:8086}
+  # 로컬 기본값은 인증 화면 SPA 개발 서버(5175). 그 서버가 SAS 경로를 auth-service(8086)로 넘긴다 (설계 문서 7-2)
+  issuer: ${AUTH_ISSUER:http://localhost:5175}
   # 로그인·가입 뒤 저장된 인가 요청이 없을 때 갈 사용자 화면
   web-home: ${WEB_HOME:http://localhost:5173/}
   oauth:

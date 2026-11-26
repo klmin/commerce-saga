@@ -6,10 +6,9 @@
 |---|---|
 | `apps/web` | 사용자 화면 (Vite + React 19 + TypeScript + Tailwind 4 + shadcn/ui, React Router, TanStack Query). 5-3a |
 | `apps/admin` | 관리자 화면: 상품 관리·관리 이력, 결제 장애 주입(로컬 :5174, 로그인 클라이언트 `gateway-admin`). 5-5 |
+| `apps/auth` | 인증 화면: SAS 의 로그인(`/signin`)·회원가입(`/register`). 폼은 auth-service 로 그대로 POST(`login`·`signup`, CSRF 는 `GET csrf` 본문). 로컬 :5175 = 로컬 issuer. 5-4 |
 | `packages/bff` | 화면들이 Gateway(BFF)를 부르는 공용 코드: `/api` 호출(CSRF·401 → 로그인), `<base href>` 앞 경로, `/api/me`, 로그인 확인(`SessionGate`), 로그아웃 폼 |
 | `packages/ui` | 화면들이 같이 쓰는 shadcn/ui 컴포넌트와 테마. 빌드 없이 소스를 내보내고 각 앱의 Vite 가 함께 묶는다 |
-
-인증 화면(`apps/auth`)은 5-4 에서 더한다.
 
 ## 구조
 
@@ -31,15 +30,18 @@ npm install -g pnpm@12.23.0   # 또는 corepack enable
 pnpm install
 pnpm dev:web                  # 사용자 화면 http://localhost:5173
 pnpm dev:admin                # 관리자 화면 http://localhost:5174 (관리자: 시드 admin)
+pnpm dev:auth                 # 인증 화면 http://localhost:5175 (로그인할 때 꼭 필요: 로컬 issuer 주소)
 ```
 
-Vite 개발 서버가 설계 문서 7-1 "화면 쪽" 경로(`/api`, `/oauth2/authorization`, `/login/oauth2/code`, `/logout`)를 Gateway(`GATEWAY_URL`, 기본 http://localhost:8000)로 넘긴다. 원래 `Host`(`localhost:5173`)를 그대로 넘겨야 Gateway 가 이 화면의 로그인 클라이언트(`gateway-web`)와 돌아올 주소를 고른다(`changeOrigin: false`). 로그인 화면은 auth-service(`AUTH_ISSUER`, 로컬 기본 http://localhost:8086)의 임시 화면 `/signin` 이다(5-4 에서 인증 화면 SPA 로 바뀜).
+Vite 개발 서버가 설계 문서 7-1 "화면 쪽" 경로(`/api`, `/oauth2/authorization`, `/login/oauth2/code`, `/logout`)를 Gateway(`GATEWAY_URL`, 기본 http://localhost:8000)로 넘긴다. 원래 `Host`(`localhost:5173`)를 그대로 넘겨야 Gateway 가 이 화면의 로그인 클라이언트(`gateway-web`)와 돌아올 주소를 고른다(`changeOrigin: false`). 로그인 화면은 인증 화면 개발 서버(`AUTH_ISSUER`, 로컬 기본 http://localhost:5175)의 `/signin` 이다. 인증 화면의 Vite 는 7-1 "인증 쪽" 의 auth-service 경로(`/oauth2`, `/.well-known`, `/userinfo`, `/connect/logout`, `/login`, `/signup`, `/csrf`)를 auth-service(`AUTH_SERVICE_URL`, 기본 http://localhost:8086)로 넘기고, 역시 원래 `Host` 를 넘겨 SAS 가 만드는 주소(로그인 화면·돌아갈 인가 요청)가 :5175 가 되게 한다.
+
+인증 화면은 정적 파일이라 CSRF 토큰을 만들지 않는다: 화면을 열 때 `GET csrf`(SSO 세션 `AUTH_SESSION` 에 둔 토큰)를 받아 폼의 숨은 필드로 넣고, 로그인·가입은 fetch 가 아니라 **폼 POST** 다(auth-service 의 302 를 브라우저가 화면 이동으로 따라가야 인가 흐름이 이어진다). 주소는 `<base>` 기준 상대 경로(`login`·`signup`·`csrf`)라 경로 방식(`/auth/…`)에서도 그대로 맞는다.
 
 개발용 계정은 루트 README 의 시드 사용자(`user1`~`user4`). 새로 가입하면 몇 초 안에 가입 축하 1,000P 가 생긴다(시나리오 13).
 
 ## 명령 (frontend 에서)
 
-- `pnpm dev:web` / `pnpm dev:admin` - 사용자·관리자 화면 개발 서버
+- `pnpm dev:web` / `pnpm dev:admin` / `pnpm dev:auth` - 사용자·관리자·인증 화면 개발 서버
 - `pnpm build` - 모든 앱 프로덕션 빌드 (`apps/*/dist`)
 - `pnpm lint` - ESLint (workspace 전체)
 - `pnpm format` / `pnpm format:check` - Prettier (Tailwind 클래스 정렬 포함)

@@ -1,6 +1,6 @@
 {{- if .Values.screens.enabled }}
-# 화면 SPA (frontend/Dockerfile: nginx 가 정적 파일을 낸다, ADR 0017). web = 사용자, admin = 관리자.
-# 같은 이미지를 두 방식에 쓴다: 경로 방식이면 BASE_PATH 로 <base href> 를 바꾼다(설계 문서 7-4). 인증 화면(auth)은 5-4
+# 화면 SPA (frontend/Dockerfile: nginx 가 정적 파일을 낸다, ADR 0017). web = 사용자, admin = 관리자, auth = 인증(로그인·가입).
+# 같은 이미지를 두 방식에 쓴다: 경로 방식이면 BASE_PATH 로 <base href> 를 바꾼다(설계 문서 7-4)
 {{- range $name, $screen := .Values.screens.apps }}
 {{- $labels := include "commerce.labels" (dict "name" $name "root" $) }}
 {{- $basePath := "/" }}

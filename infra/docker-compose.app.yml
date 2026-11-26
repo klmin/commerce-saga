@@ -240,6 +240,14 @@ services:
     environment:
       BASE_PATH: ${ADMIN_BASE_PATH:-/}
 
+  # 인증 화면 (로그인·가입). 경로 방식이면 앞 경로가 /auth/
+  auth:
+    build: { context: ../frontend, args: { APP: auth } }
+    image: commerce-saga/auth:local
+    restart: unless-stopped
+    environment:
+      BASE_PATH: ${AUTH_BASE_PATH:-/}
+
   # 앞단 프록시: 설계 문서 7-1 표대로 화면·Gateway·SAS 로 나눈다. CADDY_MODE 로 Caddyfile 을 고른다 (caddy/Caddyfile.host·path)
   caddy:
     image: caddy:2.10-alpine
@@ -249,6 +257,7 @@ services:
       auth-service: { condition: service_healthy }
       web: { condition: service_started }
       admin: { condition: service_started }
+      auth: { condition: service_started }
       # 일회성 서비스는 누군가 완료를 기다려야 --wait 가 정상 종료(0)를 실패로 보지 않는다
       connectors-init: { condition: service_completed_successfully }
     command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.${CADDY_MODE:-host}", "--adapter", "caddyfile"]

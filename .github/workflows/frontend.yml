@@ -44,9 +44,9 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      - name: 이미지 빌드 확인 (web·admin, 경로 방식 BASE_PATH)
+      - name: 이미지 빌드 확인 (web·admin·auth, 경로 방식 BASE_PATH)
         run: |
-          for app in web admin; do docker build -q --build-arg APP=$app -t commerce-saga/$app:ci . > /dev/null; done
+          for app in web admin auth; do docker build -q --build-arg APP=$app -t commerce-saga/$app:ci . > /dev/null; done
           docker run -d --name admin-ci -p 18080:8080 -e BASE_PATH=/admin/ commerce-saga/admin:ci > /dev/null
           for i in $(seq 1 20); do curl -sf -o /dev/null http://localhost:18080/healthz && break; sleep 1; done
           curl -sf http://localhost:18080/products/1 | grep -q '<base href="/admin/" />'

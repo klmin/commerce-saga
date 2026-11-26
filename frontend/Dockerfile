@@ -2,6 +2,7 @@
 #
 #   docker build --build-arg APP=web   -t commerce-saga/web   frontend
 #   docker build --build-arg APP=admin -t commerce-saga/admin frontend
+#   docker build --build-arg APP=auth  -t commerce-saga/auth  frontend
 #   docker run -p 8080:8080 -e BASE_PATH=/admin/ commerce-saga/admin
 #
 # 같은 이미지를 호스트 방식(BASE_PATH=/)과 경로 방식(/admin/ 등)에 그대로 쓴다: 앞 경로는 빌드에 넣지 않고
