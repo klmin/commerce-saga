@@ -34,6 +34,9 @@ class DeviceServiceTest {
     /** deviceId → 마지막 토큰 발급 시각 (refresh 가 살아 있는 인가 기록) */
     final Map<String, Instant> liveTokens = new HashMap<>();
     final List<String> revokedDevices = new ArrayList<>();
+    final List<Long> extended = new ArrayList<>();
+    /** 이 기기의 인가 기록 삭제가 실패한다 (DB 장애) */
+    String failRevokeOf;
 
     DeviceService service;
 
@@ -50,6 +53,10 @@ class DeviceServiceTest {
 
             public void remove(long userId, String deviceId) {
                 deviceStore.getOrDefault(userId, new HashMap<>()).remove(deviceId);
+            }
+
+            public void extend(long userId) {
+                extended.add(userId);
             }
         };
         SsoSessionPort sessions = new SsoSessionPort() {
@@ -69,6 +76,9 @@ class DeviceServiceTest {
 
             public int deleteByDevice(String principalName, String deviceId) {
                 assertThat(principalName).isEqualTo(Long.toString(USER));
+                if (deviceId.equals(failRevokeOf)) {
+                    throw new IllegalStateException("DB 장애");
+                }
                 revokedDevices.add(deviceId);
                 return liveTokens.remove(deviceId) == null ? 0 : 1;
             }
@@ -153,6 +163,32 @@ class DeviceServiceTest {
         assertThat(service.logoutOthers(USER, mine)).isEqualTo(2);
         assertThat(deletedSessions).containsExactlyInAnyOrder("s-2", "s-3");
         assertThat(service.devices(USER, mine)).extracting(DeviceResult::id).containsExactly(mine);
+    }
+
+    @Test
+    void 인가_기록을_못_지우면_기기_기록을_남겨_다시_로그아웃할_수_있다() {
+        String mine = login("s-mine", "A");
+        String first = login("s-1", "B");
+        String broken = login("s-2", "C");
+        liveTokens.put(first, NOW);
+        liveTokens.put(broken, NOW);
+        failRevokeOf = broken;
+
+        assertThatThrownBy(() -> service.logoutOthers(USER, mine)).isInstanceOf(IllegalStateException.class);
+        // 이미 끝낸 기기는 지웠고, 실패한 기기는 기록이 남아 refresh token 을 다시 지울 수 있다
+        assertThat(deviceStore.get(USER)).containsKeys(mine, broken).doesNotContainKey(first);
+        assertThat(liveSessions).containsKey("s-2");
+
+        failRevokeOf = null;
+        assertThat(service.logoutOthers(USER, mine)).isEqualTo(1);
+        assertThat(liveTokens).isEmpty();
+        assertThat(deviceStore.get(USER)).containsOnlyKeys(mine);
+    }
+
+    @Test
+    void 기기에_새_인가_기록이_묶이면_기기_기록의_보존_기간을_늘린다() {
+        service.authorized(USER);
+        assertThat(extended).containsExactly(USER);
     }
 
     @Test

@@ -12,6 +12,9 @@ public interface DevicePort {
 
     void remove(long userId, String deviceId);
 
+    /** 기기 기록 보존 기간을 지금부터 다시 건다 (새 refresh token 이 그 뒤까지 살 수 있으므로) */
+    void extend(long userId);
+
     record DeviceRecord(String deviceId, String sessionId, String userAgent, Instant loginAt) {
     }
 }

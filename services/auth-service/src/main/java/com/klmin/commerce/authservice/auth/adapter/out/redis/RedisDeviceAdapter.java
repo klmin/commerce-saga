@@ -13,7 +13,8 @@ import java.util.Map;
 
 /**
  * 사용자별 기기 {@code auth:device:<userId>} (hash: 기기 id → "세션 id \n 로그인 시각(ms) \n 브라우저"). 브라우저 문자열은
- * 서비스가 제어 문자를 빼 두어 줄바꿈이 없다. 키 만료는 refresh token 수명보다 하루 길게, 로그인할 때마다 다시 건다
+ * 서비스가 제어 문자를 빼 두어 줄바꿈이 없다. 키 만료는 refresh token 수명보다 하루 길게, 로그인할 때와 기기에 새 인가 기록이
+ * 생길 때(SSO 로 다른 화면 로그인 = 새 refresh token)마다 다시 건다
  * (그 뒤엔 어느 기기도 로그인돼 있을 수 없다). 끝난 기기는 목록을 볼 때 지운다
  */
 @Component
@@ -53,6 +54,11 @@ class RedisDeviceAdapter implements DevicePort {
             }
         }
         return result;
+    }
+
+    @Override
+    public void extend(long userId) {
+        redis.expire(key(userId), ttl); // 키가 없으면 아무것도 하지 않는다
     }
 
     @Override

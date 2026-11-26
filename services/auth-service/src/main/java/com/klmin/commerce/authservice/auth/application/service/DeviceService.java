@@ -11,7 +11,6 @@ import com.klmin.commerce.authservice.common.error.DomainValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -75,7 +74,6 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    @Transactional
     public void logout(long userId, String deviceId, String currentDeviceId) {
         if (deviceId.equals(currentDeviceId)) {
             throw new DomainValidationException("지금 기기는 로그아웃 버튼으로 로그아웃합니다");
@@ -88,7 +86,6 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    @Transactional
     public int logoutOthers(long userId, String currentDeviceId) {
         int count = 0;
         for (DeviceRecord device : devices.findAll(userId)) {
@@ -101,18 +98,27 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    @Transactional
     public void loggedOut(long userId, String deviceId) {
         int deleted = authorizations.deleteByDevice(principal(userId), deviceId);
         devices.remove(userId, deviceId);
         log.info("기기 로그아웃(OIDC): 인가 기록 {}건 삭제 (userId={})", deleted, userId);
     }
 
+    @Override
+    public void authorized(long userId) {
+        devices.extend(userId);
+    }
+
+    /**
+     * 기기 하나를 끝낸다. 트랜잭션으로 묶지 않는다: DB(인가 기록)·Redis(세션·기기 기록)는 함께 롤백되지 않으므로
+     * 지우는 순서로 다시 할 수 있게 한다. 인가 기록(바로 커밋) → SSO 세션 → 마지막에 기기 기록.
+     * 중간에 실패하면 기기 기록이 남아 다시 로그아웃하면 남은 것을 지운다(이미 지운 것은 0건·없음이라 안전)
+     */
     private void end(long userId, DeviceRecord device) {
-        sessions.delete(device.sessionId());
         int deleted = authorizations.deleteByDevice(principal(userId), device.deviceId());
+        sessions.delete(device.sessionId());
         devices.remove(userId, device.deviceId());
-        log.info("다른 기기 로그아웃: SSO 세션과 인가 기록 {}건 삭제 (userId={})", deleted, userId);
+        log.info("다른 기기 로그아웃: 인가 기록 {}건과 SSO 세션 삭제 (userId={})", deleted, userId);
     }
 
     private static Instant latest(Instant... instants) {

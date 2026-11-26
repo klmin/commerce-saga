@@ -23,4 +23,7 @@ public interface ManageDevicesUseCase {
 
     /** 이 기기가 OIDC 로그아웃했다(SSO 세션은 SAS 가 끝낸다): 이 기기의 인가 기록을 지우고 기기를 잊는다 */
     void loggedOut(long userId, String deviceId);
+
+    /** 이 사용자의 새 인가 기록(SSO 로 다른 화면 로그인 등 = 새 refresh token)이 기기에 묶였다: 기기 기록의 보존 기간을 늘린다 */
+    void authorized(long userId);
 }
