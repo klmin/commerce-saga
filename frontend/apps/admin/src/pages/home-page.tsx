@@ -18,14 +18,25 @@ import {
 } from "@/lib/fault-input";
 import { failureMessage } from "@/lib/format";
 
-/** 입력은 제어 컴포넌트로 두고, 저장 뒤에도 고른 값이 그대로 보이게 한다(저장한 값 = 화면 값) */
-function FaultForm({ current }: { current: FaultSettings }) {
+/**
+ * 입력은 제어 컴포넌트로 두고, 저장 뒤에도 고른 값이 그대로 보이게 한다(저장한 값 = 화면 값).
+ * 서버 값이 바뀌면(다시 조회, 다른 관리자의 변경) 부모가 key 로 다시 마운트해 그 값으로 채운다.
+ * 저장 결과 문구는 다시 마운트돼도 남게 부모가 들고 있다
+ */
+function FaultForm({
+  current,
+  saved,
+  onSaved,
+}: {
+  current: FaultSettings;
+  saved?: FaultSettings;
+  onSaved: (settings: FaultSettings | undefined) => void;
+}) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<FaultMode>(current.mode);
   const [delay, setDelay] = useState(String(current.delayMillis));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
-  const [saved, setSaved] = useState<FaultSettings>();
   const id = useId();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,10 +53,10 @@ function FaultForm({ current }: { current: FaultSettings }) {
     setError(undefined);
     try {
       const result = await setPaymentFaults(input.value);
+      onSaved(result);
       queryClient.setQueryData(["payment-faults"], result);
-      setSaved(result);
     } catch (e) {
-      setSaved(undefined);
+      onSaved(undefined);
       setError(failureMessage(e));
     } finally {
       setPending(false);
@@ -110,13 +121,21 @@ function FaultForm({ current }: { current: FaultSettings }) {
 
 function PaymentFaults() {
   const faults = useQuery({ queryKey: ["payment-faults"], queryFn: getPaymentFaults });
+  const [saved, setSaved] = useState<FaultSettings>();
   if (faults.isPending) {
     return <FormSkeleton fields={1} />;
   }
   if (faults.isError) {
     return <LoadError error={faults.error} retry={() => faults.refetch()} />;
   }
-  return <FaultForm current={faults.data} />;
+  return (
+    <FaultForm
+      key={`${faults.data.mode}:${faults.data.delayMillis}`}
+      current={faults.data}
+      saved={saved}
+      onSaved={setSaved}
+    />
+  );
 }
 
 export function HomePage() {

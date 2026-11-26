@@ -16,5 +16,6 @@ export async function login(page: Page, loginId: string, path = "/") {
   await page.getByLabel("아이디").fill(loginId);
   await page.getByLabel("비밀번호").fill(DEV_PASSWORD);
   await page.getByRole("button", { name: "로그인" }).click();
-  await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
+  // 헤더의 로그아웃 버튼 (관리자가 아니면 본문에도 하나 더 있다)
+  await expect(page.getByRole("banner").getByRole("button", { name: "로그아웃" })).toBeVisible();
 }
