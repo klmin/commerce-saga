@@ -114,7 +114,8 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 | `scripts/release-plan.sh` | release 가 부른다. 마지막 배포 커밋과 비교해 바뀐 이미지를 고르고 `release-tags.yaml` 을 만든다 ([docs/ci-cd.md](../docs/ci-cd.md) "배포") |
 | `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` 을 값으로 쓴다. 이미지별 태그 `release-tags.yaml`(release/eks 에만 있음)은 apps 차트가 `.Files` 로 읽는다(root 는 바꾸지 않음) |
 | `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |
-| `scripts/eks-argocd.sh` | 처음 한 번: ArgoCD 설치 → root apply → Synced·Healthy 대기 → 화면 주소 출력 |
+| `scripts/eks-argocd.sh` | 처음 한 번: ArgoCD 설치 → root apply → Synced·Healthy 대기 → 화면 주소 출력. `ARGOCD_DISCORD_WEBHOOK` 을 주면 sync 결과 Discord 알림도 켠다 |
+| `argocd/notifications.yaml` | ArgoCD Notifications(배포 완료·sync 실패·Degraded → Discord) 값. 웹훅 URL 은 클러스터 Secret 에만 ([docs/ci-cd.md](../docs/ci-cd.md) "EKS 배포 결과") |
 
 ### 처음 한 번
 
@@ -125,6 +126,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
    - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
    - 노드 여유: 요청 합계 CPU 약 1.6 코어, 메모리 약 5.5Gi (서비스 8개 JVM + Kafka + Connect + Postgres)
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
+   - sync 결과를 Discord 로 받으려면: `read -rs ARGOCD_DISCORD_WEBHOOK && export ARGOCD_DISCORD_WEBHOOK && scripts/eks-argocd.sh` (이미 설치된 클러스터에 다시 돌려도 된다)
 
 그 뒤로는 머지만 하면 된다. 바뀐 서비스만 새 이미지로 롤링된다. 롤백은 `git log --first-parent origin/release/eks` 에서 옛 release 커밋을 골라 `git push origin <옛 release 커밋>:refs/heads/release/eks --force` (그 커밋의 이미지가 GHCR 에 있다).
 

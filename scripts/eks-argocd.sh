@@ -5,6 +5,10 @@
 # 준비: kubectl 이 EKS 를 가리킨다 (aws eks update-kubeconfig --name <클러스터> --region <리전>), helm
 #       release 워크플로가 한 번 돌아 release/eks 브랜치와 GHCR 이미지가 있다
 # 실행: scripts/eks-argocd.sh
+#
+# sync 결과를 Discord 로 (ArgoCD Notifications, deploy/argocd/notifications.yaml): 웹훅 URL 을 환경변수로 주면 Secret 에 넣고 켠다.
+#   URL 이 셸 기록에 남지 않게 입력창으로: read -rs ARGOCD_DISCORD_WEBHOOK && export ARGOCD_DISCORD_WEBHOOK && scripts/eks-argocd.sh
+#   한 번 넣으면 Secret 이 남아 있으므로 다음 실행에서는 주지 않아도 켜진 채로 둔다
 set -euo pipefail
 
 ARGOCD_CHART_VERSION=${ARGOCD_CHART_VERSION:-10.18.0}
@@ -21,11 +25,26 @@ if ! git ls-remote --exit-code --heads origin release/eks > /dev/null; then
   exit 1
 fi
 
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f - > /dev/null
+if [ -n "${ARGOCD_DISCORD_WEBHOOK:-}" ]; then
+  # 값은 파일·명령 인자로 남기지 않고 stdin 으로 (kubectl 이 Secret 매니페스트를 만들어 바로 apply)
+  kubectl -n argocd create secret generic argocd-notifications-secret \
+    --from-file=discord-webhook-url=<(printf '%s' "$ARGOCD_DISCORD_WEBHOOK") --dry-run=client -o yaml \
+    | kubectl apply -f - > /dev/null
+fi
+if [ -n "$(kubectl -n argocd get secret argocd-notifications-secret -o jsonpath='{.data.discord-webhook-url}' 2> /dev/null || true)" ]; then
+  notify_args=(-f deploy/argocd/notifications.yaml)
+  echo "== Discord 알림: 켬 (argocd-notifications-secret)"
+else
+  notify_args=(--set notifications.enabled=false)
+  echo "== Discord 알림: 끔 (ARGOCD_DISCORD_WEBHOOK 없음)"
+fi
+
 echo "== ArgoCD (chart $ARGOCD_CHART_VERSION)"
 # UI 는 밖으로 열지 않는다. kubectl port-forward 로 본다 (아래 안내)
 helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm \
   --version "$ARGOCD_CHART_VERSION" -n argocd --create-namespace --wait --timeout 8m \
-  --set dex.enabled=false --set notifications.enabled=false \
+  --set dex.enabled=false "${notify_args[@]}" \
   --set 'configs.params.server\.insecure=true' > /dev/null
 
 echo "== root Application (release/eks)"

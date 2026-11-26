@@ -23,10 +23,18 @@ cd "$(dirname "$0")/.."
 TAG=${TAG:-dev-$(date +%Y%m%d%H%M%S)}
 TAG=$TAG IMAGES_ONLY=true bash scripts/k8s-deploy.sh
 
-echo "== ArgoCD (chart $ARGOCD_CHART_VERSION)"
+# ARGOCD_NOTIFY=true: EKS 와 같은 알림 설정(deploy/argocd/notifications.yaml)으로 켠다. 받을 곳은 Secret
+# argocd-notifications-secret 의 discord-webhook-url 에 미리 넣어 둔다 (CI 는 클러스터 안 수신 Pod)
+if [ "${ARGOCD_NOTIFY:-false}" = true ]; then
+  notify_args=(-f deploy/argocd/notifications.yaml)
+else
+  notify_args=(--set notifications.enabled=false)
+fi
+
+echo "== ArgoCD (chart $ARGOCD_CHART_VERSION, 알림 ${ARGOCD_NOTIFY:-false})"
 helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm \
   --version "$ARGOCD_CHART_VERSION" -n argocd --create-namespace --wait --timeout 8m \
-  --set dex.enabled=false --set notifications.enabled=false \
+  --set dex.enabled=false "${notify_args[@]}" \
   --set 'configs.params.server\.insecure=true' > /dev/null
 
 echo "== root Application (revision $REVISION, image.tag $TAG, namespace $NAMESPACE)"
