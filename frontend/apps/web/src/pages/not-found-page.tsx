@@ -1,7 +1,7 @@
 import { Button } from "@commerce/ui/button";
 import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 
-import { Page } from "@/components/page";
+import { Page } from "@commerce/ui/page";
 
 /** 없는 화면·없는(또는 남의) 주문. embedded 면 다른 화면 안에 끼워 그린다 */
 export function NotFoundPage({ embedded = false }: { embedded?: boolean }) {

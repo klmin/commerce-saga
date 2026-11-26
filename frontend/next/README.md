@@ -1,6 +1,6 @@
-# frontend/next (5-5 까지)
+# frontend/next (5-3b 에서 지움)
 
-> 사용자 화면은 SPA(`frontend/apps/web`, [frontend/README.md](../README.md))로 옮겼다(ADR 0017, 후속 5-3). 이 Next 화면은 관리자 화면이 SPA 로 옮겨지는 5-5 에서 지운다. 그때까지 기존 `/auth/*` 로그인으로 그대로 돈다.
+> 사용자 화면은 SPA(`frontend/apps/web`, [frontend/README.md](../README.md))로 옮겼다(ADR 0017, 후속 5-3). 관리자 화면도 SPA(`frontend/apps/admin`)로 옮겼다(5-5). 이 Next 화면은 배포를 SPA 이미지로 바꾸는 5-3b 에서 지운다. 그때까지 기존 `/auth/*` 로그인으로 그대로 돈다.
 
 Next.js 16 (App Router, Cache Components) / React 19 / TypeScript / Tailwind 4 / shadcn/ui. 설계는 [ADR 0011](../../docs/adr/0011-frontend-nextjs-bff-session.md).
 

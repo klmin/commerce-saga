@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError } from "@commerce/bff/api";
 import type { Product } from "@/lib/products";
 import { type SearchCriteria, searchQuery } from "@/lib/search";
 

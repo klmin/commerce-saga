@@ -15,7 +15,7 @@ import java.util.Set;
 
 /**
  * <b>기존 자체 JWT API</b> ({@code /auth/**}, {@code /.well-known/jwks.json}, ADR 0008) 의 보안 설정.
- * 지금 Next 화면이 쓰므로 Next 를 지우는 후속 5-5 까지 그대로 두고 그때 지운다. SAS·로그인 화면은 {@link AuthorizationServerConfig}.
+ * 지금 Next 화면이 쓰므로 그대로 두고, Next 를 지운 뒤(5-3b) 후속 5-3c 에서 지운다. SAS·로그인 화면은 {@link AuthorizationServerConfig}.
  * <p>
  * 회원가입·로그인·refresh·로그아웃·JWKS 는 토큰 없이, 로그인 기기 관리·전체 로그아웃은 access token 으로.
  * 검증 키는 auth-service 자신의 공개키 (JwtDecoder 는 adapter.out.security 의 JwtKeyConfig). 세션·폼 로그인을 쓰지 않는다.

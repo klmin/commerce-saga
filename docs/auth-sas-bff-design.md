@@ -340,12 +340,12 @@ k8s 는 Envoy `HTTPRoute` 에서 같은 규칙: 경로 매칭 + `URLRewrite`(`Re
 | PR | 범위 |
 |---|---|
 | 5-0 ADR | ADR 0017(이 문서의 결정). 0008·0011 대체 범위 표시 |
-| 5-1 auth-service → SAS | SAS 의존성, Flyway(클라이언트·인가·동의 테이블), 클라이언트 upsert + 시크릿 찾는 순서, 토큰 커스터마이저(`sub`·`roles`), Spring Session Redis ①, 임시 로그인 화면(서버 템플릿, 5-4 에서 교체), 세션 CSRF + `GET /csrf`(본문으로 토큰), 인가 기록 정리 스케줄러, 클라이언트 upsert 에 `post_logout_redirect_uri` 목록. **경로 방식 확인 테스트**: 경로가 붙은 issuer(`…/auth`)로 discovery·토큰 `iss`, `X-Forwarded-Prefix: /auth` 일 때 `/signin` 리다이렉트·쿠키 `Path`. **기존 `/auth/*` API 는 5-5 까지 남겨**(처음 계획은 5-3, 2026-11-26 미룸) Next 화면이 계속 동작하게 한다 |
+| 5-1 auth-service → SAS | SAS 의존성, Flyway(클라이언트·인가·동의 테이블), 클라이언트 upsert + 시크릿 찾는 순서, 토큰 커스터마이저(`sub`·`roles`), Spring Session Redis ①, 임시 로그인 화면(서버 템플릿, 5-4 에서 교체), 세션 CSRF + `GET /csrf`(본문으로 토큰), 인가 기록 정리 스케줄러, 클라이언트 upsert 에 `post_logout_redirect_uri` 목록. **경로 방식 확인 테스트**: 경로가 붙은 issuer(`…/auth`)로 discovery·토큰 `iss`, `X-Forwarded-Prefix: /auth` 일 때 `/signin` 리다이렉트·쿠키 `Path`. **기존 `/auth/*` API 는 5-3c 까지 남겨**(처음 계획은 5-3, 2026-11-26 미룸) Next 화면이 계속 동작하게 한다 |
 | 5-2 SCG BFF | `oauth2Login`(gateway-web·gateway-admin), `TokenRelay`, Redis 세션 ②, CSRF, 로그아웃(OIDC, `return_to` 로 돌아갈 홈 고르기), 클라이언트 고르기(`auto` → `ADMIN_CLIENT_HOST` 면 gateway-admin, 아니면 gateway-web), `return_to` 저장·검사와 성공 후 이동(`WEB_HOME`·`ADMIN_HOME`). Bearer 로 오는 요청의 JWT 검증은 유지. 테스트: 두 방식의 클라이언트 고르기, 위조한 `X-Forwarded-Host`·`return_to` 거부 |
-| 5-3a 사용자 SPA | `frontend/apps/web`(Vite + React + TS + Tailwind + shadcn, `packages/ui`, pnpm workspace). Next 화면 옮기기, 데이터는 `/api` 호출, 지금 사용자는 Gateway `GET /api/me`. 로컬 개발은 Vite 프록시. CI e2e 는 호스트에서 띄운 백엔드 + `vite preview` 로 BFF 로그인. Next 는 `frontend/next` 로 옮겨 5-5 까지 둔다 |
+| 5-3a 사용자 SPA | `frontend/apps/web`(Vite + React + TS + Tailwind + shadcn, `packages/ui`, pnpm workspace). Next 화면 옮기기, 데이터는 `/api` 호출, 지금 사용자는 Gateway `GET /api/me`. 로컬 개발은 Vite 프록시. CI e2e 는 호스트에서 띄운 백엔드 + `vite preview` 로 BFF 로그인. Next 는 `frontend/next` 로 옮겨 5-3b 까지 둔다 |
 | 5-3b 배포 | compose Caddy(호스트·경로 두 방식, `CADDY_MODE`)·시크릿 init, Helm `edge.mode`(host 또는 path) 라우트·nginx 이미지(시작 스크립트가 `BASE_PATH` 로 `<base href>` 주입), 프록시의 `X-Forwarded-Prefix` 제거, k8s 공개 `AUTH_ISSUER`·`GATEWAY_TRUSTED_PROXIES`, CI e2e 경로 방식 로그인 한 번 |
 | 5-4 인증 화면 | `frontend/apps/auth` 로그인·가입. 5-1 임시 로그인 화면 제거 |
-| 5-5 관리자 SPA | `frontend/apps/admin` 분리(장애 주입·상품 관리), `gateway-admin` 로 SSO 확인. 끝나면 Next(`frontend/next`)·기존 `/auth/*` API 제거(5-3 에서 옮김, 사용자 결정 2026-11-26) |
+| 5-5 관리자 SPA | `frontend/apps/admin` 분리(장애 주입·상품 관리), `gateway-admin` 로 SSO 확인, 공용 `packages/bff`. **5-3b 앞으로 당김**(사용자 결정 2026-11-26: 화면은 모두 React + Vite). Next 는 5-3b, 기존 `/auth/*` API 는 5-3c 에서 지운다 |
 | 5-6 기기 관리·정리 | 로그인 기기 목록·개별 로그아웃 다시 구현, 시나리오 문서(SSO·로그아웃·시크릿 교체), PROGRESS·README 갱신, 태그 |
 
 각 PR 은 지금 규칙대로(빌드·테스트, Codex 지적 없음 + CI 통과 후 squash 머지).

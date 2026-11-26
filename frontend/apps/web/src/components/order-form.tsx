@@ -6,10 +6,10 @@ import { type FormEvent, useId, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { placeOrder } from "@/api/orders";
-import { ApiError } from "@/lib/api";
+import { ApiError } from "@commerce/bff/api";
 import { MAX_QUANTITY, orderTotal, toOrderInput } from "@/lib/orders/order-input";
 import { type Product, won } from "@/lib/products";
-import { uuid } from "@/lib/uuid";
+import { uuid } from "@commerce/bff/uuid";
 
 type Props = {
   /** 판매 중인 상품. 가격은 화면을 연 시점 값 */

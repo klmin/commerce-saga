@@ -1,4 +1,4 @@
-import { ApiError } from "./api";
+import { ApiError } from "@commerce/bff/api";
 import { MAX_QUANTITY } from "./orders/order-input";
 
 /** 장바구니 화면의 ?error= 코드 → 문구 */

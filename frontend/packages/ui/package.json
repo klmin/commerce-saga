@@ -9,7 +9,10 @@
     "./input": "./src/input.tsx",
     "./label": "./src/label.tsx",
     "./skeleton": "./src/skeleton.tsx",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./page": "./src/page.tsx",
+    "./skeletons": "./src/skeletons.tsx",
+    "./textarea": "./src/textarea.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

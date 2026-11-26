@@ -11,8 +11,8 @@ import {
 } from "@/api/history";
 import { myPointHistory, POINT_HISTORY_PAGE_SIZE } from "@/api/points";
 import { CursorNav } from "@/components/cursor-nav";
-import { LoadError, Page, Section } from "@/components/page";
-import { ListSkeleton } from "@/components/skeletons";
+import { LoadError, Page, Section } from "@commerce/ui/page";
+import { ListSkeleton } from "@commerce/ui/skeletons";
 import { ToneBadge } from "@/components/tone-badge";
 import { numberCursor, uuidCursor } from "@/lib/history/cursor";
 import {
