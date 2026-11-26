@@ -106,7 +106,7 @@
 - `selfHeal` 이 켜져 있어 `kubectl` 로 직접 바꾼 값은 되돌아간다. 설정은 커밋으로만 바꾼다.
 - EKS 는 `release/eks` 브랜치를 따른다(release 워크플로가 이미지 빌드 후 force push). main 에 머지한다고 바로 운영에 가지 않는다.
 - 운영 ArgoCD 는 HA 매니페스트(argocd-server·repo-server 2+, redis-ha)로 설치한다.
-- sync 실패·Degraded 에 경보(ArgoCD Notifications 또는 `argocd_app_info` 메트릭).
+- sync 실패·Degraded 에 경보: ArgoCD Notifications → Discord (`deploy/argocd/notifications.yaml`, 배포 완료도 같이). 켜는 법은 docs/ci-cd.md "EKS 배포 결과".
 
 ## 11. 클러스터 · 노드
 
