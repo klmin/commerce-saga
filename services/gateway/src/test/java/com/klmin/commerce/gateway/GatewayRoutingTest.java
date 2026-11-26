@@ -48,6 +48,7 @@ class GatewayRoutingTest {
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:8.4-alpine"))
             .withExposedPorts(6379);
 
+    private static final String ISSUER = "http://auth.test";
     private static final RSAKey KEY = rsaKey("test-key");
     private static final RSAKey OTHER_KEY = rsaKey("other-key");
     private static final AtomicReference<String> LAST_REQUEST = new AtomicReference<>();
@@ -64,7 +65,12 @@ class GatewayRoutingTest {
         for (String service : List.of("AUTH", "ORDER", "INVENTORY", "POINT", "PAYMENT", "NOTIFICATION", "PRODUCT", "SEARCH")) {
             registry.add(service + "_SERVICE_URL", () -> base);
         }
-        registry.add("AUTH_JWKS_URI", () -> base + "/.well-known/jwks.json");
+        registry.add("AUTH_INTERNAL_URL", () -> base);
+        registry.add("AUTH_ISSUER", () -> ISSUER);
+        // BFF 클라이언트 시크릿은 테스트용 값 (로컬 개발용 파일을 만들지 않게)
+        registry.add("gateway.bff.secret-dev-dir", () -> "");
+        registry.add("gateway.bff.web.secret", () -> "test-web-secret");
+        registry.add("gateway.bff.admin.secret", () -> "test-admin-secret");
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     }
@@ -198,7 +204,7 @@ class GatewayRoutingTest {
     private static String token(RSAKey key, String subject, List<String> roles, long ttlSeconds) throws Exception {
         Instant now = Instant.now();
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer("commerce-saga-auth").subject(subject).claim("roles", roles)
+                .issuer(ISSUER).subject(subject).claim("roles", roles)
                 .issueTime(Date.from(now)).expirationTime(Date.from(now.plusSeconds(ttlSeconds))).build();
         SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(key.getKeyID())
                 .type(JOSEObjectType.JWT).build(), claims);
@@ -220,7 +226,7 @@ class GatewayRoutingTest {
             HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
             server.createContext("/", exchange -> {
                 byte[] body;
-                if (exchange.getRequestURI().getPath().equals("/.well-known/jwks.json")) {
+                if (exchange.getRequestURI().getPath().equals("/oauth2/jwks")) {
                     body = new JWKSet(KEY.toPublicJWK()).toString().getBytes(StandardCharsets.UTF_8);
                 } else {
                     LAST_REQUEST.set("path=" + exchange.getRequestURI().getPath()
