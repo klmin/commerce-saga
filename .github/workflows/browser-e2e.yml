@@ -4,7 +4,6 @@ name: browser-e2e
 # - 사용자 SPA(frontend/apps/web, production 빌드를 vite preview 로 :5173): Gateway BFF 로그인 → SAS 로그인 화면 → 돌아오기,
 #   로그아웃(SSO), 가입, 주문 Saga(정상·품절·포인트 부족 보상·중복 제출·남의 주문), 장바구니, 포인트·결제 내역·알림, 검색 (ADR 0017)
 # - 관리자 SPA(frontend/apps/admin, :5174, 로그인 클라이언트 gateway-admin): 결제 장애 주입 → 사용자 주문 보상, 상품 관리·관리 이력, 관리자 아님
-# - Next(frontend/next, 5-3b 에서 지움): 로그인·가입, 주문 Saga, 내역, 로그인 기기 관리, 관리자 결제 장애 주입·상품 관리 (ADR 0011)
 # e2e(saga) 워크플로와 따로 둔다: 그쪽은 시나리오 9 를 위해 Gateway 사용자 rate limit 을 낮춰 띄우는데, 화면은 한 번에
 # API 를 여러 개 불러 그 값으로는 429 가 섞인다. relay 는 스케줄러 모드 하나(두 모드 차이는 e2e 워크플로가 본다)
 on:
@@ -40,18 +39,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 26
-          cache: npm
-          cache-dependency-path: frontend/next/package-lock.json
 
       - name: bootJar
         run: ./gradlew :services:order-service:bootJar :services:inventory-service:bootJar :services:point-service:bootJar :services:payment-service:bootJar :services:notification-service:bootJar :services:auth-service:bootJar :services:product-service:bootJar :services:search-service:bootJar :services:gateway:bootJar
-
-      - name: Next 빌드, Playwright 브라우저
-        working-directory: frontend/next
-        run: |
-          npm ci
-          npm run build
-          npx playwright install --with-deps chromium
 
       # 버전은 frontend/package.json 의 packageManager 와 같게
       - name: 화면 SPA 빌드 (사용자·관리자)
@@ -60,6 +50,7 @@ jobs:
           npm install -g pnpm@12.23.0
           pnpm install --frozen-lockfile
           pnpm build
+          pnpm --filter web exec playwright install --with-deps chromium
 
       - name: 인프라 기동
         run: docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
@@ -70,8 +61,6 @@ jobs:
           for svc in auth-service product-service search-service inventory-service point-service payment-service order-service notification-service gateway; do
             nohup java -jar services/$svc/build/libs/$svc-*.jar > logs/$svc.log 2>&1 &
           done
-          # Next(:3500, package.json). Next 서버만 Gateway(:8000)를 부른다 (ADR 0011)
-          (cd frontend/next && BACKEND_URL=http://localhost:8000 nohup npm run start > ../../logs/frontend.log 2>&1 &)
           # 사용자 SPA(:5173). vite preview 가 /api·로그인 경로를 Gateway(:8000)로 넘긴다 (Vite 프록시, 설계 문서 7-2)
           (cd frontend/apps/web && nohup pnpm preview > ../../../logs/web.log 2>&1 &)
           (cd frontend/apps/admin && nohup pnpm preview > ../../../logs/admin.log 2>&1 &)
@@ -80,8 +69,6 @@ jobs:
             for i in $(seq 1 60); do curl -sf "$url" | grep -q UP && break; sleep 2; done
             curl -sf "$url" | grep -q UP || { echo "$url not UP"; exit 1; }
           done
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:3500/login && break; sleep 1; done
-          curl -sf -o /dev/null http://localhost:3500/login
           for port in 5173 5174; do
             for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:$port/ && break; sleep 1; done
             curl -sf -o /dev/null http://localhost:$port/
@@ -105,12 +92,6 @@ jobs:
           E2E_WEB_URL: http://localhost:5173
         run: pnpm exec playwright test
 
-      - name: Playwright (Next)
-        if: ${{ !cancelled() }}
-        working-directory: frontend/next
-        env:
-          E2E_BASE_URL: http://localhost:3500
-        run: npx playwright test
 
       - name: Playwright 결과·서비스 로그 전체 (실패 시)
         if: failure()
@@ -122,8 +103,6 @@ jobs:
             frontend/apps/web/test-results
             frontend/apps/admin/playwright-report
             frontend/apps/admin/test-results
-            frontend/next/playwright-report
-            frontend/next/test-results
             logs
           retention-days: 7
 

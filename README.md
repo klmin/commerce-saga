@@ -75,7 +75,7 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:search-service:bootRun                 # 8089 상품 검색 (후속 4-2, Elasticsearch 9200 + product-cdc 커넥터 등록)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
 (cd frontend && pnpm install && pnpm dev:web)          # 사용자 화면 SPA http://localhost:5173 (BFF 로그인). frontend/README.md
-(cd frontend/next && npm ci && npm run dev)            # Next 화면 http://localhost:3500 (5-5 까지)
+(cd frontend && pnpm dev:admin)                        # 관리자 화면 SPA http://localhost:5174
 ```
 
 ```bash
@@ -151,7 +151,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 ```
 services/      order(오케스트레이터), inventory, point, payment(가짜 PG), notification, auth(회원·로그인·JWT 발급), gateway(Spring Cloud Gateway)
 libs/          messaging-contract(메시지 스키마), outbox(저장 + relay)
-frontend/      Next.js 화면 (로그인·회원가입, 상품·주문·내 주문·주문 상세 Saga 타임라인, 포인트·결제·알림, 로그인 기기, 관리자)
+frontend/      화면 SPA (Vite + React, ADR 0017): apps/web 사용자(상품·장바구니·주문·Saga 타임라인·포인트·결제·알림), apps/admin 관리자(상품 관리·결제 장애 주입), nginx 이미지
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)

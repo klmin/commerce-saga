@@ -86,7 +86,7 @@ if kubectl -n "$NAMESPACE" get kafkaconnect > /dev/null 2>&1; then
   kubectl -n "$NAMESPACE" wait kafkaconnector --all --for=condition=Ready --timeout=5m
 fi
 # 이번 태그의 Pod 로 다 바뀌었는지 (Healthy 는 옛 Pod 로도 날 수 있다)
-for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway frontend; do
+for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway web admin; do
   image=$(kubectl -n "$NAMESPACE" get deployment "$d" -o jsonpath='{.spec.template.spec.containers[0].image}')
   [[ "$image" == *":$TAG" ]] || { echo "FAIL: $d 이미지가 $image (기대 태그 $TAG)" >&2; exit 1; }
   kubectl -n "$NAMESPACE" rollout status deployment/"$d" --timeout=5m > /dev/null
