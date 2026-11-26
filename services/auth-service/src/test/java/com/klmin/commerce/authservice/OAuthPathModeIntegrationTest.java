@@ -23,8 +23,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -50,8 +48,6 @@ class OAuthPathModeIntegrationTest {
     static final String ISSUER = "http://example.test/auth";
     static final String REDIRECT = "http://example.test/login/oauth2/code/gateway-web";
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    private static final Pattern CSRF = Pattern.compile("name=\"_csrf\" value=\"([^\"]+)\"");
-
     @Autowired
     MockMvc mvc;
 
@@ -79,12 +75,12 @@ class OAuthPathModeIntegrationTest {
         assertThat(sessionHeader(start)).contains("Path=/auth;").contains("HttpOnly").contains("SameSite=Lax");
         Cookie session = session(start);
 
-        MvcResult page = proxied(get("/signin").cookie(session));
-        Matcher csrf = CSRF.matcher(page.getResponse().getContentAsString(StandardCharsets.UTF_8));
-        assertThat(csrf.find()).isTrue();
+        // 로그인 화면(인증 화면 SPA)이 하듯 CSRF 토큰을 GET /csrf 본문으로 (/signin 은 SPA 라 auth-service 가 그리지 않는다)
+        String csrf = JSON.readTree(proxied(get("/csrf").cookie(session))
+                .getResponse().getContentAsString(StandardCharsets.UTF_8)).get("token").asString();
 
         MvcResult loggedIn = proxied(post("/login").cookie(session)
-                .param("username", loginId).param("password", "password1").param("_csrf", csrf.group(1)));
+                .param("username", loginId).param("password", "password1").param("_csrf", csrf));
         Cookie afterLogin = session(loggedIn) != null ? session(loggedIn) : session;
         assertThat(location(loggedIn)).startsWith("http://example.test/auth/oauth2/authorize");
 

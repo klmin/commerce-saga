@@ -21,6 +21,7 @@ libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에�
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 frontend/apps/web/         사용자 화면 SPA (Vite + React). 토큰을 모르고 같은 출처 /api 를 BFF 세션 쿠키로 부른다 (ADR 0017)
 frontend/apps/admin/       관리자 화면 SPA (상품 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
+frontend/apps/auth/        인증 화면 SPA (SAS 로그인·가입). 폼은 auth-service 로 그대로 POST, CSRF 는 GET csrf 본문 (설계 문서 4절)
 frontend/packages/ui/      화면 SPA 공용 shadcn/ui 컴포넌트·테마
 frontend/packages/bff/     화면 SPA 공용 Gateway(BFF) 호출·로그인 확인·로그아웃
 build-logic/               공통 빌드 설정 (convention plugin)

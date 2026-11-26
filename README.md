@@ -76,6 +76,7 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (BFF 로그인 /oauth2/**, /api/**)
 (cd frontend && pnpm install && pnpm dev:web)          # 사용자 화면 SPA http://localhost:5173 (BFF 로그인). frontend/README.md
 (cd frontend && pnpm dev:admin)                        # 관리자 화면 SPA http://localhost:5174
+(cd frontend && pnpm dev:auth)                         # 인증 화면 SPA http://localhost:5175 (로그인·가입. 로컬 issuer 라 로그인하려면 필요)
 ```
 
 앱까지 컨테이너로 한 번에 띄우려면(후속 5-3d): 밖으로는 Caddy(:80) 하나, 화면·Gateway·SAS 를 경로로 나눈다

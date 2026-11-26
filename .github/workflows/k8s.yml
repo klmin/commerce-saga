@@ -174,7 +174,7 @@ jobs:
           # Strimzi 는 Deployment 대신 StrimziPodSet 으로 Pod 를 띄운다
           kubectl -n commerce logs -l strimzi.io/kind=KafkaConnect --tail=80 || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -40 || true
-          for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway web admin; do
+          for d in auth-service product-service search-service order-service inventory-service point-service payment-service notification-service gateway web admin auth; do
             echo "===== $d"
             kubectl -n commerce logs deployment/$d --tail=80 || true
           done
@@ -296,10 +296,13 @@ jobs:
           curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
           curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
+          # 인증 화면 /auth/ (로그인·가입 화면, <base href> 는 /auth/), /auth → /auth/
+          curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'
+          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/auth)" = http://localhost/auth/ ]
           # SAS 는 /auth 아래 (issuer 에 경로가 붙는다)
           curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
           # SAS·로그인 경로만 연다: 관리 엔드포인트는 밖에서 보이지 않는다
-          ! curl -s http://localhost/auth/actuator/prometheus | grep -q jvm_
+          if curl -s http://localhost/auth/actuator/prometheus | grep -q jvm_; then echo "관리 엔드포인트가 밖에 열림: http://localhost/auth/actuator/prometheus" >&2; exit 1; fi
           BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
 
       - name: port-forward

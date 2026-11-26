@@ -25,15 +25,17 @@ code=$(c -o /dev/null -w '%{http_code}' "$BASE_URL/api/me")
 [ "$code" = 401 ] || fail "/api/me → $code (기대 401)"
 
 echo "== 로그인 시작 → SAS 로그인 화면"
-signin=$(c -L -o "$work/signin.html" -w '%{url_effective}' "$BASE_URL/oauth2/authorization/auto?return_to=%2Forders")
+signin=$(c -L -o /dev/null -w '%{url_effective}' "$BASE_URL/oauth2/authorization/auto?return_to=%2Forders")
 case "$signin" in */signin*) ;; *) fail "로그인 화면으로 가지 않았다: $signin" ;; esac
 echo "   $signin"
-csrf=$(sed -n 's/.*name="_csrf" value="\([^"]*\)".*/\1/p' "$work/signin.html" | head -1)
-[ -n "$csrf" ] || fail "로그인 폼에 _csrf 가 없다"
+# 로그인 화면(인증 화면 SPA)이 하듯 CSRF 토큰을 GET csrf 본문으로. 주소는 로그인 화면 기준 상대 경로(경로 방식이면 /auth/csrf)
+auth_base="${signin%%/signin*}"
+csrf=$(c "$auth_base/csrf" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+[ -n "$csrf" ] || fail "CSRF 토큰을 받지 못했다 ($auth_base/csrf)"
 
 echo "== 폼 로그인 → 인가 코드 → Gateway 콜백 → 돌아갈 곳"
 # 폼 action 은 상대 경로(login): 로그인 화면 주소 기준 (경로 방식이면 /auth/login)
-login_url="${signin%%/signin*}/login"
+login_url="$auth_base/login"
 final=$(c -L -o /dev/null -w '%{url_effective}' \
   --data-urlencode "username=$LOGIN_ID" --data-urlencode "password=$PASSWORD" --data-urlencode "_csrf=$csrf" \
   "$login_url")

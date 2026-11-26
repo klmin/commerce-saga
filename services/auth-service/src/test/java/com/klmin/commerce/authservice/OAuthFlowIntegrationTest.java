@@ -30,8 +30,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -52,14 +50,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Testcontainers(disabledWithoutDocker = true)
 class OAuthFlowIntegrationTest {
 
-    static final String ISSUER = "http://localhost:8086";
+    static final String ISSUER = "http://localhost:5175";
     static final String CLIENT = "gateway-web";
     static final String SECRET = "test-web-secret";
     static final String REDIRECT = "http://localhost:5173/login/oauth2/code/gateway-web";
     static final String SESSION = "AUTH_SESSION";
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    private static final Pattern CSRF = Pattern.compile("name=\"_csrf\" value=\"([^\"]+)\"");
-
     @Autowired
     MockMvc mvc;
 
@@ -186,7 +182,7 @@ class OAuthFlowIntegrationTest {
         Browser browser = new Browser();
         Pkce pkce = new Pkce();
         browser.perform(authorize(pkce));
-        String csrf = browser.csrfFromPage("/register");
+        String csrf = browser.csrfToken();
         String newLoginId = "n" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
 
         MvcResult signedUp = browser.perform(post("/signup").param("loginId", newLoginId).param("password", "password1")
@@ -203,7 +199,7 @@ class OAuthFlowIntegrationTest {
     @Test
     void 가입_폼의_중복_아이디는_register_error_로() throws Exception {
         Browser browser = new Browser();
-        String csrf = browser.csrfFromPage("/register");
+        String csrf = browser.csrfToken();
         MvcResult result = browser.perform(post("/signup").param("loginId", loginId).param("password", "password1")
                 .param("_csrf", csrf));
         assertThat(location(result)).isEqualTo("register?error=duplicate");
@@ -337,16 +333,13 @@ class OAuthFlowIntegrationTest {
             return result;
         }
 
-        String csrfFromPage(String page) throws Exception {
-            MvcResult pageResult = perform(get(page));
-            String html = pageResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
-            Matcher m = CSRF.matcher(html);
-            assertThat(m.find()).as("CSRF hidden field in " + page).isTrue();
-            return m.group(1);
+        String csrfToken() throws Exception {
+            // 인증 화면 SPA 처럼 GET /csrf 의 본문에서 (세션에 둔 토큰)
+            return json(perform(get("/csrf"))).get("token").asString();
         }
 
         MvcResult submitLogin(String id, String password) throws Exception {
-            String csrf = csrfFromPage("/signin");
+            String csrf = csrfToken();
             return perform(post("/login").param("username", id).param("password", password).param("_csrf", csrf));
         }
 

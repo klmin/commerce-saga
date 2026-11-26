@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-3c 기존 /auth API 제거·스크립트 클라이언트: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-4 인증 화면 SPA: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -588,11 +588,18 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 인가 기록 보존: 들어 있는 토큰이 모두 끝나고 1일 뒤 삭제, 1시간마다(멱등 기록 정리와 같은 모양). SSO 로그아웃 때는 그 사용자의 기록을 바로 지운다(다른 화면의 refresh 도 막힘)
 - refresh token 14일. 5-1 은 갱신마다 새 토큰(회전)이었고 5-2 에서 회전을 껐다(아래). 그래서 로그인부터 14일이 절대 상한이다(ADR 0008 의 절대 30일 대신)
 - 토큰 `roles` 는 토큰을 만들 때마다 DB 에서 읽는다(refresh 때 역할 변경 반영, 정지 계정은 `invalid_grant`). principal 이름 = userId 문자열 → `sub`
-- `AUTH_ISSUER` 로컬 기본값은 `http://localhost:8086`(auth-service 직접). 인증 화면 SPA 가 생기는 5-4 에서 `http://localhost:5175` 로 바꾼다. 기존 `/auth/*` 토큰의 `iss`(`commerce-saga-auth`)와 서비스 검증 값은 5-2 에서 맞춘다
+- (5-4 에서 바꿈) `AUTH_ISSUER` 로컬 기본값은 처음 `http://localhost:8086`(auth-service 직접)이었다. 인증 화면 SPA 가 생긴 5-4 에서 `http://localhost:5175` 로 바꾼다. 기존 `/auth/*` 토큰의 `iss`(`commerce-saga-auth`)와 서비스 검증 값은 5-2 에서 맞춘다
 - 클라이언트 시크릿 k8s: 서명 키와 같은 hook Job 이 Secret `oauth-client-secrets` 를 없을 때만 만든다(설계 문서의 "k8s 스크립트" 자리. 이미 있는 Argo CD 밖 생성 방식을 그대로 씀)
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
 **순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
+
+**5-4 에서 정한 것** (추천안)
+- 인증 화면 `frontend/apps/auth`(Vite + React Router, 로컬 :5175): `/signin`·`/register` 두 화면, 그 밖은 `/signin` 으로. 서버 상태가 없어 TanStack Query·`packages/bff` 는 쓰지 않는다(공용 UI 만). auth-service 의 임시 화면(`SignInPageController`)은 지웠다
+- 폼은 fetch 가 아니라 브라우저 폼 POST(`login`·`signup`, `<base>` 기준 상대 경로). CSRF 토큰은 화면을 열 때 `GET csrf` 본문으로 받아 숨은 필드에 넣고, 받기 전에는 제출 버튼을 막는다. 오류 문구는 auth-service 가 돌려보내는 `?error`·`error=locked`·`error=duplicate|invalid`
+- `AUTH_ISSUER` 로컬 기본값을 `http://localhost:5175`(서비스·Gateway·auth-service). 인증 화면 Vite 가 SAS 경로(`/oauth2`·`/.well-known`·`/userinfo`·`/connect/logout`·`/login`·`/signup`·`/csrf`)를 auth-service 로 넘긴다(`changeOrigin: false`). 시나리오 스크립트는 auth-service(8086)를 바로 불러도 토큰 `iss` 는 설정값이라 같다
+- edge·Caddy: 인증 쪽은 SAS 경로만 auth-service, 그 밖은 인증 화면(nginx, 경로 방식 `BASE_PATH=/auth/`, `/auth` → `/auth/`). auth-service 의 관리 엔드포인트는 여전히 밖에서 열리지 않는다(화면의 SPA fallback). 이미지 `auth` 를 release·kind·compose 에 더함
+- 스크립트(`scripts/lib/auth.sh`·`smoke-bff-login.sh`)·통합 테스트도 화면과 같이 `GET csrf` 로 토큰을 받는다. CI 의 "관리 엔드포인트가 안 열림" 검사는 404 대신 메트릭 본문이 없는지로(부정 명령 `!` 는 `set -e` 에서 실패로 안 잡혀 `if … exit 1` 로)
 
 **5-3c 에서 정한 것** (사용자 결정 2026-11-26)
 - 기존 자체 JWT API(`/auth/*`: 가입·로그인·refresh 회전·재사용 탐지·로그아웃·기기 관리, `/.well-known/jwks.json`)와 refresh family(Redis)·관련 코드·테스트를 지웠다. Gateway 의 `/auth/**` 라우트·IP rate limit 도. auth-service 는 SAS(로그인 화면·토큰·JWKS `/oauth2/jwks`) + 가입 폼 + 로그인 실패 제한(그대로)

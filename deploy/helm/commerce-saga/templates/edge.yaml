@@ -49,8 +49,8 @@ spec:
 {{- $gw := dict "name" "gateway" "port" .Values.services.gateway.port }}
 {{- $sas := dict "name" "auth-service" "port" (index .Values.services "auth-service").port }}
 {{- $scgPaths := list "/api" "/oauth2/authorization" "/login/oauth2/code" "/logout" }}
-{{- /* SAS 표준 엔드포인트 + 로그인·가입 처리·화면 (설계 문서 7-1 "인증 쪽". 로그인 화면은 지금 auth-service 의 임시 화면) */}}
-{{- $sasPaths := list "/oauth2" "/.well-known" "/userinfo" "/connect/logout" "/login" "/signup" "/csrf" "/signin" "/register" }}
+{{- /* auth-service 로 보내는 경로: SAS 표준 엔드포인트 + 로그인·가입 처리 + CSRF (설계 문서 7-1 "인증 쪽"). 그 밖은 인증 화면 */}}
+{{- $sasPaths := list "/oauth2" "/.well-known" "/userinfo" "/connect/logout" "/login" "/signup" "/csrf" }}
 {{- if eq .Values.edge.mode "host" }}
 {{- range $screen := list "web" "admin" }}
 ---
@@ -79,7 +79,7 @@ spec:
         - { name: {{ $screen }}, port: 80 }
 {{- end }}
 ---
-# auth 호스트: SAS(auth-service). 로그인·가입 화면도 지금은 auth-service 의 임시 화면(/signin·/register) → 인증 화면 SPA 는 5-4
+# auth 호스트: SAS 경로 → auth-service, 그 밖(/signin·/register·정적 파일) → 인증 화면 (설계 문서 7-1 "인증 쪽")
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -89,7 +89,7 @@ spec:
     - name: {{ .Release.Name }}-edge
   hostnames: [{{ include "commerce.hostOf" $urls.auth | quote }}]
   rules:
-    # SAS·로그인·가입에 필요한 경로만 (설계 문서 7-1 "인증 쪽"). 관리 엔드포인트(/actuator) 등 그 밖은 열지 않는다(404)
+    # SAS·로그인·가입 처리에 필요한 경로만 auth-service 로 (설계 문서 7-1 "인증 쪽")
     - matches:
         {{- range $sasPaths }}
         - path: { type: PathPrefix, value: {{ . }} }
@@ -99,6 +99,11 @@ spec:
           requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
       backendRefs:
         - { name: {{ $sas.name }}, port: {{ $sas.port }} }
+    # 그 밖 → 인증 화면. auth-service 의 관리 엔드포인트(/actuator 등)는 여기로 와 화면의 SPA fallback 이 된다(열리지 않는다)
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - { name: auth, port: 80 }
 {{- else }}
 ---
 # 경로 방식: 한 호스트에 앞 경로로 나눈다 (설계 문서 7-4 "경로 방식 프록시 규칙"). 가장 긴 경로가 먼저 맞는다
@@ -113,7 +118,7 @@ spec:
   hostnames: [{{ include "commerce.hostOf" . | quote }}]
   {{- end }}
   rules:
-    # 1. /auth/<SAS·로그인·가입 경로> → SAS. /auth 를 떼고 X-Forwarded-Prefix: /auth (SAS 가 만드는 주소·쿠키 Path 에 붙는다).
+    # 1. /auth/<SAS 경로> → SAS. /auth 를 떼고 X-Forwarded-Prefix: /auth (SAS 가 만드는 주소·쿠키 Path 에 붙는다).
     #    정해진 경로만 넘긴다: 관리 엔드포인트(/auth/actuator 등)는 열지 않는다
     {{- range $sasPaths }}
     - matches:
@@ -128,6 +133,25 @@ spec:
       backendRefs:
         - { name: {{ $sas.name }}, port: {{ $sas.port }} }
     {{- end }}
+    # 1-1. /auth → /auth/ (인증 화면의 <base href> 가 /auth/ 라 끝 / 가 있어야 자산이 맞는다)
+    - matches:
+        - path: { type: Exact, value: /auth }
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path: { type: ReplaceFullPath, replaceFullPath: /auth/ }
+            statusCode: 302
+    # 1-2. /auth/… 그 밖(/auth/signin·/auth/register·정적 파일) → 인증 화면. /auth 를 뗀다
+    - matches:
+        - path: { type: PathPrefix, value: /auth }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
+        - type: RequestHeaderModifier
+          requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
+      backendRefs:
+        - { name: auth, port: 80 }
     # 2. Gateway 경로 → Spring Gateway (그대로)
     - matches:
         {{- range $scgPaths }}

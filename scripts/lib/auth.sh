@@ -5,7 +5,7 @@
 #   curl -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" ...   # 관리자로
 #
 # SAS(auth-service)의 스크립트용 공개 클라이언트(scripts: 시크릿 없음, PKCE, 루프백 redirect, 후속 5-3c)로 인가 코드 흐름을
-# curl 로 돈다: 인가 요청 → 로그인 화면(/signin) → 폼 로그인 → 인가 코드(redirect 주소에서 읽음) → 토큰 교환.
+# curl 로 돈다: 인가 요청 → (로그인 화면 대신) GET csrf → 폼 로그인 → 인가 코드(redirect 주소에서 읽음) → 토큰 교환.
 # 브라우저 앱(Gateway BFF)과 같은 SAS 로그인이고 같은 서명 키·issuer 의 토큰이다.
 #
 # 사용자는 auth-service 의 개발용 시드(db/dev-seed): id 1~4 = user1~user4, 100 = admin, 비밀번호 local-dev-pass.
@@ -32,9 +32,9 @@ _query_param() { # url name
   printf '%s' "$1" | sed -n "s/.*[?&]$2=\([^&]*\).*/\1/p"
 }
 
-# SAS 화면(폼)의 CSRF 토큰 (세션은 쿠키 파일에)
-_csrf_of() { # jar url
-  curl -s -c "$1" -b "$1" "$2" | sed -n 's/.*name="_csrf" value="\([^"]*\)".*/\1/p' | head -1
+# SAS 세션의 CSRF 토큰 (GET csrf 본문, 인증 화면 SPA 와 같은 방법. 세션은 쿠키 파일에)
+_csrf_of() { # jar authBaseUrl
+  curl -s -c "$1" -b "$1" "$2/csrf" | sed -nE 's/.*"token":"([^"]+)".*/\1/p'
 }
 
 # 인가 코드 흐름 한 번 → access token
@@ -47,9 +47,9 @@ user_token() { # loginId [password]
   authorize="$AUTH_URL/oauth2/authorize?response_type=code&client_id=$SCRIPTS_CLIENT_ID&scope=openid&state=$state"
   authorize="$authorize&redirect_uri=$SCRIPTS_REDIRECT_URI&code_challenge=$challenge&code_challenge_method=S256"
 
-  # 로그인 안 된 브라우저 → 로그인 화면. 화면의 폼에서 CSRF 토큰을 읽는다
+  # 로그인 안 된 브라우저 → 로그인 화면 주소(인증 화면 SPA, 열지 않는다). 그 기준 주소의 csrf 로 토큰을 받는다
   signin=$(curl -s -c "$jar" -b "$jar" -H 'Accept: text/html' -o /dev/null -w '%{redirect_url}' "$authorize")
-  csrf=$(_csrf_of "$jar" "$signin")
+  csrf=$(_csrf_of "$jar" "${signin%%/signin*}")
   if [ -z "$csrf" ]; then
     echo "FAIL: 로그인 화면을 열지 못했다 ($AUTH_URL, 인가 요청 → '$signin')" >&2
     rm -f "$jar"; return 1
@@ -79,11 +79,11 @@ user_token() { # loginId [password]
   printf '%s' "$token"
 }
 
-# 가입 폼(SAS 의 /register → POST /signup). 성공이면 0, 같은 아이디가 있으면 2
+# 가입 폼(인증 화면 /register 가 보내는 POST /signup). 성공이면 0, 같은 아이디가 있으면 2
 signup_user() { # loginId password
   local jar csrf location
   jar=$(mktemp)
-  csrf=$(_csrf_of "$jar" "$AUTH_URL/register")
+  csrf=$(_csrf_of "$jar" "$AUTH_URL")
   location=$(curl -s -c "$jar" -b "$jar" -o /dev/null -w '%{redirect_url}' \
     --data-urlencode "loginId=$1" --data-urlencode "password=$2" --data-urlencode "_csrf=$csrf" "$AUTH_URL/signup")
   rm -f "$jar"
