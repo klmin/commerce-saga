@@ -54,7 +54,8 @@ groups:
           description: "원인 확인 후 scripts/dlt.sh replay 로 재처리 (ADR 0012, 시나리오 6)"
 
       - alert: ConsumerLagHigh
-        expr: sum by (consumergroup, topic) (kafka_consumergroup_lag) > 20
+        # kafka_consumergroup_lag 는 한 번도 커밋하지 않은 파티션을 -1 로 내보내 합이 실제보다 작아진다. 그 파티션을 뺀 _sum 을 쓴다
+        expr: sum by (consumergroup, topic) (kafka_consumergroup_lag_sum) > 20
         for: 30s
         labels: {severity: warning}
         annotations:

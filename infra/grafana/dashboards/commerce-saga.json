@@ -212,6 +212,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "컨슈머 lag (그룹별)",
+      "description": "kafka-exporter 는 그룹이 아직 한 번도 커밋하지 않은 파티션(메시지가 안 온 파티션)의 lag 을 -1 로 내보낸다. 그래서 파티션별 kafka_consumergroup_lag 를 더하면 -2, -4 처럼 음수가 나온다. 그 파티션을 뺀 kafka_consumergroup_lag_sum 을 쓴다",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -240,7 +241,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (consumergroup) (kafka_consumergroup_lag)",
+          "expr": "sum by (consumergroup) (kafka_consumergroup_lag_sum)",
           "legendFormat": "{{consumergroup}}"
         }
       ]
