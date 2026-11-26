@@ -282,21 +282,23 @@ jobs:
           ! grep -q '^INVALID' <<< "$logs" || { echo "JSON 이 아닌 본문이 왔다"; exit 1; }
           grep -q "${REVISION:0:7}" <<< "$line" || { echo "알림의 revision 이 $REVISION 이 아님"; exit 1; }
 
-      # edge(경로 방식, deploy/argocd/apps/values.yaml): Envoy 의 Service 를 로컬 18080 으로 연결한다(kind 에는 LoadBalancer 가 없다).
-      # 차트가 공개 주소 http://localhost:18080 으로 SAS issuer·redirect URI 를 만들었다 → 브라우저처럼 로그인 한 바퀴
+      # edge(경로 방식, deploy/argocd/apps/values.yaml): Envoy 의 Service 를 로컬 80 으로 연결한다(kind 에는 LoadBalancer 가 없다).
+      # 80 이어야 한다: Envoy 가 붙이는 X-Forwarded-Proto 를 Spring 이 읽으면 X-Forwarded-Port 가 없을 때 포트를 스킴 기본값으로
+      # 되돌려, 다른 포트로 열면 SAS 가 돌려보내는 주소에서 포트가 빠진다(실제 배포는 80·443 이라 상관없다). 80 은 sudo 로 연다
+      # 차트가 공개 주소 http://localhost 로 SAS issuer·redirect URI 를 만들었다 → 브라우저처럼 로그인 한 바퀴
       - name: edge 로 화면·로그인 (경로 방식)
         run: |
           svc=$(kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o name | head -1)
           [ -n "$svc" ] || { echo "edge Service 없음"; exit 1; }
-          kubectl -n envoy-gateway-system port-forward "$svc" 18080:80 > /dev/null 2>&1 &
-          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:18080/ && break; sleep 1; done
+          sudo -E env "PATH=$PATH" kubectl --kubeconfig "$HOME/.kube/config" -n envoy-gateway-system port-forward "$svc" 80:80 > /dev/null 2>&1 &
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost/ && break; sleep 1; done
           # 사용자 화면 /, 관리자 화면 /admin/ (앞 경로를 떼고 넘김, <base href> 는 /admin/), /admin → /admin/
-          curl -sf http://localhost:18080/orders/1 | grep -q '<base href="/" />'
-          curl -sf http://localhost:18080/admin/products/1 | grep -q '<base href="/admin/" />'
-          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost:18080/admin)" = http://localhost:18080/admin/ ]
+          curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
+          curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
+          [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
           # SAS 는 /auth 아래 (issuer 에 경로가 붙는다)
-          curl -sf http://localhost:18080/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost:18080/auth"'
-          BASE_URL=http://localhost:18080 bash scripts/smoke-bff-login.sh
+          curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
+          BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
 
       - name: port-forward
         run: bash scripts/k8s-port-forward.sh
