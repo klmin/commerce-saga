@@ -5,6 +5,7 @@ import com.klmin.commerce.orderservice.order.application.port.out.LoadOrderPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderEventPort;
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
 import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPort;
+import com.klmin.commerce.orderservice.order.application.port.out.SagaOutcomePort;
 import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
 import com.klmin.commerce.orderservice.order.domain.SagaAction;
@@ -38,10 +39,11 @@ class SagaTimeoutService implements HandleSagaTimeoutUseCase {
     private final Clock clock;
 
     SagaTimeoutService(LoadOrderPort loadOrderPort, SaveOrderPort saveOrderPort, OrderSagaPort sagaPort,
-                       SagaCommandPort commandPort, OrderEventPort eventPort, SagaTimeoutProperties properties,
+                       SagaCommandPort commandPort, OrderEventPort eventPort, SagaOutcomePort outcomePort,
+                       SagaTimeoutProperties properties,
                        Clock clock) {
         this.sagaPort = sagaPort;
-        this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort);
+        this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort, outcomePort);
         this.properties = properties;
         this.clock = clock;
     }

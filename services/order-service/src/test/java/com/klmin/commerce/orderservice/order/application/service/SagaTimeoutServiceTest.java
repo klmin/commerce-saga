@@ -30,10 +30,11 @@ class SagaTimeoutServiceTest {
     private final InMemoryOrders orders = new InMemoryOrders();
     private final InMemorySagas sagas = new InMemorySagas();
     private final Recording sent = new Recording();
+    private final InMemorySagaOutcomes outcomes = new InMemorySagaOutcomes();
     private final OrderService orderService =
             new OrderService(orders, orders, sagas, sent, sent, new InMemoryProcessedMessages(),
-                    new InMemoryIdempotencyKeys(), new InMemoryCart(), clock);
-    private final SagaTimeoutService timeouts = new SagaTimeoutService(orders, orders, sagas, sent, sent,
+                    new InMemoryIdempotencyKeys(), new InMemoryCart(), outcomes, clock);
+    private final SagaTimeoutService timeouts = new SagaTimeoutService(orders, orders, sagas, sent, sent, outcomes,
             new SagaTimeoutProperties(STEP, 1, 2, 100), clock);
 
     private Order place(long pointAmount) {
@@ -80,6 +81,9 @@ class SagaTimeoutServiceTest {
         assertThat(orders.store.get(order.id()).cancelReason())
                 .isEqualTo("timeout: no reply in RESERVING_STOCK after 1 resends");
         assertThat(sent.log).last().isEqualTo("cancelled:" + order.id());
+        // 시작부터 보상이 끝날 때까지: 재전송 대기 + 포기 대기
+        assertThat(outcomes.recorded).containsExactly(
+                new InMemorySagaOutcomes.Outcome(SagaState.CANCELLED, STEP.multipliedBy(2)));
     }
 
     @Test
