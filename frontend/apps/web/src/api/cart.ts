@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { api } from "@/lib/api";
+import { api } from "@commerce/bff/api";
 
 const item = z.object({
   productId: z.number().int(),

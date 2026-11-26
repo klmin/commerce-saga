@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Skeleton } from "@commerce/ui/skeleton";
+import { Skeleton } from "./skeleton";
 
 /**
  * 불러오는 동안 보여 줄 틀. 화면 읽기 프로그램에는 "불러오는 중..." 을 알리고,

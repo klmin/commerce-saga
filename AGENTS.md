@@ -9,7 +9,7 @@ AI 코딩 도구(Claude, Codex 등)가 이 저장소에서 작업·리뷰할 때
 - Java 25, Spring Boot 4.2, Gradle Kotlin DSL 멀티모듈 모노레포. 인증은 Spring Security (OAuth2 Resource Server, JWT RS256) + Redis (후속 2)
 - PostgreSQL(서비스별 DB), Flyway, Kafka(KRaft), Spring for Apache Kafka, Debezium(Kafka Connect, 3단계)
 - 테스트: JUnit 5, ArchUnit, Testcontainers(Postgres, Kafka)
-- 프론트엔드: 화면 SPA 는 Vite + React 19 / TypeScript / Tailwind 4 / shadcn/ui / React Router / TanStack Query, Vitest·Playwright (`frontend/` pnpm workspace: `apps/*`, `packages/ui`, 명령은 frontend/README.md, ADR 0017). Next 16 화면(`frontend/next`)은 5-5 까지 남긴다. Next 를 고칠 때는 `frontend/next/node_modules/next/dist/docs/` 를 먼저 읽는다
+- 프론트엔드: 화면 SPA 는 Vite + React 19 / TypeScript / Tailwind 4 / shadcn/ui / React Router / TanStack Query, Vitest·Playwright (`frontend/` pnpm workspace: `apps/*`, `packages/ui`, 명령은 frontend/README.md, ADR 0017). Next 16 화면(`frontend/next`)은 5-3b 에서 지운다. Next 를 고칠 때는 `frontend/next/node_modules/next/dist/docs/` 를 먼저 읽는다
 
 ## 구성
 
@@ -20,8 +20,10 @@ libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 �
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 frontend/apps/web/         사용자 화면 SPA (Vite + React). 토큰을 모르고 같은 출처 /api 를 BFF 세션 쿠키로 부른다 (ADR 0017)
+frontend/apps/admin/       관리자 화면 SPA (상품 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
 frontend/packages/ui/      화면 SPA 공용 shadcn/ui 컴포넌트·테마
-frontend/next/             Next.js 화면 (5-5 까지, ADR 0011). 관리자 화면이 SPA 로 옮겨지면 지운다
+frontend/packages/bff/     화면 SPA 공용 Gateway(BFF) 호출·로그인 확인·로그아웃
+frontend/next/             Next.js 화면 (5-3b 에서 지운다, ADR 0011)
 build-logic/               공통 빌드 설정 (convention plugin)
 infra/                     docker-compose (Postgres, Kafka, Kafka UI, Kafka Connect, Redis, Alloy·Tempo·Loki·Prometheus·Grafana)
 scripts/                   커넥터 등록, 부하 생성, 장애 주입, 스모크 테스트

@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@commerce/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import type { ReactNode } from "react";
 
 /** 화면 한 장의 틀 (가운데 정렬된 본문) */

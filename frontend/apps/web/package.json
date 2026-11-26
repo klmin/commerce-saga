@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@commerce/bff": "workspace:*",
     "@commerce/ui": "workspace:*",
     "@tanstack/react-query": "^5.108.4",
     "cn": "^0.5.2",

@@ -26,8 +26,8 @@ export default defineConfig([
     },
   },
   {
-    // shadcn 컴포넌트는 variants 같은 값도 함께 내보낸다
-    files: ["packages/ui/src/**/*.tsx"],
+    // 공용 패키지는 컴포넌트와 함께 값·훅도 내보낸다(shadcn variants, 세션 훅). 앱의 빠른 새로고침 경계가 아니다
+    files: ["packages/*/src/**/*.tsx"],
     rules: { "react-refresh/only-export-components": "off" },
   },
   {

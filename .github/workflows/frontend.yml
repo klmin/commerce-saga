@@ -2,7 +2,7 @@ name: frontend
 
 # 화면. 두 갈래 (ADR 0017):
 # - web: 새 화면 SPA workspace(frontend/apps/*, packages/*, pnpm). 형식·lint·타입·단위 테스트·빌드
-# - next: 5-5 까지 남기는 Next 화면(frontend/next, npm, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지
+# - next: 5-3b 에서 지우는 Next 화면(frontend/next, npm, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지
 # 백엔드 전체를 띄우는 브라우저 e2e(Playwright)는 browser-e2e 워크플로
 on:
   push:

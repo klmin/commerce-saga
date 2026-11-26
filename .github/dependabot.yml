@@ -23,7 +23,7 @@ updates:
       dev-tools:
         dependency-type: development
 
-  # Next 화면 (frontend/next, 5-5 까지 남김)
+  # Next 화면 (frontend/next, 5-3b 에서 지움)
   - package-ecosystem: npm
     directory: /frontend/next
     schedule:
