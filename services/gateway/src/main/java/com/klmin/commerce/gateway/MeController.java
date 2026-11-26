@@ -18,6 +18,13 @@ import java.util.List;
 @RestController
 class MeController {
 
+    private final String devicesUrl;
+
+    MeController(BffProperties properties) {
+        // 로그인 기기 화면 (인증 화면 /devices, 후속 5-6). SSO 로그인돼 있으면 바로, 아니면 로그인을 거쳐 연다
+        this.devicesUrl = properties.issuer() + "/sessions/login";
+    }
+
     @GetMapping("/api/me")
     Me me(Authentication authentication) {
         List<String> roles = authentication.getAuthorities().stream()
@@ -27,7 +34,7 @@ class MeController {
                 .distinct()
                 .sorted()
                 .toList();
-        return new Me(userId(authentication.getName()), roles);
+        return new Me(userId(authentication.getName()), roles, devicesUrl);
     }
 
     /** 토큰의 sub 는 auth-service 가 정한 long userId 다. 아니면 이 Gateway 가 받을 토큰이 아니므로 401 */
@@ -39,6 +46,7 @@ class MeController {
         }
     }
 
-    record Me(long userId, List<String> roles) {
+    /** devicesUrl: 로그인 기기 화면을 여는 주소. 화면은 SAS 주소를 모르므로 Gateway 가 알려 준다 */
+    record Me(long userId, List<String> roles, String devicesUrl) {
     }
 }

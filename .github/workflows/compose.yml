@@ -46,6 +46,9 @@ jobs:
           curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
           curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
           curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'
+          # 로그인 기기 API 는 auth-service 로(로그인 안 했으면 401), 기기 화면은 인증 화면
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost/auth/sessions)" = 401 ]
+          curl -sf http://localhost/auth/devices | grep -q '<base href="/auth/" />'
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/auth)" = http://localhost/auth/ ]
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
           curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
@@ -78,6 +81,7 @@ jobs:
           curl -sf http://admin.localhost/products/1 | grep -q '<base href="/" />'
           curl -sf http://auth.localhost/.well-known/openid-configuration | grep -q '"issuer":"http://auth.localhost"'
           curl -sf http://auth.localhost/signin | grep -q '<base href="/" />'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://auth.localhost/sessions)" = 401 ]
           if curl -s http://auth.localhost/actuator/prometheus | grep -q jvm_; then echo "관리 엔드포인트가 밖에 열림: http://auth.localhost/actuator/prometheus" >&2; exit 1; fi
           # 관리자 호스트에서 로그인을 시작하면 gateway-admin
           curl -s -o /dev/null -w '%{redirect_url}' http://admin.localhost/oauth2/authorization/auto | grep -q 'client_id=gateway-admin'

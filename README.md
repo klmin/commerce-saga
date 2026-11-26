@@ -125,7 +125,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 6 | [poison message → DLT 격리(파티션 안 막힘) → 원인 확인 → 재처리 한 번만 반영](docs/scenarios/06-poison-message-dlt.md) | 통과 (로컬, CI `e2e`) |
 | 7 | [relay 비교: 스케줄러 vs Debezium, Saga 완료 지연·DB 부하](docs/scenarios/07-relay-comparison.md) | 측정 (로컬, CI `e2e`) |
 | 8 | [알림 서비스 다운 → 주문은 정상 완료, 복구 후 밀린 이벤트 처리](docs/scenarios/08-notification-down.md) | 통과 (CI `e2e`) |
-| 9 | [인증: refresh token 회전, 옛 토큰 재사용 → 그 기기 세션 폐기, 로그인 잠금](docs/scenarios/09-auth-refresh-reuse.md), JWT 로 바꾼 뒤 남의 주문 404·Gateway·서비스 이중 검증·rate limit | 통과 (로컬, CI `e2e`) |
+| 9 | [인증](docs/scenarios/09-auth-refresh-reuse.md): (9a~9e 자체 refresh 회전은 후속 5 에서 지움 → 시나리오 19) JWT 로 바꾼 뒤 남의 주문 404·Gateway·서비스 이중 검증·rate limit | 통과 (로컬, CI `e2e`) |
 | 10 | [주문 Idempotency-Key: 같은 키 재요청·동시 5번 → 주문 1건, 다른 본문 422 / 내 주문·결제 목록](docs/scenarios/10-order-idempotency.md) | 통과 (CI `e2e`) |
 | 11 | [분산 트레이싱: Saga 한 건이 서비스 다섯 개를 지나도 trace 하나, 주문 id 로 검색](docs/scenarios/11-distributed-tracing.md) | 통과 (로컬, CI `e2e`) |
 | 12 | [메트릭·경보: 깨진 메시지·PG 지연을 넣으면 DLT·결제 UNKNOWN·재전송 포기 경보가 firing](docs/scenarios/12-metrics-alerts.md) | 통과 (로컬, CI `e2e`) |
@@ -135,6 +135,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 | 16 | [상품 테이블 CDC: products 변경이 product.cdc.products 로 (키 = 상품 id, 변경 후 행, 헤더 __lsn)](docs/scenarios/16-product-cdc.md) | CI `e2e`·`k8s` |
 | 17 | [상품 검색: 가격 변경·판매 중지가 몇 초 안에 검색에 반영, 옛 변경 무시, ES 중단 중 검색만 503 → 재개 후 따라잡음](docs/scenarios/17-product-search.md) | CI `e2e`·`k8s` |
 | 18 | [인기 상품 재고 락: 한 상품에 몰린 예약은 약 150건/s 에서 막히고 인스턴스를 늘려도 그대로(락 대기), 상품이 나뉘면 늘어남 → 비관적 락 유지](docs/scenarios/18-hot-stock-lock.md) | 측정 (로컬) |
+| 19 | [SSO·로그아웃(이 기기만)·로그인 기기(다른 기기 로그아웃 → 그 기기 refresh 거절·로그인 화면)·클라이언트 시크릿 교체](docs/scenarios/19-sso-logout-devices.md) (시나리오 9 의 9a~9e 대체) | CI `browser-e2e`·`compose`·`k8s`, 통합 테스트 |
 
 ## 설계 결정 (ADR)
 

@@ -12,9 +12,16 @@ const sas = {
   changeOrigin: false,
 };
 const proxy = Object.fromEntries(
-  ["/oauth2", "/.well-known", "/userinfo", "/connect/logout", "/login", "/signup", "/csrf"].map(
-    (path) => [path, sas],
-  ),
+  [
+    "/oauth2",
+    "/.well-known",
+    "/userinfo",
+    "/connect/logout",
+    "/login",
+    "/signup",
+    "/csrf",
+    "/sessions",
+  ].map((path) => [path, sas]),
 );
 
 export default defineConfig({

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { DEV_PASSWORD, login } from "./helpers";
+import { DEV_PASSWORD, login, signUpFresh } from "./helpers";
 
 test("로그인하지 않으면 SAS 로그인 화면으로, 로그인하면 가려던 화면으로 돌아온다", async ({
   page,
@@ -49,4 +49,28 @@ test("가입하면 바로 로그인되고 가입 축하 포인트 1,000P 가 생
     await page.reload();
     await expect(page.getByText("1,000P", { exact: true })).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 20_000 });
+});
+
+test("로그인 기기: 다른 브라우저를 로그아웃하면 그 브라우저의 SSO 세션이 끝난다 (후속 5-6)", async ({
+  page,
+  browser,
+}) => {
+  // 다른 시나리오의 로그인과 섞이지 않게 새 사용자로
+  const loginId = await signUpFresh(page);
+  const other = await (await browser.newContext()).newPage();
+  await login(other, "/", loginId, "e2e-password");
+
+  // 사용자 화면 헤더 → 인증 화면의 기기 목록 (SSO 세션이 있어 로그인 화면 없이)
+  await page.getByRole("link", { name: "로그인 기기" }).click();
+  await expect(page).toHaveURL(/\/devices$/);
+  const devices = page.getByRole("list", { name: "로그인 기기" });
+  await expect(devices.getByRole("listitem")).toHaveCount(2);
+  await expect(devices.getByText("이 기기")).toBeVisible();
+
+  await page.getByRole("button", { name: "다른 기기 모두 로그아웃" }).click();
+  await expect(devices.getByRole("listitem")).toHaveCount(1);
+
+  // 로그아웃된 브라우저: SSO 세션이 없어 기기 화면을 열면 로그인 화면으로
+  await other.getByRole("link", { name: "로그인 기기" }).click();
+  await expect(other).toHaveURL(/\/signin/);
 });
