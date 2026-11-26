@@ -40,6 +40,8 @@ commerceValues:
         # 개발용 시드 사용자(admin/local-dev-pass 등, 저장소에 공개)를 넣지 않는다. 인터넷에 열린 화면에서 관리자 로그인이 되면
         # 누구나 결제 장애를 주입할 수 있다. 사용자는 회원가입으로, 관리자는 DB 에서 따로 역할을 준다
         AUTH_FLYWAY_LOCATIONS: classpath:db/migration
+        # 시나리오 스크립트용 공개 클라이언트(scripts)도 등록하지 않는다 (시드 사용자가 없고 쓸 곳이 없다, 후속 5-3c)
+        AUTH_SCRIPTS_CLIENT_ENABLED: "false"
     gateway:
       env:
         # EKS Pod IP 는 VPC 대역(10/8, 172.16/12, 192.168/16 중 하나). Spring Gateway 는 내부망에만 있다

@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-3d compose 전체 실행·Caddy: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-3c 기존 /auth API 제거·스크립트 클라이언트: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -593,6 +593,12 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
 **순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
+
+**5-3c 에서 정한 것** (사용자 결정 2026-11-26)
+- 기존 자체 JWT API(`/auth/*`: 가입·로그인·refresh 회전·재사용 탐지·로그아웃·기기 관리, `/.well-known/jwks.json`)와 refresh family(Redis)·관련 코드·테스트를 지웠다. Gateway 의 `/auth/**` 라우트·IP rate limit 도. auth-service 는 SAS(로그인 화면·토큰·JWKS `/oauth2/jwks`) + 가입 폼 + 로그인 실패 제한(그대로)
+- 시나리오 스크립트의 토큰: SAS 에 **스크립트용 공개 클라이언트 `scripts`**(시크릿 없음, PKCE, 루프백 redirect `http://127.0.0.1/scripts/callback`, 인가 코드만·refresh 없음 = 네이티브 앱 방식 RFC 8252). `scripts/lib/auth.sh` 가 curl 로 인가 요청 → 로그인 폼 → 코드(redirect 주소에서 읽음) → 토큰 교환. 서비스는 그대로 Bearer 로 부른다. 시드 사용자가 없는 EKS 는 끈다(`AUTH_SCRIPTS_CLIENT_ENABLED=false`). 켰다 끄면 DB 에 남은 행은 직접 지운다(경고 로그)
+- 시나리오 9 의 인증 부분(9a~9e, `smoke-auth.sh`)은 지우고 문서에 기록으로 남김. 9f~9i(`smoke-gateway.sh`)는 그대로. 시나리오 13 은 SAS 가입 폼 + 스크립트 클라이언트로
+- 리뷰 지침(AGENTS.md)의 인증 항목을 SAS·BFF 기준으로 바꿨다
 
 **5-3d 에서 정한 것** (추천안)
 - 전체 실행은 인프라 compose 위에 얹는 파일(`infra/docker-compose.app.yml`). 서비스 이미지는 미리 만든 jar(`./gradlew bootJar`) + `deploy/docker/service.Dockerfile`, 화면은 `frontend/Dockerfile`. 밖으로는 Caddy(:80) 하나, 서비스·Gateway·SAS 는 compose 네트워크 안

@@ -37,11 +37,10 @@ import org.springframework.session.web.http.DefaultCookieSerializer;
 import java.util.Map;
 
 /**
- * OIDC 인가 서버(Spring Authorization Server)와 로그인 화면의 보안 설정 (ADR 0017, 설계 문서 4·7절). 필터 체인 둘:
+ * OIDC 인가 서버(Spring Authorization Server)와 로그인 화면의 보안 설정 (ADR 0017, 설계 문서 4·7절). 필터 체인 둘 (순서 1·3. 2번이던 기존 자체 JWT API 는 후속 5-3c 에서 지웠다):
  * <ol>
  *   <li><b>SAS 표준 엔드포인트</b> ({@code /oauth2/*}, {@code /.well-known/openid-configuration}, {@code /userinfo},
  *       {@code /connect/logout}). 로그인이 안 된 브라우저는 로그인 화면 {@code /signin} 으로</li>
- *   <li>(2번은 기존 자체 JWT API, {@link SecurityConfig})</li>
  *   <li><b>로그인 화면·처리</b>: 화면 {@code /signin}·{@code /register}, 처리 {@code POST /login}·{@code POST /signup},
  *       CSRF 토큰 {@code GET /csrf}. SSO 로그인 세션(Spring Session Redis, 쿠키 {@code AUTH_SESSION})에 로그인 상태와
  *       CSRF 토큰을 둔다</li>

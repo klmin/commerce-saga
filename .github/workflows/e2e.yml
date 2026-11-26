@@ -40,8 +40,6 @@ jobs:
       # payment-service 결제 보정(PG 조회·환불) 주기. 시나리오 2 가 빨리 끝나도록
       PAYMENT_RECONCILE_INTERVAL: 1s
       SAGA_TIMEOUT_SCAN_INTERVAL: 1s
-      # auth-service 동시 refresh 유예(ADR 0008). 시나리오 9 가 재사용 탐지까지 몇 초 안에 보이도록 (기본 20s)
-      AUTH_REFRESH_GRACE: 2s
       # Gateway 사용자별 rate limit 을 낮춰 시나리오 9 가 429 를 볼 수 있게 (기본 초당 20, 버스트 40)
       GATEWAY_USER_RATE: 5
       GATEWAY_USER_BURST: 10
@@ -92,10 +90,6 @@ jobs:
       - name: 상품 테이블 CDC 커넥터 등록
         if: matrix.relay == 'scheduler'
         run: CONNECTORS=product-cdc bash scripts/register-connectors.sh
-
-      # 가입·로그인·refresh 회전·재사용 탐지·로그아웃·로그인 잠금
-      - name: 인증, refresh token 재사용 탐지 (시나리오 9)
-        run: GRACE_WAIT=3 bash scripts/smoke-auth.sh
 
       # notification-service 는 일부러 띄우지 않는다 (알림 장애 중에도 주문이 완료되는지)
       - name: 스모크 테스트

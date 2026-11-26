@@ -61,6 +61,51 @@ class RegisteredClientSync implements ApplicationRunner {
                 sync(clientId, entry.getValue(), secret);
             }
         }
+        OAuthClientProperties.ScriptsClient scripts = properties.scriptsClient();
+        if (scripts.enabled()) {
+            try {
+                syncScripts(scripts.redirectUri());
+            } catch (DuplicateKeyException e) {
+                syncScripts(scripts.redirectUri());
+            }
+        } else if (repository.findByClientId(OAuthClientProperties.ScriptsClient.ID) != null) {
+            // 설정에 없는 클라이언트는 지우지 않는다(위 주석). 켰다가 끈 환경이면 직접 지운다
+            log.warn("OAuth 클라이언트 {} 가 DB 에 남아 있다(설정은 꺼짐). 쓰지 않으면 oauth2_registered_client 에서 지운다",
+                    OAuthClientProperties.ScriptsClient.ID);
+        }
+    }
+
+    /**
+     * 시나리오 스크립트용 공개 클라이언트 (시크릿 없음, PKCE 필수, 인가 코드만). refresh token 은 주지 않는다(SAS 는 공개
+     * 클라이언트에 refresh 를 주지 않는다): 스크립트는 토큰이 끝나면 다시 로그인한다
+     */
+    void syncScripts(String redirectUri) {
+        String clientId = OAuthClientProperties.ScriptsClient.ID;
+        if (redirectUri == null || redirectUri.isBlank()) {
+            throw new IllegalStateException("클라이언트 " + clientId + " 의 redirect URI 가 없다");
+        }
+        RegisteredClient existing = repository.findByClientId(clientId);
+        RegisteredClient desired = RegisteredClient.withId(existing != null ? existing.getId() : clientId)
+                .clientId(clientId)
+                .clientName(clientId)
+                .clientIdIssuedAt(existing != null ? existing.getClientIdIssuedAt() : clock.instant())
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri(redirectUri.strip())
+                .scope(OidcScopes.OPENID)
+                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).requireProofKey(true).build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(properties.accessTokenTtl())
+                        .idTokenSignatureAlgorithm(SignatureAlgorithm.RS256)
+                        .build())
+                .build();
+        if (existing == null) {
+            repository.save(desired);
+            log.info("OAuth 클라이언트 등록: {} (공개, 스크립트용) redirect={}", clientId, redirectUri);
+        } else if (!sameSettings(existing, desired) || existing.getClientSecret() != null) {
+            repository.save(desired);
+            log.info("OAuth 클라이언트 갱신: {} (공개, 스크립트용) redirect={}", clientId, redirectUri);
+        }
     }
 
     void sync(String clientId, OAuthClientProperties.Client config, String rawSecret) {

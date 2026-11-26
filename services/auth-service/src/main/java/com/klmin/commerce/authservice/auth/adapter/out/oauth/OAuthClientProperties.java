@@ -13,14 +13,28 @@ import java.util.Map;
  * @param secretDevDir      시크릿을 외부에서 주지 않았을 때 쓰는 로컬 개발용 파일 디렉터리
  *                          ({@code oauth-client-<id>.secret}). 비우면(compose·k8s) 시크릿이 없을 때 기동 실패
  * @param accessTokenTtl    access token 수명 (ADR 0008 과 같은 15분)
- * @param refreshTokenTtl   refresh token 수명. 갱신할 때마다 새 refresh token(회전)이라 쓰는 동안 연장된다
+ * @param refreshTokenTtl   refresh token 수명 (로그인부터, 회전하지 않는다)
+ * @param scriptsClient     시나리오 스크립트(curl)가 사용자 토큰을 받는 CLI 클라이언트
  */
 @ConfigurationProperties("auth.oauth")
 record OAuthClientProperties(Map<String, Client> clients, String secretDevDir, Duration accessTokenTtl,
-                             Duration refreshTokenTtl) {
+                             Duration refreshTokenTtl, ScriptsClient scriptsClient) {
 
     OAuthClientProperties {
         clients = clients == null ? Map.of() : Map.copyOf(clients);
+        scriptsClient = scriptsClient == null ? new ScriptsClient(false, null) : scriptsClient;
+    }
+
+    /**
+     * 시나리오 스크립트용 공개 클라이언트 {@value #ID} (후속 5-3c). 시크릿 없이 PKCE 로 인가 코드 흐름을 돌아 사용자 토큰을 받는다
+     * (네이티브 앱 방식, RFC 8252). redirect URI 는 루프백이고 실제로 받지 않는다: 스크립트가 리다이렉트 주소에서 코드를 읽는다.
+     * 사용자의 아이디·비밀번호가 있어야 하므로 개발용 시드 사용자가 없는 환경(EKS)에서는 끈다
+     *
+     * @param enabled     등록할지
+     * @param redirectUri 루프백 콜백 (정확히 일치)
+     */
+    record ScriptsClient(boolean enabled, String redirectUri) {
+        static final String ID = "scripts";
     }
 
     /**

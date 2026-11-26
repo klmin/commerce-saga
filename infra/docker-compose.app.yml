@@ -208,7 +208,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       OAUTH_CLIENT_SECRET_DEV_DIR: /secrets
-      AUTH_SERVICE_URL: http://auth-service:8086
       ORDER_SERVICE_URL: http://order-service:8081
       INVENTORY_SERVICE_URL: http://inventory-service:8082
       POINT_SERVICE_URL: http://point-service:8083

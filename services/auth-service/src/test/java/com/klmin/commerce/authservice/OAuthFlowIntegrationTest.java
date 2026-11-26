@@ -216,6 +216,42 @@ class OAuthFlowIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void 스크립트용_공개_클라이언트는_시크릿_없이_PKCE_로_사용자_토큰을_받고_refresh_는_없다() throws Exception {
+        String redirect = "http://127.0.0.1/scripts/callback";
+        Browser browser = new Browser();
+        Pkce pkce = new Pkce();
+        URI authorize = UriComponentsBuilder.fromPath("/oauth2/authorize")
+                .queryParam("response_type", "code").queryParam("client_id", "scripts")
+                .queryParam("redirect_uri", redirect).queryParam("scope", "openid").queryParam("state", "s")
+                .queryParam("code_challenge", pkce.challenge()).queryParam("code_challenge_method", "S256")
+                .encode().build().toUri();
+        assertThat(location(browser.perform(get(authorize).accept(MediaType.TEXT_HTML)))).isEqualTo("/signin");
+        String saved = location(browser.submitLogin(loginId, "password1"));
+        String callback = location(browser.perform(get(URI.create(saved)).accept(MediaType.TEXT_HTML)));
+        assertThat(callback).startsWith(redirect + "?code=");
+        String code = UriComponentsBuilder.fromUriString(callback).build().getQueryParams().getFirst("code");
+
+        // PKCE 없이(verifier 틀림) 바꾸면 거절
+        mvc.perform(post("/oauth2/token").param("client_id", "scripts").param("grant_type", "authorization_code")
+                        .param("code", java.net.URLDecoder.decode(code, StandardCharsets.UTF_8))
+                        .param("redirect_uri", redirect).param("code_verifier", "wrong-verifier-" + UUID.randomUUID()))
+                .andExpect(status().isBadRequest());
+        // 위에서 코드를 한 번 썼으니 새로 받는다
+        String saved2 = location(browser.perform(get(authorize).accept(MediaType.TEXT_HTML)));
+        String code2 = UriComponentsBuilder.fromUriString(saved2).build().getQueryParams().getFirst("code");
+        JsonNode token = json(mvc.perform(post("/oauth2/token").param("client_id", "scripts")
+                        .param("grant_type", "authorization_code")
+                        .param("code", java.net.URLDecoder.decode(code2, StandardCharsets.UTF_8))
+                        .param("redirect_uri", redirect).param("code_verifier", pkce.verifier()))
+                .andExpect(status().isOk()).andReturn());
+
+        Jwt access = decode(token.get("access_token").asString());
+        assertThat(access.getSubject()).isEqualTo(Long.toString(userId));
+        assertThat(access.getClaimAsStringList("roles")).containsExactly("USER");
+        assertThat(token.has("refresh_token")).isFalse();
+    }
+
     // ---- helpers ----
 
     private Tokens loginAndExchange() throws Exception {
