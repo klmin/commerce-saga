@@ -12,9 +12,20 @@ updates:
         patterns: ['*']
         exclude-patterns: ['org.springframework*', 'io.spring*']
 
-  # frontend (Next·React·도구). PR 이 몰리지 않게 둘로 묶는다: 런타임 의존성 / 개발 도구
+  # 화면 SPA workspace (frontend: pnpm, apps/*·packages/*). PR 이 몰리지 않게 둘로 묶는다: 런타임 의존성 / 개발 도구
   - package-ecosystem: npm
     directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      runtime:
+        dependency-type: production
+      dev-tools:
+        dependency-type: development
+
+  # Next 화면 (frontend/next, 5-5 까지 남김)
+  - package-ecosystem: npm
+    directory: /frontend/next
     schedule:
       interval: weekly
     groups:

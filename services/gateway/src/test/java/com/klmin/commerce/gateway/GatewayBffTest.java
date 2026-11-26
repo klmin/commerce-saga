@@ -151,6 +151,61 @@ class GatewayBffTest {
     }
 
     @Test
+    void api_me_는_세션의_사용자와_역할을_Gateway_가_답하고_없으면_401() throws Exception {
+        assertThat(get("/api/me", "localhost:5173").statusCode()).isEqualTo(401);
+
+        ROLES.set(List.of("USER", "ADMIN"));
+        login("/", "localhost:5173");
+        HttpResponse<String> me = get("/api/me", "localhost:5173");
+        assertThat(me.statusCode()).isEqualTo(200);
+        assertThat(me.body()).isEqualTo("{\"userId\":8,\"roles\":[\"ADMIN\",\"USER\"]}");
+        // 서비스로 넘기지 않는다
+        assertThat(LAST_API.get()).isNull();
+    }
+
+    @Test
+    void 같은_세션으로_API_를_동시에_불러도_세션이_유지된다() throws Exception {
+        login("/", "localhost:5173");
+        get("/api/orders/abc", "localhost:5173");
+        String xsrf = cookie("XSRF-TOKEN").getValue();
+        // 화면은 한 번에 API 를 여러 개 부른다 (홈: 내 정보·포인트·상품·재고 여러 개, 주문 버튼 연타)
+        List<java.util.concurrent.CompletableFuture<HttpResponse<String>>> calls = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            HttpRequest.Builder request = request("/api/orders/c" + i, "localhost:5173");
+            calls.add(browser.sendAsync(i % 2 == 0 ? request.GET().build()
+                            : request.header("X-XSRF-TOKEN", xsrf).POST(HttpRequest.BodyPublishers.ofString("{}")).build(),
+                    HttpResponse.BodyHandlers.ofString()));
+        }
+        for (var call : calls) {
+            HttpResponse<String> response = call.get();
+            assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        }
+        assertThat(get("/api/me", "localhost:5173").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void 기다리다_끊은_요청이_있어도_다음_요청은_바로_답한다() throws Exception {
+        login("/", "localhost:5173");
+        // 화면 이동으로 브라우저가 진행 중인 API 를 끊는다(재고 여러 개)
+        List<java.util.concurrent.CompletableFuture<HttpResponse<String>>> aborted = new java.util.ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            aborted.add(browser.sendAsync(request("/api/orders/slow-" + i, "localhost:5173")
+                    .timeout(java.time.Duration.ofMillis(300)).GET().build(), HttpResponse.BodyHandlers.ofString()));
+        }
+        for (var call : aborted) {
+            assertThat(call).failsWithin(java.time.Duration.ofSeconds(5));
+        }
+        long started = System.nanoTime();
+        HttpResponse<String> me = browser.send(request("/api/me", "localhost:5173")
+                .timeout(java.time.Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> api = browser.send(request("/api/orders/next", "localhost:5173")
+                .timeout(java.time.Duration.ofSeconds(5)).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(me.statusCode()).isEqualTo(200);
+        assertThat(api.statusCode()).isEqualTo(200);
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - started)).isLessThan(java.time.Duration.ofSeconds(3));
+    }
+
+    @Test
     void 바깥_주소_return_to_는_버리고_클라이언트의_홈으로() throws Exception {
         assertThat(login("//evil.example/x", "localhost:5173")).isEqualTo("http://localhost:5173/");
         newBrowser();
@@ -340,12 +395,22 @@ class GatewayBffTest {
                              "refresh_token":"%s","id_token":"%s"}
                             """.formatted(access, ACCESS_TTL.get(), refresh ? "r-2" : "r-1", id));
                 } else {
+                    if (path.startsWith("/orders/slow")) {
+                        // 느린 서비스: 브라우저가 기다리다 끊는다(화면 이동)
+                        try {
+                            Thread.sleep(1500);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                     LAST_API.set("path=" + path
                             + " auth=" + exchange.getRequestHeaders().getFirst("Authorization")
                             + " cookie=" + exchange.getRequestHeaders().getFirst("Cookie"));
                     respond(exchange, "{}");
                 }
             });
+            // 느린 요청이 다른 요청을 막지 않게
+            server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
             server.start();
             return server;
         } catch (IOException e) {

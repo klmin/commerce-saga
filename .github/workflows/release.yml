@@ -153,7 +153,8 @@ jobs:
           [ "$(docker version --format '{{.Server.Arch}}')" = "$ARCH" ] || { echo "러너 아키텍처가 $ARCH 가 아님"; exit 1; }
           for s in $BUILD; do
             case "$s" in
-              frontend) docker build --label "$label" -t "$REGISTRY/frontend:$TAG-$ARCH" frontend ;;
+              # frontend 이미지 = Next 화면(frontend/next, 5-5 까지). 새 SPA 이미지(nginx)는 5-3b
+              frontend) docker build --label "$label" -t "$REGISTRY/frontend:$TAG-$ARCH" frontend/next ;;
               connect) docker build -f deploy/docker/connect.Dockerfile --label "$label" -t "$REGISTRY/connect:$TAG-$ARCH" deploy/docker ;;
               *) docker build -f deploy/docker/service.Dockerfile --label "$label" \
                    --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "$REGISTRY/$s:$TAG-$ARCH" . ;;

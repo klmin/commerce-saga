@@ -1,17 +1,17 @@
 # release 워크플로가 쓴다 (release/eks 에만 있다, scripts/release-plan.sh). 손으로 고치지 않는다
 # 이미지마다 마지막으로 다시 빌드된 main 커밋. 이번에 안 바뀐 이미지는 이전 태그 그대로 → 그 Deployment 는 롤링하지 않는다
-releasedCommit: 2c89ac9862d4422d40ec39d32e5082b368e64449
+releasedCommit: 2abca416dd8478e9295b71d342c5a34c702511c3
 commerceValues:
   image:
     tags:
-      auth-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      product-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      search-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      order-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      inventory-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      point-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      payment-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      notification-service: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      gateway: 2c89ac9862d4422d40ec39d32e5082b368e64449
-      frontend: c9827434bdb58746f05353a85d0e0b1b0126a56d
-      connect: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      auth-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      product-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      search-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      order-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      inventory-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      point-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      payment-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      notification-service: 2abca416dd8478e9295b71d342c5a34c702511c3
+      gateway: 2abca416dd8478e9295b71d342c5a34c702511c3
+      frontend: 2abca416dd8478e9295b71d342c5a34c702511c3
+      connect: 2abca416dd8478e9295b71d342c5a34c702511c3

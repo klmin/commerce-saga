@@ -9,6 +9,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+      # 명령 하나를 기다리는 최대 시간 (기본 60초). 세션·rate limit 은 요청마다 Redis 를 부르고 연결 하나를 같이 쓴다.
+      # SPA 가 화면을 옮기며 진행 중인 요청을 끊을 때 그 연결이 한동안 응답을 못 받아 모든 요청이 기본값만큼 멈춘 적이 있다
+      # (5-3a browser-e2e). 짧게 두면 그 요청만 실패하고 바로 풀린다. rate limit 은 Redis 오류면 통과시킨다
+      timeout: ${REDIS_TIMEOUT:2s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
   # BFF 세션 (ADR 0017). 쿠키 GW_SESSION 은 BffClientConfig. auth-service 의 SSO 세션(auth:session)과 접두어를 나눈다.
   # 유휴 2시간: 쇼핑 중 잠깐 자리를 비워도 이어지고, 공용 PC 에 오래 남지 않게. 끝나면 API 가 401 → 다시 로그인
   # (SSO 세션 30분이 남아 있으면 화면 없이 통과)

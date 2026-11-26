@@ -1,7 +1,9 @@
 name: frontend
 
-# Next.js 화면 (후속 2 F-1, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지.
-# 백엔드 전체 + Next 를 띄우는 브라우저 e2e(Playwright)는 browser-e2e 워크플로 (F-2b)
+# 화면. 두 갈래 (ADR 0017):
+# - web: 새 화면 SPA workspace(frontend/apps/*, packages/*, pnpm). 형식·lint·타입·단위 테스트·빌드
+# - next: 5-5 까지 남기는 Next 화면(frontend/next, npm, ADR 0011). lint·형식·타입·단위 테스트·빌드·Docker 이미지
+# 백엔드 전체를 띄우는 브라우저 e2e(Playwright)는 browser-e2e 워크플로
 on:
   push:
     branches: [main]
@@ -23,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  frontend:
+  web:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,8 +36,29 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 26
+
+      # 버전은 frontend/package.json 의 packageManager 와 같게
+      - run: npm install -g pnpm@12.23.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  next:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/next
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend/next/package-lock.json
 
       - run: npm ci
       - run: npm run format:check
