@@ -47,6 +47,8 @@ jobs:
           curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
           curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
+          # SAS·로그인 경로만 연다: 관리 엔드포인트는 밖에서 404
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/auth/actuator/prometheus)" = 404 ]
           # 브라우저가 보낸 X-Forwarded-Prefix 는 버린다 (로그인 화면 주소가 위조한 앞 경로로 바뀌지 않는다)
           loc=$(curl -s -o /dev/null -w '%{redirect_url}' -H 'X-Forwarded-Prefix: /evil' 'http://localhost/auth/oauth2/authorize?response_type=code&client_id=gateway-web&scope=openid&redirect_uri=http://localhost/login/oauth2/code/gateway-web&state=s&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
           echo "authorize → $loc"
@@ -62,6 +64,7 @@ jobs:
           curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
           curl -sf http://admin.localhost/products/1 | grep -q '<base href="/" />'
           curl -sf http://auth.localhost/.well-known/openid-configuration | grep -q '"issuer":"http://auth.localhost"'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://auth.localhost/actuator/prometheus)" = 404 ]
           # 관리자 호스트에서 로그인을 시작하면 gateway-admin
           curl -s -o /dev/null -w '%{redirect_url}' http://admin.localhost/oauth2/authorization/auto | grep -q 'client_id=gateway-admin'
           BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
