@@ -599,6 +599,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 화면이 지금 사용자를 알도록 Gateway 에 `GET /api/me`(세션의 `userId`·`roles`, 서비스로 넘기지 않음). 모든 화면이 로그인을 요구한다(Next 와 같다): `/api/me` 가 401 이면 바로 로그인 시작
 - 401 은 화면이 `/oauth2/authorization/auto?return_to=<지금 경로>` 로 옮긴다. 주문 Idempotency-Key 는 화면을 열 때 브라우저가 만든다(http 경로 방식에서도 되게 `crypto.randomUUID` 가 없으면 `getRandomValues`)
 - 로그인 기기 관리(`/sessions`) 화면은 옮기지 않았다(5-6 에서 SSO 세션 기준으로 다시 만든다). 관리자 메뉴는 5-5
+- Gateway Redis 명령 타임아웃 2초(`REDIS_TIMEOUT`, 기본 60초): SPA 는 화면을 옮길 때 진행 중인 API 를 끊는다(Next 는 서버가 불러 이런 일이 없었다). browser-e2e 에서 그 뒤 Gateway 의 세션·rate limit Redis 명령이 약 60초 응답을 못 받아 모든 요청이 멈춘 적이 있다(원인은 공유 연결에서의 취소로 추정, 재현 안 됨). 짧게 두면 그 요청만 실패하고 바로 풀린다
 
 **5-2 에서 정한 것** (Gateway BFF, 추천안)
 - issuer 통일: 기존 `/auth/*` 토큰도 `iss` = `AUTH_ISSUER`(로컬 `http://localhost:8086`). Gateway·서비스 9개는 `AUTH_ISSUER` 문자열과 `AUTH_INTERNAL_URL/oauth2/jwks` 로 검증(두 토큰은 서명 키가 같다). 지금 Next 화면(Bearer)과 BFF 세션이 5-5 까지 함께 돈다. k8s 는 공개 주소가 생기는 5-3b 전까지 `AUTH_ISSUER=http://auth-service:8086`
