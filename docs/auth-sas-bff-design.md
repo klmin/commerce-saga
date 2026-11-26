@@ -181,7 +181,7 @@ ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 
 - 관리자 호스트에는 접근 제한(IP 허용 목록 등)을 걸 수 있게 둔다(k8s)
 
 ```caddyfile
-# infra/caddy/Caddyfile (compose)
+# infra/caddy/Caddyfile.host (compose, 호스트 방식. 5-3d 구현은 전역 auto_https off 와 auth 호스트를 auth-service 로만 보냄)
 (scg) {
     request_header -X-Forwarded-Prefix   # 브라우저가 보낸 값은 버린다(7-3)
     @scg path /api/* /oauth2/authorization/* /login/oauth2/code/* /logout
@@ -285,7 +285,7 @@ ClientRegistration.withRegistrationId("gateway-web")
 | 4 | 그 외 | 사용자 SPA |
 
 ```caddyfile
-# infra/caddy/Caddyfile.path (compose, 경로 방식). 호스트 방식은 7-2 의 Caddyfile
+# infra/caddy/Caddyfile.path (compose, 경로 방식). 호스트 방식은 7-2 의 Caddyfile.host
 http://localhost {
     request_header -X-Forwarded-Prefix          # 브라우저가 보낸 값은 버린다(7-3)
     redir /auth /auth/

@@ -600,6 +600,14 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 시나리오 9 의 인증 부분(9a~9e, `smoke-auth.sh`)은 지우고 문서에 기록으로 남김. 9f~9i(`smoke-gateway.sh`)는 그대로. 시나리오 13 은 SAS 가입 폼 + 스크립트 클라이언트로
 - 리뷰 지침(AGENTS.md)의 인증 항목을 SAS·BFF 기준으로 바꿨다
 
+**5-3d 에서 정한 것** (추천안)
+- 전체 실행은 인프라 compose 위에 얹는 파일(`infra/docker-compose.app.yml`). 서비스 이미지는 미리 만든 jar(`./gradlew bootJar`) + `deploy/docker/service.Dockerfile`, 화면은 `frontend/Dockerfile`. 밖으로는 Caddy(:80) 하나, 서비스·Gateway·SAS 는 compose 네트워크 안
+- 방식은 `CADDY_MODE`(`caddy/Caddyfile.host`·`Caddyfile.path`)와 공개 주소 값들. 경로 방식은 `--env-file infra/app-path.env` 로 한 번에 바꾼다(issuer·redirect URI·홈·`ADMIN_CLIENT_HOST` 비움·관리자 `BASE_PATH`)
+- 시크릿 init(`oauth-secrets-init`, alpine): 없을 때만 `gateway-web`·`gateway-admin` 시크릿 파일을 만들고 auth-service·Gateway 가 같은 볼륨을 개발용 시크릿 디렉터리로 읽는다. 서명 키 볼륨도 준비해 auth-service 가 처음 만든 키를 재시작해도 쓴다
+- 검색용 `product-cdc` 커넥터는 `connectors-init`(curl 이미지가 `scripts/register-connectors.sh` 를 실행, product-service 기동 뒤)이 등록. Alloy 메트릭 수집 대상은 compose 내부 주소로 덮어씀. 80 이 아닌 포트로 띄우면 `ADMIN_CLIENT_HOST` 도 포트까지
+- Caddy 는 두 방식 모두 들어온 `X-Forwarded-Prefix` 를 지우고, 경로 방식 `/auth` 에서만 다시 붙인다. `X-Forwarded-For·Proto·Host` 는 Caddy 가 자기 값으로. Gateway 는 compose 네트워크 대역을 믿는 프록시로
+- CI `compose` 워크플로: 경로 방식으로 띄워 `/`·`/admin/`·SAS issuer·위조한 `X-Forwarded-Prefix` 무시·BFF 로그인(curl), 같은 볼륨으로 호스트 방식으로 다시 띄워 관리자 호스트의 `gateway-admin`·BFF 로그인
+
 **5-3b 에서 정한 것** (추천안, EKS 방식은 사용자 확인 2026-11-26)
 - 5-3b 를 둘로: 이 PR(이미지·Helm·k8s·Next 제거)과 5-3d(compose 전체 실행·Caddy·시크릿 init). Next 를 지우면서 k8s·EKS 가 화면 없이 남지 않게 이미지·차트를 함께 바꿨다
 - 화면 이미지는 Dockerfile 하나(`--build-arg APP=web|admin`), `nginxinc/nginx-unprivileged`(uid 101, 8080). 시작 스크립트가 `BASE_PATH`(/ 로 시작·끝, 쓸 글자 제한)로 `<base href>` 를 바꾸고, 틀리면 기동 실패. `index.html`·화면 경로는 `no-cache`, 해시 자산은 1년, 없는 자산은 404
