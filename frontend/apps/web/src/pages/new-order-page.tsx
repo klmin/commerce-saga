@@ -4,8 +4,8 @@ import { useSearchParams } from "react-router";
 import { myPointBalance } from "@/api/points";
 import { listProducts, stocksByProduct } from "@/api/products";
 import { OrderForm } from "@/components/order-form";
-import { LoadError, Page, Section } from "@/components/page";
-import { FormSkeleton } from "@/components/skeletons";
+import { LoadError, Page, Section } from "@commerce/ui/page";
+import { FormSkeleton } from "@commerce/ui/skeletons";
 
 export function NewOrderPage() {
   const [params] = useSearchParams();

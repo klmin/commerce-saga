@@ -7,12 +7,13 @@
   },
   "scripts": {
     "dev:web": "pnpm --filter web dev",
-    "build": "pnpm -r --filter ./apps/* build",
+    "build": "pnpm -r --filter \"./apps/*\" build",
     "lint": "eslint apps packages",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r --filter ./apps/* test",
+    "test": "pnpm -r test",
     "format": "prettier --write apps packages",
-    "format:check": "prettier --check apps packages"
+    "format:check": "prettier --check apps packages",
+    "dev:admin": "pnpm --filter admin dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

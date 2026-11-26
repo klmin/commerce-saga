@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError } from "@commerce/bff/api";
 
 const pointBalance = z.object({ userId: z.number().int(), balance: z.number().int() });
 

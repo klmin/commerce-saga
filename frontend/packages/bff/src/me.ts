@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { api } from "@/lib/api";
+import { api } from "./api";
 
 const me = z.object({ userId: z.number().int(), roles: z.array(z.string()) });
 

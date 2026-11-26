@@ -64,7 +64,7 @@ else
   for s in $BACKEND; do
     if has "^services/$s/"; then build[$s]=1; fi
   done
-  # frontend 이미지 = Next 화면(frontend/next, 5-5 까지)
+  # frontend 이미지 = Next 화면(frontend/next, 5-3b 에서 지움)
   if has '^frontend/next/'; then build[frontend]=1; fi
   if has '^deploy/docker/connect\.Dockerfile$'; then build[connect]=1; fi
   # 이전 태그가 없는 이미지(새로 생긴 서비스 등)

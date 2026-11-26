@@ -5,10 +5,12 @@
 | 경로 | 내용 |
 |---|---|
 | `apps/web` | 사용자 화면 (Vite + React 19 + TypeScript + Tailwind 4 + shadcn/ui, React Router, TanStack Query). 5-3a |
+| `apps/admin` | 관리자 화면: 상품 관리·관리 이력, 결제 장애 주입(로컬 :5174, 로그인 클라이언트 `gateway-admin`). 5-5 |
+| `packages/bff` | 화면들이 Gateway(BFF)를 부르는 공용 코드: `/api` 호출(CSRF·401 → 로그인), `<base href>` 앞 경로, `/api/me`, 로그인 확인(`SessionGate`), 로그아웃 폼 |
 | `packages/ui` | 화면들이 같이 쓰는 shadcn/ui 컴포넌트와 테마. 빌드 없이 소스를 내보내고 각 앱의 Vite 가 함께 묶는다 |
-| `next/` | Next 화면(ADR 0011). 관리자 화면이 SPA 로 옮겨지는 5-5 까지 남긴다. workspace 밖이고 npm 으로 따로 돈다([next/README.md](next/README.md)) |
+| `next/` | Next 화면(ADR 0011). 배포를 SPA 이미지로 바꾸는 5-3b 에서 지운다. workspace 밖이고 npm 으로 따로 돈다([next/README.md](next/README.md)) |
 
-관리자 화면(`apps/admin`)은 5-5, 인증 화면(`apps/auth`)은 5-4 에서 더한다.
+인증 화면(`apps/auth`)은 5-4 에서 더한다.
 
 ## 구조
 
@@ -29,6 +31,7 @@ docker compose -f infra/docker-compose.yml up -d --wait
 npm install -g pnpm@12.23.0   # 또는 corepack enable
 pnpm install
 pnpm dev:web                  # 사용자 화면 http://localhost:5173
+pnpm dev:admin                # 관리자 화면 http://localhost:5174 (관리자: 시드 admin)
 ```
 
 Vite 개발 서버가 설계 문서 7-1 "화면 쪽" 경로(`/api`, `/oauth2/authorization`, `/login/oauth2/code`, `/logout`)를 Gateway(`GATEWAY_URL`, 기본 http://localhost:8000)로 넘긴다. 원래 `Host`(`localhost:5173`)를 그대로 넘겨야 Gateway 가 이 화면의 로그인 클라이언트(`gateway-web`)와 돌아올 주소를 고른다(`changeOrigin: false`). 로그인 화면은 auth-service(`AUTH_ISSUER`, 로컬 기본 http://localhost:8086)의 임시 화면 `/signin` 이다(5-4 에서 인증 화면 SPA 로 바뀜).
@@ -37,12 +40,12 @@ Vite 개발 서버가 설계 문서 7-1 "화면 쪽" 경로(`/api`, `/oauth2/aut
 
 ## 명령 (frontend 에서)
 
-- `pnpm dev:web` - 사용자 화면 개발 서버
+- `pnpm dev:web` / `pnpm dev:admin` - 사용자·관리자 화면 개발 서버
 - `pnpm build` - 모든 앱 프로덕션 빌드 (`apps/*/dist`)
 - `pnpm lint` - ESLint (workspace 전체)
 - `pnpm format` / `pnpm format:check` - Prettier (Tailwind 클래스 정렬 포함)
 - `pnpm typecheck` - `tsc --noEmit` (앱·패키지마다)
 - `pnpm test` - Vitest (앱마다)
-- `pnpm --filter web test:e2e` - Playwright. 백엔드와 화면이 떠 있어야 한다(기본 http://localhost:5173, 다른 주소는 `E2E_BASE_URL`). 프로덕션 빌드로 보려면 `pnpm --filter web build && pnpm --filter web preview`(같은 프록시, :5173)
+- `pnpm --filter web test:e2e`·`pnpm --filter admin test:e2e` - Playwright. 관리자 e2e 는 사용자 화면(`E2E_WEB_URL`, 기본 :5173)도 쓴다. 백엔드와 화면이 떠 있어야 한다(기본 http://localhost:5173, 다른 주소는 `E2E_BASE_URL`). 프로덕션 빌드로 보려면 `pnpm --filter web build && pnpm --filter web preview`(같은 프록시, :5173)
 
 CI(`.github/workflows/frontend.yml` 의 `web`)는 format·lint·typecheck·test·build 를, `browser-e2e.yml` 은 백엔드 전체 + `vite preview` 로 `apps/web/e2e` 를 돈다.
