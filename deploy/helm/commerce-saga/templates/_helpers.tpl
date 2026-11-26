@@ -32,7 +32,7 @@ app.kubernetes.io/managed-by: {{ .root.Release.Service }}
 {{- end -}}
 
 {{/* k8s 에만 있는 수집 (alloy 가 config.alloy 와 같은 폴더에서 읽는다). 노드 kubelet 의 컨테이너 지표(cAdvisor):
-     메모리·limit·CPU·OOM. 이 namespace 의 컨테이너만, 쓰는 지표만 남긴다(경보 ContainerMemoryNearLimit) */}}
+     메모리·limit·CPU·OOM, kubelet 의 PVC 사용량. 이 namespace 것만, 쓰는 지표만 남긴다(경보 ContainerMemoryNearLimit, 대시보드) */}}
 {{- define "commerce.kubernetesAlloy" -}}
 discovery.kubernetes "nodes" {
   role = "node"
@@ -84,6 +84,56 @@ prometheus.relabel "cadvisor" {
   rule {
     source_labels = ["__name__"]
     regex         = "container_(memory_working_set_bytes|spec_memory_limit_bytes|cpu_usage_seconds_total|oom_events_total)"
+    action        = "keep"
+  }
+}
+
+// PVC 디스크 사용량(Kafka·Postgres 등). cAdvisor 가 아니라 kubelet 자신의 /metrics 에 있다
+discovery.relabel "kubelet" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc:443"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/${1}/proxy/metrics"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "kubelet" {
+  targets           = discovery.relabel.kubelet.output
+  job_name          = "kubelet"
+  scheme            = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  scrape_interval   = "30s"
+  forward_to        = [prometheus.relabel.kubelet.receiver]
+
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  }
+}
+
+prometheus.relabel "kubelet" {
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  rule {
+    source_labels = ["namespace"]
+    regex         = "{{ .Release.Namespace }}"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "kubelet_volume_stats_(used|capacity)_bytes"
     action        = "keep"
   }
 }

@@ -18,6 +18,7 @@ import com.klmin.commerce.orderservice.order.application.port.out.OrderIdempoten
 import com.klmin.commerce.orderservice.order.application.port.out.OrderSagaPort;
 import com.klmin.commerce.orderservice.order.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPort;
+import com.klmin.commerce.orderservice.order.application.port.out.SagaOutcomePort;
 import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
 import com.klmin.commerce.orderservice.order.domain.Order;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
@@ -59,13 +60,13 @@ class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderS
 
     OrderService(LoadOrderPort loadOrderPort, SaveOrderPort saveOrderPort, OrderSagaPort sagaPort,
                  SagaCommandPort commandPort, OrderEventPort eventPort, ProcessedMessagePort processedMessagePort,
-                 OrderIdempotencyPort idempotencyPort, CartPort cartPort,
+                 OrderIdempotencyPort idempotencyPort, CartPort cartPort, SagaOutcomePort outcomePort,
                  Clock clock) {
         this.loadOrderPort = loadOrderPort;
         this.saveOrderPort = saveOrderPort;
         this.sagaPort = sagaPort;
         this.commandPort = commandPort;
-        this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort);
+        this.executor = new SagaActionExecutor(loadOrderPort, saveOrderPort, commandPort, eventPort, outcomePort);
         this.processedMessagePort = processedMessagePort;
         this.idempotencyPort = idempotencyPort;
         this.cartPort = cartPort;
