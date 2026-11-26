@@ -74,7 +74,8 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
 ./gradlew :services:search-service:bootRun                 # 8089 상품 검색 (후속 4-2, Elasticsearch 9200 + product-cdc 커넥터 등록)
 ./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
-(cd frontend && npm ci && npm run dev)                 # 화면 http://localhost:3500. frontend/README.md
+(cd frontend && pnpm install && pnpm dev:web)          # 사용자 화면 SPA http://localhost:5173 (BFF 로그인). frontend/README.md
+(cd frontend/next && npm ci && npm run dev)            # Next 화면 http://localhost:3500 (5-5 까지)
 ```
 
 ```bash

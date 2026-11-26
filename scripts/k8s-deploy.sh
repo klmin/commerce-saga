@@ -36,7 +36,7 @@ if [ "$SKIP_BUILD" != true ]; then
     docker build -q -f deploy/docker/service.Dockerfile \
       --build-arg JAR="services/$s/build/libs/$s-0.0.1-SNAPSHOT.jar" -t "commerce-saga/$s:$TAG" . > /dev/null
   done
-  docker build -q -t "commerce-saga/frontend:$TAG" frontend > /dev/null
+  docker build -q -t "commerce-saga/frontend:$TAG" frontend/next > /dev/null
   # Debezium Postgres 플러그인을 얹은 Strimzi Kafka Connect (K-2)
   docker build -q -f deploy/docker/connect.Dockerfile -t "commerce-saga/connect:$TAG" deploy/docker > /dev/null
 fi

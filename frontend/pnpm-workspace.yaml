@@ -1,0 +1,8 @@
+# 화면 SPA 들과 공용 UI (ADR 0017, 설계 문서 2절). next/ 는 5-5 까지 남기는 Next 화면이라 workspace 밖(npm 으로 따로)
+packages:
+  - apps/*
+  - packages/*
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.1.2'
+  - '@vitest/spy@5.1.2'
+  - vitest@5.1.2

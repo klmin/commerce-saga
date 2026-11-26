@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko" class="h-full antialiased">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 이 화면의 앞 경로. 실행할 때 nginx 가 BASE_PATH 로 바꾼다(경로 방식 /admin/ 등, 설계 문서 7-4). 로컬 개발·호스트 방식은 / -->
+    <base href="/" />
+    <link rel="icon" href="./favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="주문·재고·포인트·결제 Saga 데모" />
+    <title>commerce-saga</title>
+  </head>
+  <body class="flex min-h-full flex-col">
+    <div id="root" class="flex min-h-full flex-col"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>
