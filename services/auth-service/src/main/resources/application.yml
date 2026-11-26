@@ -1,5 +1,15 @@
 server:
   port: ${SERVER_PORT:8086}
+  # 앞단 프록시(Caddy·Envoy·Vite)가 넘긴 Host·X-Forwarded-* 로 로그인 화면 리다이렉트·쿠키 경로를 만든다.
+  # 경로 방식(example.com/auth/...)에서는 X-Forwarded-Prefix: /auth 가 붙어 온다 (설계 문서 7-4).
+  # 헤더를 그대로 믿으므로 앞단은 들어온 X-Forwarded-Prefix 를 지우고 자기 값을 붙인다 (7-3)
+  # Boot 4 이름(옛 server.forward-headers-strategy). X-Forwarded-Prefix 는 use-prefix 를 켜야 읽는다(기본 꺼짐)
+  request:
+    header:
+      forwarded:
+        strategy: framework
+        naming: x-forwarded
+        use-prefix: true
 
 spring:
   application:
@@ -19,11 +29,18 @@ spring:
   mvc:
     problemdetails:
       enabled: true
-  # refresh token family, 로그인 실패 횟수 (ADR 0008)
+  # refresh token family, 로그인 실패 횟수 (ADR 0008), SSO 로그인 세션 (ADR 0017)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+  # SSO 로그인 세션. 쿠키(AUTH_SESSION, HttpOnly, SameSite=Lax, Secure 는 auth.cookie.secure)는 AuthorizationServerConfig.
+  # 유휴 만료 30분 (Keycloak 의 SSO Session Idle 기본값과 같다). 사용자·관리자 화면 사이 재로그인 없이 오가는 기간
+  session:
+    timeout: ${AUTH_SSO_SESSION_IDLE:30m}
+    redis:
+      # Gateway 의 BFF 세션(gateway:session)과 섞이지 않게
+      namespace: auth:session
   # 가입 이벤트(auth.events) 발행만 한다. 구독하는 토픽은 없다 (outbox relay 가 보낸다)
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -39,6 +56,34 @@ outbox:
     batch-size: 100
 
 auth:
+  # OIDC 인가 서버(SAS) 공개 주소 = 토큰 iss, 브라우저가 가는 주소 (ADR 0017, 설계 문서 7-3). 끝에 / 를 붙이지 않는다.
+  # 호스트 방식 https://auth.example.com, 경로 방식 https://example.com/auth.
+  # 로컬 기본값은 auth-service 를 바로 보는 주소다. 인증 화면 SPA(5175)가 생기는 5-4 에서 http://localhost:5175 로 바꾼다
+  issuer: ${AUTH_ISSUER:http://localhost:8086}
+  # 로그인·가입 뒤 저장된 인가 요청이 없을 때 갈 사용자 화면
+  web-home: ${WEB_HOME:http://localhost:5173/}
+  oauth:
+    access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:15m}
+    # 갱신할 때마다 새 refresh token(회전, 옛 것은 무효)이라 쓰는 동안 연장된다
+    refresh-token-ttl: ${AUTH_OAUTH_REFRESH_TOKEN_TTL:14d}
+    # 모든 토큰이 끝난 인가 기록을 이만큼 지난 뒤 지운다
+    authorization-retention: ${AUTH_OAUTH_AUTHORIZATION_RETENTION:1d}
+    cleanup:
+      interval: ${AUTH_OAUTH_CLEANUP_INTERVAL:1h}
+    # 시크릿을 외부에서 주지 않았을 때 쓰는 로컬 개발용 파일 디렉터리 (oauth-client-<id>.secret, Gateway 와 같은 파일).
+    # compose·k8s 는 비운다 → 시크릿이 없으면 기동 실패 (설계 문서 6절)
+    secret-dev-dir: ${OAUTH_CLIENT_SECRET_DEV_DIR:${user.home}/.commerce-saga}
+    # 고정 등록하는 클라이언트 (DCR 아님). 시작할 때 DB 에 upsert 한다. 주소는 정확히 일치해야 한다(쉼표로 여럿)
+    clients:
+      gateway-web:
+        secret: ${GATEWAY_WEB_CLIENT_SECRET:}
+        redirect-uris: ${WEB_REDIRECT_URI:http://localhost:5173/login/oauth2/code/gateway-web}
+        # 경로 방식은 관리자 화면도 이 클라이언트라 /admin/ 도 넣는다 (설계 문서 7-4)
+        post-logout-redirect-uris: ${WEB_POST_LOGOUT_REDIRECT_URIS:http://localhost:5173/}
+      gateway-admin:
+        secret: ${GATEWAY_ADMIN_CLIENT_SECRET:}
+        redirect-uris: ${ADMIN_REDIRECT_URI:http://localhost:5174/login/oauth2/code/gateway-admin}
+        post-logout-redirect-uris: ${ADMIN_POST_LOGOUT_REDIRECT_URIS:http://localhost:5174/}
   policy:
     access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:15m}
     # 쓸 때마다 이만큼 연장한다. 연장해도 처음 로그인부터 refresh-absolute-ttl 을 넘지 않는다

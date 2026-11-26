@@ -8,6 +8,7 @@ import { numberCursor } from "@/lib/history/cursor";
 import { notificationTypeLabel } from "@/lib/history/labels";
 import { formatTime } from "@/lib/orders/format";
 
+import { ListSkeleton } from "../loading-skeletons";
 import { CursorNav } from "../cursor-nav";
 import { ToneBadge } from "../tone-badge";
 
@@ -69,13 +70,7 @@ export default function NotificationsPage({ searchParams }: PageProps<"/notifica
             주문 Saga 가 끝나면 notification-service 가 order.events 를 받아 남깁니다(코레오그래피).
             주문 직후에는 몇 초 늦게 보일 수 있습니다.
           </p>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<ListSkeleton />}>
             <NotificationList searchParams={searchParams} />
           </Suspense>
         </CardContent>

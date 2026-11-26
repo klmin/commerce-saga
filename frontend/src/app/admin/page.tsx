@@ -8,6 +8,7 @@ import { getPaymentFaults } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
 import { isAdmin } from "@/lib/auth/server-session";
 
+import { FormSkeleton } from "../loading-skeletons";
 import { setPaymentFaultsAction } from "./admin-actions";
 import { FaultForm } from "./fault-form";
 
@@ -57,13 +58,7 @@ export default function AdminPage() {
             화면에서 재현한다. 모든 사용자의 주문에 적용되니 확인한 뒤 &quot;정상 승인&quot;으로
             되돌린다.
           </p>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<FormSkeleton fields={1} />}>
             <PaymentFaults />
           </Suspense>
         </CardContent>

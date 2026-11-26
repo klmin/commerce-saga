@@ -1,17 +1,17 @@
 # release 워크플로가 쓴다 (release/eks 에만 있다, scripts/release-plan.sh). 손으로 고치지 않는다
 # 이미지마다 마지막으로 다시 빌드된 main 커밋. 이번에 안 바뀐 이미지는 이전 태그 그대로 → 그 Deployment 는 롤링하지 않는다
-releasedCommit: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
+releasedCommit: c9827434bdb58746f05353a85d0e0b1b0126a56d
 commerceValues:
   image:
     tags:
-      auth-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      product-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      search-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      order-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      inventory-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      point-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      payment-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      notification-service: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      gateway: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      frontend: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
-      connect: 12ffa75d9326d97ff1aec7d1d6f3c7e74d2212ed
+      auth-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      product-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      search-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      order-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      inventory-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      point-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      payment-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      notification-service: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      gateway: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      frontend: c9827434bdb58746f05353a85d0e0b1b0126a56d
+      connect: c9827434bdb58746f05353a85d0e0b1b0126a56d

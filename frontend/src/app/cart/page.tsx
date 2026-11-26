@@ -12,6 +12,7 @@ import { getCart } from "@/lib/api/cart";
 import { MAX_QUANTITY } from "@/lib/orders/order-input";
 import { type Product, productName, won } from "@/lib/products";
 
+import { ListSkeleton } from "../loading-skeletons";
 import { OrderForm } from "../orders/new/order-form";
 import { pointBalanceOrUndefined, stocksByProduct } from "../shop-data";
 import { removeFromCartAction, updateCartQuantityAction } from "./cart-actions";
@@ -151,13 +152,7 @@ export default function CartPage({ searchParams }: PageProps<"/cart">) {
           <CardTitle>장바구니</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<ListSkeleton />}>
             <CartContent searchParams={searchParams} />
           </Suspense>
         </CardContent>

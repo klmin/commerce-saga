@@ -9,6 +9,7 @@ import { paymentStatusLabel } from "@/lib/history/labels";
 import { formatTime } from "@/lib/orders/format";
 import { won } from "@/lib/products";
 
+import { ListSkeleton } from "../loading-skeletons";
 import { CursorNav } from "../cursor-nav";
 import { ToneBadge } from "../tone-badge";
 
@@ -71,13 +72,7 @@ export default function PaymentsPage({ searchParams }: PageProps<"/payments">) {
             &quot;환불됨&quot;이 되고, 응답이 늦은 결제는 PG 조회로 확정될 때까지 &quot;결과 확인
             중&quot;입니다.
           </p>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<ListSkeleton />}>
             <PaymentList searchParams={searchParams} />
           </Suspense>
         </CardContent>

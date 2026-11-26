@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/client";
 import { isAdmin } from "@/lib/auth/server-session";
 import { won } from "@/lib/products";
 
+import { ListSkeleton } from "../../loading-skeletons";
 import { registerProductAction } from "./product-actions";
 import { RegisterProductForm } from "./product-forms";
 
@@ -84,13 +85,7 @@ export default function AdminProductsPage({ searchParams }: PageProps<"/admin/pr
             판매 중지 상품까지 모두 보인다. 바꾸면 누가·언제·무엇을 바꿨는지 관리 이력에 남는다(같은
             트랜잭션). 검색에는 CDC 로 몇 초 뒤 반영된다.
           </p>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<ListSkeleton rows={5} />}>
             <ProductTable searchParams={searchParams} />
           </Suspense>
         </CardContent>

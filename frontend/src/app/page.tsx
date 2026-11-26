@@ -12,14 +12,9 @@ import { parseSearch, type SearchCriteria } from "@/lib/search";
 import { addToCartAction } from "./cart/cart-actions";
 import { won } from "@/lib/products";
 
+import { ListSkeleton, ValueSkeleton } from "./loading-skeletons";
 import { ProductSearchForm } from "./product-search-form";
 import { pointBalanceOrUndefined, stocksByProduct } from "./shop-data";
-
-const loading = (
-  <p role="status" className="text-sm text-muted-foreground">
-    불러오는 중...
-  </p>
-);
 
 // 가입 직후에는 포인트 계정이 아직 없을 수 있다: auth.events 로 몇 초 안에 생긴다 (시나리오 13)
 async function PointBalance() {
@@ -132,7 +127,7 @@ export default function Home({ searchParams }: PageProps<"/">) {
           <CardTitle>내 포인트</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={loading}>
+          <Suspense fallback={<ValueSkeleton />}>
             <PointBalance />
           </Suspense>
         </CardContent>
@@ -147,7 +142,7 @@ export default function Home({ searchParams }: PageProps<"/">) {
             받습니다. 품절 상품도 주문할 수 있습니다. 재고 예약 단계에서 실패하고 주문이 취소되는
             과정을 주문 상세에서 볼 수 있습니다.
           </p>
-          <Suspense fallback={loading}>
+          <Suspense fallback={<ListSkeleton rows={4} />}>
             <ProductSection searchParams={searchParams} />
           </Suspense>
         </CardContent>

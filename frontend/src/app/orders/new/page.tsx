@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listProducts } from "@/lib/api/products";
 
+import { FormSkeleton } from "../../loading-skeletons";
 import { pointBalanceOrUndefined, stocksByProduct } from "../../shop-data";
 import { OrderForm } from "./order-form";
 
@@ -42,13 +43,7 @@ export default function NewOrderPage({ searchParams }: PageProps<"/orders/new">)
           <CardTitle>주문하기</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={<FormSkeleton fields={3} />}>
             <OrderFormWithData searchParams={searchParams} />
           </Suspense>
         </CardContent>

@@ -12,7 +12,7 @@
 | 정기 | `k8s` 매일 04:00 KST, CodeQL 매주 월 03:00 KST, Dependabot 매주 |
 | 워크플로가 끝날 때·PR 열림·머지 | `notify` 가 Discord 로 알림 (아래 "알림") |
 
-모든 워크플로에 `concurrency` 가 있다. CI 는 같은 브랜치에 연달아 push 하면 앞 실행을 취소하고 마지막 것만 돈다. `release` 만 취소하지 않고 한 번에 하나씩 돈다.
+모든 워크플로에 `concurrency` 가 있다. CI 는 PR 에 연달아 push 하면 앞 실행을 취소하고 마지막 것만 돈다. **main 의 CI 는 취소하지 않는다**(실행마다 그룹이 다르다): `release` 가 커밋마다 그 커밋의 main CI 결과를 기다리기 때문이다. `release` 는 취소하지 않고 한 번에 하나씩 돈다.
 
 ## 워크플로별
 
@@ -26,7 +26,7 @@
 | `k8s` | kind, argocd | `deploy/` `services/` `libs/` `build-logic/` `frontend/` `infra/postgres/` 관측성 설정(`infra/alloy·tempo·loki·prometheus·grafana·alertmanager/`) `scripts/k8s-*.sh` `scripts/smoke-tracing.sh` (+ 매일 schedule, 수동) | 차트의 infra 사본 diff, kind 에 Helm 차트(Strimzi 포함)로 올리고 스모크·Debezium·관측성 확인(kind). 같은 구성을 ArgoCD 로 sync(argocd). **argocd 는 PR 에서 `deploy/`·`scripts/k8s-*`·이 워크플로가 바뀔 때만** 돌고(서비스 코드만 바뀐 PR 은 kind 가 같은 차트로 확인), main push·매일·수동 실행에서는 항상 돈다 |
 | `codeql` | analyze (java-kotlin), analyze (javascript-typescript), analyze (actions) | `docs/**`·`*.md` 만 바뀐 경우 제외 전부 (+ 주간 schedule) | 정적 분석(security-and-quality). javascript-typescript 는 `frontend/` |
 | `Codex review on push` | request-review | 열린 PR 에 push(`synchronize`). draft·fork·Dependabot push 제외 | `@codex review` 댓글로 재리뷰 요청. PR 을 열 때·ready 로 바꿀 때는 Codex 가 스스로 리뷰 |
-| `release` | images (amd64), images (arm64), manifest | main push, `docs/**`·`*.md` 만 바뀐 경우 제외 (+ 수동 실행) | 아래 "배포" |
+| `release` | ci, plan, images (amd64), images (arm64), manifest | main push, `docs/**`·`*.md` 만 바뀐 경우 제외 (+ 수동 실행) | 아래 "배포" |
 | `notify` | pr-event, workflow-result | 위 워크플로가 끝날 때(`workflow_run`), PR 열림·ready·머지·닫힘 | 아래 "알림" |
 
 각 워크플로 파일 자기 자신이 바뀌어도 그 워크플로가 돈다. docs 만 바꾼 PR 은 CI 가 돌지 않고 Codex 리뷰만 받는다.
@@ -36,18 +36,19 @@
 - `main` 은 ruleset 으로 보호한다: 직접 push·삭제·force push 금지, PR 로만 머지(squash)
 - ruleset 에 필수 status check 는 없다. 경로로 건너뛴 워크플로가 머지를 막지 않는 대신, **머지 조건(CI 전부 통과 + 마지막 커밋에 Codex 지적 없음)은 사람이 확인한다** ([PROGRESS 0절](PROGRESS.md))
 - 체크를 필수로 바꾸려면 경로 필터(`paths`, `paths-ignore`)를 job 안의 경로 판단으로 바꿔야 한다. 건너뛴 워크플로의 필수 체크는 대기 상태로 남아 머지를 막는다
-- **감수한 것: 배포가 main CI 결과를 기다리지 않는다.** `release` 는 main 의 CI 와 동시에 돌고, main CI 는 다음 머지가 오면 취소된다(concurrency). 그래서 배포 전 검증은 PR CI 하나다. squash 머지라 PR 이 main 최신이 아니었으면 합친 결과는 머지 뒤 main CI 에서야 처음 돈다. 막으려면 위처럼 필수 체크로 바꾸고 ruleset 의 "브랜치 최신 상태 요구"를 켠다
+- **배포는 main CI 가 통과한 커밋만 한다.** squash 머지라 PR 이 main 최신이 아니었으면 합친 결과는 머지 뒤 main CI 에서야 처음 돈다. 그래서 `release` 의 첫 잡(`ci`, `scripts/release-ci-gate.sh`)이 **마지막 배포 이후의 main 커밋들**의 CI(위 표의 CI 워크플로)가 끝나길 기다리고, **커밋 하나하나**의 실행(다시 돌렸으면 마지막 실행)이 모두 통과해야 다음으로 간다. 실패·취소면 이미지도 만들지 않고 멈춘다. 이번 커밋만 보면 부족하다: CI 는 경로로 골라 돌고 backend 는 바뀐 모듈만 빌드해서, A 에서 깨진 모듈이 B 에서는 다시 검증되지 않는다. 같은 이유로 B 의 통과가 A 의 실패를 대신하지 않는다. 실행이 아직 API 에 안 보이는 경우를 놓치지 않으려고, 문서만 바꾼 게 아닌 커밋은 codeql 실행(그런 push 마다 항상 돈다)이 보일 때까지 기다린다. 머지 자체는 막지 않는다(머지를 막으려면 위처럼 필수 체크 + ruleset 의 "브랜치 최신 상태 요구")
 
 ## 배포 (`release`)
 
 ```
-main 머지 → plan: 마지막 배포 이후 바뀐 이미지 고르기 (scripts/release-plan.sh) → release-tags.yaml
+main 머지 → ci: 마지막 배포 이후 main 커밋들의 CI 가 끝나고 통과할 때까지 대기 (실패면 멈춤)
+         → plan: 마지막 배포 이후 바뀐 이미지 고르기 (scripts/release-plan.sh) → release-tags.yaml
          → images (amd64·arm64 러너에서 각각, 바뀐 것만): bootJar → GHCR push (<커밋 SHA>-<아키텍처>)
          → manifest: 두 아키텍처를 <커밋 SHA> 하나로 묶고, release-tags.yaml 의 이미지가 모두 있는지 확인
                      → release/eks 에 release 커밋(그 main 커밋 + release-tags.yaml) → EKS 의 ArgoCD 가 sync
 ```
 
-- 이미지: 서비스 9개 + `frontend` + `connect`, `ghcr.io/<owner>/commerce-saga/<이름>:<커밋 SHA>`. 테스트는 PR CI 가 이미 돌렸으므로 bootJar 만
+- 이미지: 서비스 9개 + `frontend` + `connect`, `ghcr.io/<owner>/commerce-saga/<이름>:<커밋 SHA>`. 테스트는 PR CI 와 main CI(`ci` 잡이 통과를 확인)가 돌리므로 bootJar 만
 - **바뀐 이미지만 빌드·배포한다** ([ADR 0014](adr/0014-k8s-deployment.md) "바뀐 서비스만 배포"). `plan` 이 **마지막으로 배포된 main 커밋**(release/eks 의 `release-tags.yaml` 에 적힌 `releasedCommit`) → 이번 커밋 사이에 바뀐 경로로 고른다
 
   | 바뀐 경로 | 다시 빌드하는 이미지 |
@@ -66,6 +67,7 @@ main 머지 → plan: 마지막 배포 이후 바뀐 이미지 고르기 (script
 - release 커밋은 부모가 (이전 release 커밋, 이번 main 커밋)이라 `release/eks` 는 force push 없이 앞으로만 간다. `git log --first-parent origin/release/eks` 가 배포 이력이다
 - EKS 의 ArgoCD 는 `release/eks` 를 본다(`deploy/argocd/eks/root.yaml`). `release-tags.yaml` 은 apps 차트(`templates/commerce-saga.yaml`)가 `.Files` 로 직접 읽어서 이미 등록된 root 를 다시 apply 하지 않아도 된다. CI 에는 클러스터 권한이 없다
 - 머지가 몰리면 한 번에 하나씩 돈다. 대기 중인 실행은 GitHub 가 최신 것 하나만 남긴다(건너뛴 커밋의 변경은 다음 실행에 포함된다)
+- main CI 가 실패하면 그 뒤 머지의 release 도 멈춘다(실패한 커밋이 범위에 남아 있다). 일시 실패면 그 CI 를 다시 돌려 통과시킨 뒤 release 를 다시 돌린다(Re-run failed jobs). 뒤 커밋이 고쳤다면 고친 커밋의 CI 통과를 확인하고 Actions 에서 release 를 수동 실행하며 `ci_from` = 고친 커밋(그 커밋부터만 판정)
 - 로컬·CI 검증용 ArgoCD(`deploy/argocd/root.yaml`)는 `main` 을 보고 `image.tags` 없이 공통 태그를 쓴다. 자세한 구성은 [deploy/README.md](../deploy/README.md), 결정은 [ADR 0014](adr/0014-k8s-deployment.md)
 
 **롤백**: 옛 release 커밋으로 브랜치를 되돌린다. 그 커밋의 `release-tags.yaml` 이 가리키는 이미지가 GHCR 에 남아 있다.

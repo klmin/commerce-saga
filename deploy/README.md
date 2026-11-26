@@ -34,6 +34,7 @@ compose 로 띄운 서비스와 포트가 겹치므로 둘 중 하나만 띄운�
 - **relay**: K-1 은 스케줄러 relay 로 시작했고, K-2 부터 배포 기준인 Debezium(ADR 0004)이 기본이다(아래)
 - **trace**: K-1 은 클러스터에 Tempo 가 없어 `TRACING_SAMPLING_PROBABILITY=0` 으로 시작했고, 지금은 차트가 관측성을 같이 올려 서비스가 trace·로그를 alloy 로 보낸다(아래 "관측성". 끄면 `observability.enabled=false`)
 - **auth-service 서명 키**: Secret `auth-jwt-key`(`private.pem` PKCS#8, `kid`)를 읽기만 한다. 로컬 k8s 는 차트의 hook Job(Helm `pre-install,pre-upgrade` = Argo CD PreSync)이 없을 때만 한 번 만들고 그 뒤로는 그대로 둔다. Secret 은 차트에 없어 Argo CD 가 관리하지 않는다(일부러, sync 로 덮어쓰거나 지우지 않게). EKS 는 외부 비밀 저장소(External Secrets 등)가 같은 이름의 Secret 을 채우고 `authJwtKey.generate=false`. 모든 Pod 가 같은 키라 `RollingUpdate`(`maxUnavailable: 0`)로 무중단 배포한다. Secret 을 지우면 다음 sync 때 새 키 → 그 전 access token 무효(refresh 로 복구). 확인: `kubectl -n commerce get secret auth-jwt-key -o jsonpath={.data.kid} | base64 -d` (ADR 0014 "auth-service 서명 키")
+- **OAuth 클라이언트 시크릿**(후속 5, ADR 0017): Secret `oauth-client-secrets`(키 `gateway-web`·`gateway-admin`)를 auth-service(와 5-2 부터 Gateway)가 `GATEWAY_*_CLIENT_SECRET` 으로 읽는다. 위 서명 키와 같은 hook Job 이 없을 때만 만들고 Argo CD 가 관리하지 않는다. 외부 비밀 저장소가 채우면 `oauthClientSecrets.generate=false`. 개발용 시크릿 파일은 끄므로(`OAUTH_CLIENT_SECRET_DEV_DIR=""`) Secret 이 없으면 auth-service 가 기동 실패한다(조용히 만들면 Gateway 와 값이 어긋남). Secret 을 지우면 새 값이 생기고 auth-service·Gateway 를 다시 띄워야 맞는다
 - **Pod 종료**: 서비스·frontend 는 `preStop` 5초 대기(`sleep` 핸들러, k8s 1.30+) 뒤 SIGTERM, 유예 40초(`gracefulTermination`). 종료가 시작되면 Endpoints 에서 빠지는 것과 SIGTERM 이 동시라, 대기가 없으면 Gateway·Envoy 가 옛 주소를 지우기 전에 앱이 연결을 닫아 롤아웃 중 요청이 실패한다(Gateway 는 연결 타임아웃 30초 뒤 500). Spring 은 graceful shutdown(기본)으로 처리 중인 요청을 끝낸다
 - **이미지**: kind 노드에 직접 넣는다(`kind load docker-image`). 레지스트리에 올리면 `image.registry` 만 채운다
 
@@ -100,7 +101,8 @@ kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-syst
 
 ```
 PR → CI(backend·e2e·k8s 등) → main 머지
-  → release 워크플로: 마지막 배포 이후 바뀐 이미지만 bootJar → GHCR push (amd64·arm64, 태그 = 이번 커밋 해시)
+  → release 워크플로: 마지막 배포 이후 main CI 가 통과할 때까지 대기(실패면 중단)
+                     → 바뀐 이미지만 bootJar → GHCR push (amd64·arm64, 태그 = 이번 커밋 해시)
                      → release/eks 에 release 커밋 (그 main 커밋 + release-tags.yaml: 이미지별 태그)
   → EKS 의 ArgoCD: release/eks 가 움직이면 sync → 태그가 바뀐 Deployment 만 롤링 배포
 ```
@@ -108,6 +110,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 | 파일 | 내용 |
 |---|---|
 | `.github/workflows/release.yml` | main push(문서만 바뀐 커밋 제외)·수동 실행(`all`: 전부 다시 빌드). `ghcr.io/klmin/commerce-saga/<이름>:<커밋 해시>` |
+| `scripts/release-ci-gate.sh` | release 첫 잡. 마지막 배포 이후 main 커밋 하나하나의 CI 가 통과해야 넘어감, 실패·취소면 배포 중단(고친 뒤 수동 실행 `ci_from`) |
 | `scripts/release-plan.sh` | release 가 부른다. 마지막 배포 커밋과 비교해 바뀐 이미지를 고르고 `release-tags.yaml` 을 만든다 ([docs/ci-cd.md](../docs/ci-cd.md) "배포") |
 | `argocd/eks/root.yaml` | EKS 용 root. `release/eks` 를 보고 `values-eks.yaml` 을 값으로 쓴다. 이미지별 태그 `release-tags.yaml`(release/eks 에만 있음)은 apps 차트가 `.Files` 로 읽는다(root 는 바꾸지 않음) |
 | `argocd/apps/values-eks.yaml` | GHCR, Envoy LoadBalancer(internet-facing), StorageClass, http 임시 쿠키 설정 |

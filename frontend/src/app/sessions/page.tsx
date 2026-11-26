@@ -12,6 +12,7 @@ import { redirectAfterUnauthorized, redirectToLogin } from "@/lib/auth/unauthori
 import { deviceName } from "@/lib/auth/device";
 import { formatTime } from "@/lib/orders/format";
 
+import { ListSkeleton } from "../loading-skeletons";
 import { ToneBadge } from "../tone-badge";
 import { logoutAllAction, revokeSessionAction } from "./session-actions";
 
@@ -67,9 +68,21 @@ async function SessionList() {
   );
 }
 
-export default async function SessionsPage({ searchParams }: PageProps<"/sessions">) {
+// searchParams 는 요청 시점 데이터라 Suspense 안에서 await 한다 (Cache Components). 그래야 카드 틀이 먼저 뜬다
+async function ErrorMessage({ searchParams }: Pick<PageProps<"/sessions">, "searchParams">) {
   const error = (await searchParams).error;
   const message = typeof error === "string" ? ERRORS[error] : undefined;
+  if (!message) {
+    return null;
+  }
+  return (
+    <p role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
+  );
+}
+
+export default function SessionsPage({ searchParams }: PageProps<"/sessions">) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
       <Card>
@@ -86,18 +99,10 @@ export default async function SessionsPage({ searchParams }: PageProps<"/session
             로그인할 때마다 기기 하나가 생깁니다(refresh token). 다른 기기를 로그아웃하면 그 기기는
             지금 쓰는 access token 이 끝나는 대로(최대 15분) 다시 로그인해야 합니다.
           </p>
-          {message && (
-            <p role="alert" className="text-sm text-destructive">
-              {message}
-            </p>
-          )}
-          <Suspense
-            fallback={
-              <p role="status" className="text-sm text-muted-foreground">
-                불러오는 중...
-              </p>
-            }
-          >
+          <Suspense fallback={null}>
+            <ErrorMessage searchParams={searchParams} />
+          </Suspense>
+          <Suspense fallback={<ListSkeleton rows={2} />}>
             <SessionList />
           </Suspense>
         </CardContent>
