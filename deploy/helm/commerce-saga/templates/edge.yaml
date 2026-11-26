@@ -49,8 +49,8 @@ spec:
 {{- $gw := dict "name" "gateway" "port" .Values.services.gateway.port }}
 {{- $sas := dict "name" "auth-service" "port" (index .Values.services "auth-service").port }}
 {{- $scgPaths := list "/api" "/oauth2/authorization" "/login/oauth2/code" "/logout" }}
-{{- /* auth-service 로 보내는 경로: SAS 표준 엔드포인트 + 로그인·가입 처리 + CSRF (설계 문서 7-1 "인증 쪽"). 그 밖은 인증 화면 */}}
-{{- $sasPaths := list "/oauth2" "/.well-known" "/userinfo" "/connect/logout" "/login" "/signup" "/csrf" }}
+{{- /* auth-service 로 보내는 경로: SAS 표준 엔드포인트 + 로그인·가입 처리 + CSRF + 로그인 기기 API (설계 문서 7-1 "인증 쪽"). 그 밖은 인증 화면 */}}
+{{- $sasPaths := list "/oauth2" "/.well-known" "/userinfo" "/connect/logout" "/login" "/signup" "/csrf" "/sessions" }}
 {{- if eq .Values.edge.mode "host" }}
 {{- range $screen := list "web" "admin" }}
 ---

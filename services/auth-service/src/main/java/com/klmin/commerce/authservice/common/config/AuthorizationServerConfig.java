@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.LockedException;
@@ -30,10 +31,20 @@ import org.springframework.security.web.authentication.SavedRequestAwareAuthenti
 import org.springframework.security.web.authentication.logout.CompositeLogoutHandler;
 import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.session.web.http.CookieSerializer;
 import org.springframework.session.web.http.DefaultCookieSerializer;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -133,12 +144,19 @@ public class AuthorizationServerConfig {
     @Bean
     @Order(3)
     SecurityFilterChain loginFilterChain(HttpSecurity http,
-                                         @Value("${auth.web-home}") String webHome) throws Exception {
+                                         @Value("${auth.web-home}") String webHome,
+                                         SessionAuthenticationStrategy deviceLoginRecorder) throws Exception {
         SavedRequestAwareAuthenticationSuccessHandler success = new SavedRequestAwareAuthenticationSuccessHandler();
         success.setDefaultTargetUrl(webHome);
         ExceptionMappingAuthenticationFailureHandler failure = new ExceptionMappingAuthenticationFailureHandler();
         failure.setDefaultFailureUrl("/signin?error");
         failure.setExceptionMappings(Map.of(LockedException.class.getName(), "/signin?error=locked"));
+        // 기기 API(/sessions, /sessions/{id})는 화면이 fetch 로 부른다: 로그인 화면 리다이렉트 대신 401.
+        // /sessions/login 은 브라우저가 여는 주소라 로그인 화면으로(로그인 뒤 돌아온다)
+        PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
+        RequestMatcher devicesApi = new AndRequestMatcher(
+                new OrRequestMatcher(paths.matcher("/sessions"), paths.matcher("/sessions/*")),
+                new NegatedRequestMatcher(paths.matcher("/sessions/login")));
         return http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/csrf").permitAll()
@@ -152,6 +170,12 @@ public class AuthorizationServerConfig {
                         .successHandler(success)
                         .failureHandler(failure)
                         .permitAll())
+                .exceptionHandling(e -> e.defaultAuthenticationEntryPointFor(
+                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED), devicesApi))
+                // 로그인하면 세션 id 를 바꾸고(세션 고정 방지) 그 세션을 기기로 남긴다 (후속 5-6)
+                .sessionManagement(session -> session.sessionAuthenticationStrategy(
+                        new CompositeSessionAuthenticationStrategy(
+                                List.of(new ChangeSessionIdAuthenticationStrategy(), deviceLoginRecorder))))
                 .logout(logout -> logout.disable())
                 .httpBasic(basic -> basic.disable())
                 .build();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 /** auth-service 가 SSO 세션에 둔 CSRF 토큰 (GET csrf 의 본문, 설계 문서 4절) */
-export type CsrfToken = { parameterName: string; token: string };
+export type CsrfToken = { parameterName: string; token: string; headerName: string };
 
 /**
  * CSRF 토큰을 받는다. 주소는 앞 `/` 없는 상대 경로(`csrf`)라 `<base href>` 기준이다: 호스트 방식 `/csrf`, 경로 방식 `/auth/csrf`
@@ -21,8 +21,13 @@ export async function fetchCsrf(fetcher: typeof fetch = fetch): Promise<CsrfToke
   ) {
     throw new Error("csrf 응답 형식");
   }
-  const { parameterName, token } = body as CsrfToken;
-  return { parameterName, token };
+  const { parameterName, token, headerName } = body as Partial<CsrfToken>;
+  // 헤더 이름은 fetch 로 보내는 요청(기기 로그아웃)에 쓴다. 폼은 parameterName
+  return {
+    parameterName: parameterName!,
+    token: token!,
+    headerName: typeof headerName === "string" ? headerName : "X-CSRF-TOKEN",
+  };
 }
 
 export type CsrfState =

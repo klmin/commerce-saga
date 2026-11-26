@@ -40,7 +40,7 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
 | product-service | 상품·가격의 주인, 가격 변경 이력. 공개 조회 API(order 가 주문 때 동기 조회, ADR 0016). 메시지를 발행하지 않음(products 테이블은 Debezium 이 검색용으로 복제, ADR 0010) |
 | search-service | 상품 검색. `product.cdc.products`(테이블 CDC)를 소비해 Elasticsearch 에 색인(외부 버전 = 원본 LSN), 공개 검색 API. ES 가 자기 저장소(DB 없음) (ADR 0010) |
-| auth-service | 회원가입, Spring Authorization Server(OIDC): 로그인 화면·SSO 세션(Redis)·토큰(JWT RS256) 발급·JWKS. 메시지는 `auth.events` 만 (ADR 0017, 0008) |
+| auth-service | 회원가입, Spring Authorization Server(OIDC): 로그인·SSO 세션(Redis)·토큰(JWT RS256) 발급·JWKS·로그인 기기(SSO 세션 단위). 메시지는 `auth.events` 만 (ADR 0017, 0008) |
 | gateway | Spring Cloud Gateway(WebFlux) = BFF: 화면 로그인(`oauth2Login`, 세션에 토큰), `/api/<자원>/**` → 서비스(토큰 릴레이), JWT 1차 검증·역할·사용자별 rate limit (ADR 0017, 0008) |
 
 ## 명령
@@ -170,6 +170,7 @@ common/error, common/web, common/config
   - 토큰(access·refresh)이 브라우저(JS·URL·쿠키 값)로 나가지 않는지. 화면은 Gateway 세션 쿠키(httpOnly)만. 비밀번호·토큰·클라이언트 시크릿이 로그·예외 메시지·`toString` 에 남지 않는지
   - redirect URI·로그아웃 뒤 주소·`return_to` 가 등록된 정확한 값·같은 출처 경로만인지(open redirect), PKCE·state 를 쓰는지 (P0)
   - 쿠키로 인증되는 상태 변경에 CSRF 검사가 있는지, 앞단이 들어온 `X-Forwarded-Prefix`·`Host` 를 믿지 않는지 (P1)
+  - 로그인 기기 API(`/sessions`)가 SSO 세션의 사용자 기기만 보이고 지우는지(남의 기기 id 는 404), 응답에 세션 id(쿠키 값)를 내보내지 않는지 (P0)
 - 동시성
   - 재고·포인트 차감이 동시 요청에서 음수가 되지 않는지 (조건부 UPDATE, 낙관적 락 등)
 - 민감정보

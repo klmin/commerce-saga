@@ -7,11 +7,11 @@ export const DEV_PASSWORD = process.env.E2E_DEV_PASSWORD ?? "local-dev-pass";
  * 화면을 열면 세션이 없어 Gateway 로그인 → SAS 로그인 화면(/signin, 인증 화면 SPA)으로 간다 (ADR 0017).
  * 로그인하면 돌아가려던 화면으로 돌아온다
  */
-export async function login(page: Page, path = "/", loginId = "user1") {
+export async function login(page: Page, path = "/", loginId = "user1", password = DEV_PASSWORD) {
   await page.goto(path);
   await expect(page).toHaveURL(/\/signin/);
   await page.getByLabel("아이디").fill(loginId);
-  await page.getByLabel("비밀번호").fill(DEV_PASSWORD);
+  await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "로그인" }).click();
   await expect(page.getByText(`사용자 #`)).toBeVisible();
 }

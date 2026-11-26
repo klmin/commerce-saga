@@ -2,7 +2,7 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-4 인증 화면 SPA: 4-7절)
+- 마지막 갱신: 2026-11-26 (후속 5-6 로그인 기기·시나리오 19: 4-7절)
 - 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
@@ -581,7 +581,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 | 5-3d | compose 전체 실행·Caddy(`CADDY_MODE` host·path)·시크릿 init, compose 경로 방식 e2e |
 | 5-3c | 기존 `/auth/*` API·refresh family 제거(auth-service·Gateway 라우트) |
 | 5-4 | 인증 화면(`frontend/apps/auth`) |
-| 5-6 | 로그인 기기 관리 재구현, 시나리오 문서, 태그 |
+| 5-6 | 로그인 기기 관리 재구현(기기 = SSO 세션, 인증 화면 `/devices`), 시나리오 19, 머지 뒤 태그 |
 
 **5-1 에서 정한 것** (설계 문서 11절 중 auth-service 몫, 추천안)
 - SSO 세션(`AUTH_SESSION`) 유휴 만료 30분(`AUTH_SSO_SESSION_IDLE`). Keycloak 의 SSO Session Idle 기본값과 같다. 길게 두면 공용 PC 위험, 짧으면 화면 사이 SSO 가 자주 끊긴다
@@ -593,6 +593,14 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - 확인한 것: Boot 4 는 전달 헤더 설정 이름이 `server.request.header.forwarded.*` 이고 `X-Forwarded-Prefix` 는 `use-prefix: true` 를 켜야 읽는다. Spring Session 쿠키 설정은 내장 서버일 때만 Boot 속성이 먹어 `CookieSerializer` 로 둔다. Security 7 은 ID 토큰 `auth_time` 을 `FactorGrantedAuthority`(PASSWORD)에서 읽는다
 
 **순서 바꿈** (사용자 결정 2026-11-26, 5-3a 뒤): 화면은 모두 React + Vite 로 간다. Next 에 남은 것이 관리자 화면뿐이라 5-5(관리자 SPA)를 먼저 하고, Next 는 SPA 이미지로 배포를 바꾸는 5-3b 에서 지운다(이 PR 에서 지우면 5-3b 전까지 EKS 에 화면이 없다). 기존 `/auth/*` API 는 그 뒤 5-3c. 순서: 5-3a → 5-5 → 5-3b → 5-3c → 5-4 → 5-6
+
+**5-6 에서 정한 것** (기기 단위·화면 위치는 사용자 확인 2026-11-26, 나머지 추천안. 자세히는 [시나리오 19](scenarios/19-sso-logout-devices.md))
+- 기기 = SSO 세션(브라우저 하나). 로그인·가입 후 로그인 때 세션 고정 방지 다음에 기기 id 를 세션에 두고 `auth:device:<userId>`(Redis hash)에 남긴다. SAS 인가 기록에는 인가 요청 때 속성 `device_id` 를 붙인다(인가 기록 저장소를 BeanPostProcessor 로 감쌈: common 설정이 기능 패키지를 모르게)
+- 기기는 SSO 세션(30분 유휴)이나 그 기기의 refresh token(14일) 중 하나라도 살아 있으면 보인다. 화면은 SSO 세션이 끝나도 refresh 로 로그인을 이어가기 때문. 둘 다 끝난 기기는 목록을 볼 때 지운다
+- 다른 기기 로그아웃 = 그 SSO 세션 + 그 기기의 인가 기록 삭제. 그 브라우저의 Gateway 세션은 Gateway 소유라 건드리지 않아 access token 이 끝날 때까지(최대 15분) API 가 된다(한계로 기록)
+- OIDC 로그아웃은 이 기기의 인가 기록만 지운다(5-1 은 그 사용자 전부). 기기 id 없는 옛 세션이면 예전처럼 전부
+- 화면: 인증 화면 `/devices`(auth-service 를 SSO 세션 쿠키로 바로, `GET/DELETE /sessions`, CSRF 헤더). 사용자 화면 헤더 "로그인 기기" 는 Gateway `/api/me` 의 `devicesUrl`(SAS 공개 주소 + `/sessions/login`: SSO 세션이 없으면 로그인을 거쳐 돌아옴). 앞단 프록시·Vite 가 `/sessions` 를 auth-service 로
+- 태그는 이 PR 머지 뒤 main 에 `v0.7-sso-bff`(후속 5 끝)
 
 **5-4 에서 정한 것** (추천안)
 - 인증 화면 `frontend/apps/auth`(Vite + React Router, 로컬 :5175): `/signin`·`/register` 두 화면, 그 밖은 `/signin` 으로. 서버 상태가 없어 TanStack Query·`packages/bff` 는 쓰지 않는다(공용 UI 만). auth-service 의 임시 화면(`SignInPageController`)은 지웠다

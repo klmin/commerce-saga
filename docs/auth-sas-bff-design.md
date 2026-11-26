@@ -81,7 +81,7 @@ Redis 세션이 **둘**이다. 접두어를 나눠 섞이지 않게 한다. Redi
 
 **토큰 갱신**: access token 이 만료되면 SCG 가 refresh token 으로 SAS 에서 새로 받는다. refresh token 은 회전하지 않는다(5-2: 같은 세션의 동시 요청이 옛 토큰으로 갱신하다 거절돼 세션이 끝나는 것을 막는다. 수명은 로그인부터 14일 고정). 브라우저는 모른다.
 
-**로그아웃**: SCG 세션 ② 삭제 → OIDC RP-initiated logout 으로 SAS 의 세션 ① 과 그 사용자의 인가 기록 정리 → 화면으로. "이 화면만 로그아웃"이 아니라 SSO 전체 로그아웃이 기본.
+**로그아웃**: SCG 세션 ② 삭제 → OIDC RP-initiated logout 으로 SAS 의 세션 ① 과 이 기기(세션 ①)에서 받은 인가 기록 정리(5-6 전에는 그 사용자의 인가 기록 전부. 다른 기기는 로그인 기기 화면에서) → 화면으로. "이 화면만 로그아웃"이 아니라 SSO 전체 로그아웃이 기본.
 
 **가입**: 인증 화면 `/register` → **폼 POST** `/signup`(auth-service, `_csrf` 포함) → 회원 + `UserRegistered` outbox(지금 그대로, point 가 포인트 계정 생성) → 바로 로그인 처리(세션 ①) → 저장된 authorize 요청이 있으면 ⑤ 부터 이어서 화면으로, 없으면 사용자 화면으로. 중복 아이디 등 실패는 `/register?error=…` 로 돌아온다.
 
@@ -158,7 +158,8 @@ ADR 0008 의 refresh family·재사용 탐지·유예(20초)·single-flight 는 
 | `/login` | auth-service | 로그인 폼 POST 처리 |
 | `/signup` | auth-service | 가입 폼 POST 처리 |
 | `/csrf` | auth-service | 인증 화면이 CSRF 토큰을 받음 |
-| 그 외 (`/signin`, `/register`, 정적 파일) | 인증 화면(SPA) | 로그인·가입 화면. SPA fallback |
+| `/sessions`, `/sessions/**` | auth-service | 로그인 기기 API (SSO 세션 쿠키로, 5-6) |
+| 그 외 (`/signin`, `/register`, `/devices`, 정적 파일) | 인증 화면(SPA) | 로그인·가입·로그인 기기 화면. SPA fallback |
 
 화면 라우터는 위 서버 경로를 쓰지 않는다(경로 예약). 이 두 표가 원본이고, Caddyfile·Helm values·Vite 프록시는 이 표를 그대로 옮긴다(바꿀 때 같이 바꾼다).
 
@@ -191,7 +192,7 @@ http://localhost       { import scg; handle { reverse_proxy web:80 } }
 http://admin.localhost { import scg; handle { reverse_proxy admin:80 } }
 http://auth.localhost {
     request_header -X-Forwarded-Prefix
-    @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
+    @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf /sessions /sessions/*
     handle @sas { reverse_proxy auth-service:8086 }
     handle      { reverse_proxy auth-front:80 }
 }
@@ -290,7 +291,7 @@ http://localhost {
     request_header -X-Forwarded-Prefix          # 브라우저가 보낸 값은 버린다(7-3)
     redir /auth /auth/
     handle_path /auth/* {                       # handle_path 가 /auth 를 뗀다
-        @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
+        @sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf /sessions /sessions/*
         handle @sas { reverse_proxy auth-service:8086 { header_up X-Forwarded-Prefix /auth } }
         handle      { reverse_proxy auth-front:80 }
     }
@@ -353,7 +354,7 @@ k8s 는 Envoy `HTTPRoute` 에서 같은 규칙: 경로 매칭 + `URLRewrite`(`Re
 ## 11. PR 에서 정할 것
 
 - SPA 라우터·데이터 라이브러리(React Router / TanStack Router, TanStack Query)
-- 기기 관리의 "기기" 단위(SSO 세션 ① 기준 추천)와 화면 위치(인증 화면 또는 사용자 화면)
+- ~~기기 관리의 "기기" 단위와 화면 위치~~ → 5-6 에서 정함(사용자 확인 2026-11-26): 기기 = SSO 세션 ①(브라우저), 화면은 인증 화면 `/devices`. [시나리오 19](scenarios/19-sso-logout-devices.md)
 - SCG 세션 수명·유휴 만료, SSO 세션 수명
 - 인가 기록 보존 기간과 정리 주기
 - 프론트 모노레포 도구(pnpm workspace 추천, Turborepo 는 필요해지면)
