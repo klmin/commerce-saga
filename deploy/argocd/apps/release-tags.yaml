@@ -1,6 +1,6 @@
 # release 워크플로가 쓴다 (release/eks 에만 있다, scripts/release-plan.sh). 손으로 고치지 않는다
 # 이미지마다 마지막으로 다시 빌드된 main 커밋. 이번에 안 바뀐 이미지는 이전 태그 그대로 → 그 Deployment 는 롤링하지 않는다
-releasedCommit: 139eedd6ce711ce638e51552c419c43195a3b694
+releasedCommit: b71bd946500a1a26fae155c74f36d3566304cad0
 commerceValues:
   image:
     tags:
