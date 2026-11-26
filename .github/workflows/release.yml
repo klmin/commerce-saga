@@ -177,7 +177,7 @@ jobs:
         with:
           fetch-depth: 0   # release 커밋의 부모(이전 release 커밋)가 있어야 한다
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: release-tags
           path: ${{ runner.temp }}/release
