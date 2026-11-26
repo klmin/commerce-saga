@@ -1,9 +1,11 @@
 package com.klmin.commerce.gateway;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -25,7 +27,16 @@ class MeController {
                 .distinct()
                 .sorted()
                 .toList();
-        return new Me(Long.parseLong(authentication.getName()), roles);
+        return new Me(userId(authentication.getName()), roles);
+    }
+
+    /** 토큰의 sub 는 auth-service 가 정한 long userId 다. 아니면 이 Gateway 가 받을 토큰이 아니므로 401 */
+    private static long userId(String sub) {
+        try {
+            return Long.parseLong(sub);
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "sub 가 userId 가 아니다");
+        }
     }
 
     record Me(long userId, List<String> roles) {

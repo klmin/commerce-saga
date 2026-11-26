@@ -5,7 +5,9 @@ import { getMe } from "@/api/me";
 import { LoadError, Page } from "@/components/page";
 import { SiteHeader } from "@/components/site-header";
 import { ListSkeleton } from "@/components/skeletons";
-import { ApiError } from "@/lib/api";
+import { Button } from "@commerce/ui/button";
+
+import { ApiError, LoginFailedError, startLogin } from "@/lib/api";
 import { routerBasename } from "@/lib/base";
 import { CartPage } from "@/pages/cart-page";
 import { NotificationsPage, PaymentsPage, PointsPage } from "@/pages/history-pages";
@@ -18,9 +20,11 @@ import { ErrorPage, NotFoundPage } from "@/pages/not-found-page";
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // 4xx 는 다시 해도 같다. 5xx·네트워크 오류만 한 번 더
+      // 4xx·로그인 실패는 다시 해도 같다. 5xx·네트워크 오류만 한 번 더
       retry: (count, error) =>
-        count < 1 && !(error instanceof ApiError && error.status >= 400 && error.status < 500),
+        count < 1 &&
+        !(error instanceof LoginFailedError) &&
+        !(error instanceof ApiError && error.status >= 400 && error.status < 500),
       refetchOnWindowFocus: false,
     },
   },
@@ -37,6 +41,16 @@ function Layout() {
       <SiteHeader />
       {me.isSuccess ? (
         <Outlet />
+      ) : me.error instanceof LoginFailedError ? (
+        // 로그인이 실패해 돌아왔다(?login_error). 자동으로 다시 가지 않고 사용자가 고르게 한다
+        <Page>
+          <div role="alert" className="flex flex-col items-start gap-3">
+            <p className="text-sm text-destructive">{me.error.message}</p>
+            <Button type="button" onClick={() => void startLogin(true)}>
+              다시 로그인
+            </Button>
+          </div>
+        </Page>
       ) : me.isError ? (
         <Page>
           <LoadError error={me.error} retry={() => me.refetch()} />

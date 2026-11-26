@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, ApiError, browser, loginUrl, xsrfToken } from "./api";
+import {
+  api,
+  ApiError,
+  browser,
+  LoginFailedError,
+  loginUrl,
+  startLogin,
+  withoutLoginError,
+  xsrfToken,
+} from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -70,5 +79,25 @@ describe("api", () => {
         "/oauth2/authorization/auto?return_to=%2Forders%3Fbefore%3Dx",
       ),
     );
+  });
+});
+
+describe("로그인 실패로 돌아온 화면 (?login_error)", () => {
+  it("자동으로 다시 로그인하지 않고 LoginFailedError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+    vi.spyOn(browser, "currentPath").mockReturnValue("/?login_error");
+    const assign = vi.spyOn(browser, "assign").mockImplementation(() => {});
+    await expect(api("/api/me")).rejects.toBeInstanceOf(LoginFailedError);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("다시 로그인(force)은 login_error 를 뺀 곳으로 돌아오게 시작한다", () => {
+    vi.spyOn(browser, "currentPath").mockReturnValue("/orders?login_error&before=x");
+    const assign = vi.spyOn(browser, "assign").mockImplementation(() => {});
+    void startLogin(true);
+    expect(assign).toHaveBeenCalledWith(
+      "/oauth2/authorization/auto?return_to=%2Forders%3Fbefore%3Dx",
+    );
+    expect(withoutLoginError("/?login_error")).toBe("/");
   });
 });

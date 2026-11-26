@@ -67,9 +67,43 @@ export const browser = {
   },
 };
 
-/** 세션이 없거나 끝났다(401). 로그인을 시작한다. SSO 세션이 남아 있으면 화면 없이 바로 돌아온다 */
-export function startLogin(): Promise<never> {
-  browser.assign(loginUrl(browser.currentPath()));
+/** 로그인이 실패해 돌아왔다(Gateway 가 홈의 ?login_error 로 보냄). 다시 자동으로 로그인하지 않는다 */
+export class LoginFailedError extends Error {
+  constructor() {
+    super("로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+    this.name = "LoginFailedError";
+  }
+}
+
+const LOGIN_ERROR = "login_error";
+
+function splitPath(path: string): { pathname: string; params: URLSearchParams } {
+  const i = path.indexOf("?");
+  return i < 0
+    ? { pathname: path, params: new URLSearchParams() }
+    : { pathname: path.slice(0, i), params: new URLSearchParams(path.slice(i + 1)) };
+}
+
+/** ?login_error 를 뺀 경로 (다시 로그인한 뒤 돌아올 곳) */
+export function withoutLoginError(path: string): string {
+  const { pathname, params } = splitPath(path);
+  params.delete(LOGIN_ERROR);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+/**
+ * 세션이 없거나 끝났다(401). 로그인을 시작한다. SSO 세션이 남아 있으면 화면 없이 바로 돌아온다.
+ * 로그인이 실패해 ?login_error 로 돌아온 화면이면 자동으로 다시 가지 않고 LoginFailedError 를 낸다:
+ * 토큰 교환이 계속 실패하는데 SSO 세션이 남아 있으면 로그인과 콜백 사이를 끝없이 오가기 때문이다.
+ * 사용자가 "다시 로그인"을 누르면 force 로 부른다
+ */
+export function startLogin(force = false): Promise<never> {
+  const path = browser.currentPath();
+  if (!force && splitPath(path).params.has(LOGIN_ERROR)) {
+    return Promise.reject(new LoginFailedError());
+  }
+  browser.assign(loginUrl(withoutLoginError(path)));
   // 화면이 넘어갈 때까지 기다린다 (오류 화면이 잠깐 보이지 않게)
   return new Promise<never>(() => {});
 }
