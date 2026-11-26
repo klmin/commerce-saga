@@ -1,7 +1,7 @@
 import { Button } from "@commerce/ui/button";
 import { Input } from "@commerce/ui/input";
 import { Label } from "@commerce/ui/label";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
@@ -141,6 +141,7 @@ function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
 
 function ProductList({ products }: { products: Product[] }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [adding, setAdding] = useState<number>();
   const stocks = useQuery({
     queryKey: ["stocks", products.map((p) => p.id)],
@@ -152,7 +153,11 @@ function ProductList({ products }: { products: Product[] }) {
     setAdding(productId);
     try {
       const current = (await getCart()).items.find((i) => i.productId === productId)?.quantity ?? 0;
-      await putCartItem(productId, Math.min(current + 1, MAX_QUANTITY));
+      // 받은 장바구니로 캐시를 바꾼 뒤 옮긴다. 옛 캐시로 장바구니 주문 폼이 먼저 그려지면 방금 담은 상품이 빠진 채 주문될 수 있다
+      queryClient.setQueryData(
+        ["cart"],
+        await putCartItem(productId, Math.min(current + 1, MAX_QUANTITY)),
+      );
       navigate("/cart");
     } catch (e) {
       navigate(`/cart?error=${cartErrorCode(e)}`);
