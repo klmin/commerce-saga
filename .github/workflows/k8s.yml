@@ -298,6 +298,8 @@ jobs:
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
           # SAS 는 /auth 아래 (issuer 에 경로가 붙는다)
           curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'
+          # SAS·로그인 경로만 연다: 관리 엔드포인트는 밖에서 보이지 않는다
+          ! curl -s http://localhost/auth/actuator/prometheus | grep -q jvm_
           BASE_URL=http://localhost bash scripts/smoke-bff-login.sh
 
       - name: port-forward

@@ -49,6 +49,8 @@ spec:
 {{- $gw := dict "name" "gateway" "port" .Values.services.gateway.port }}
 {{- $sas := dict "name" "auth-service" "port" (index .Values.services "auth-service").port }}
 {{- $scgPaths := list "/api" "/oauth2/authorization" "/login/oauth2/code" "/logout" }}
+{{- /* SAS 표준 엔드포인트 + 로그인·가입 처리·화면 (설계 문서 7-1 "인증 쪽". 로그인 화면은 지금 auth-service 의 임시 화면) */}}
+{{- $sasPaths := list "/oauth2" "/.well-known" "/userinfo" "/connect/logout" "/login" "/signup" "/csrf" "/signin" "/register" }}
 {{- if eq .Values.edge.mode "host" }}
 {{- range $screen := list "web" "admin" }}
 ---
@@ -87,8 +89,11 @@ spec:
     - name: {{ .Release.Name }}-edge
   hostnames: [{{ include "commerce.hostOf" $urls.auth | quote }}]
   rules:
+    # SAS·로그인·가입에 필요한 경로만 (설계 문서 7-1 "인증 쪽"). 관리 엔드포인트(/actuator) 등 그 밖은 열지 않는다(404)
     - matches:
-        - path: { type: PathPrefix, value: / }
+        {{- range $sasPaths }}
+        - path: { type: PathPrefix, value: {{ . }} }
+        {{- end }}
       filters:
         - type: RequestHeaderModifier
           requestHeaderModifier: { remove: [X-Forwarded-Prefix] }
@@ -108,18 +113,21 @@ spec:
   hostnames: [{{ include "commerce.hostOf" . | quote }}]
   {{- end }}
   rules:
-    # 1. /auth → SAS. /auth 를 떼고 X-Forwarded-Prefix: /auth (SAS 가 만드는 주소·쿠키 Path 에 붙는다)
+    # 1. /auth/<SAS·로그인·가입 경로> → SAS. /auth 를 떼고 X-Forwarded-Prefix: /auth (SAS 가 만드는 주소·쿠키 Path 에 붙는다).
+    #    정해진 경로만 넘긴다: 관리 엔드포인트(/auth/actuator 등)는 열지 않는다
+    {{- range $sasPaths }}
     - matches:
-        - path: { type: PathPrefix, value: /auth }
+        - path: { type: PathPrefix, value: {{ printf "/auth%s" . }} }
       filters:
         - type: URLRewrite
           urlRewrite:
-            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: {{ . }} }
         - type: RequestHeaderModifier
           requestHeaderModifier:
             set: [{ name: X-Forwarded-Prefix, value: /auth }]
       backendRefs:
         - { name: {{ $sas.name }}, port: {{ $sas.port }} }
+    {{- end }}
     # 2. Gateway 경로 → Spring Gateway (그대로)
     - matches:
         {{- range $scgPaths }}
