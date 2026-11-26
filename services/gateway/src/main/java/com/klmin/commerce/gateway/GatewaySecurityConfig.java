@@ -36,18 +36,16 @@ import java.util.Set;
  * <ul>
  *   <li><b>BFF 세션</b>(화면 SPA): 쿠키 {@code GW_SESSION}. 로그인은 {@code /oauth2/authorization/auto} → SAS → 콜백
  *       {@code /login/oauth2/code/*}. 토큰은 세션에 있고 {@code TokenRelay} 가 서비스로 {@code Authorization: Bearer} 를 붙인다</li>
- *   <li><b>Bearer</b>: {@code Authorization} 헤더의 access token 을 JWKS 로 검증 (지금 Next 화면, 나중 모바일·외부 앱)</li>
+ *   <li><b>Bearer</b>: {@code Authorization} 헤더의 access token 을 JWKS 로 검증 (시나리오 스크립트, 나중 모바일·외부 앱)</li>
  * </ul>
  * 경로 규칙:
  * <ul>
- *   <li>{@code /auth/**}, JWKS: 토큰 없이 auth-service 로 (기존 로그인 API, 5-3 에서 제거)</li>
  *   <li>{@code GET /api/stocks/**}, {@code GET /api/products/**}, {@code GET /api/search/**}: 로그인 없이</li>
  *   <li>{@code /api/admin/**}: ADMIN 역할(세션은 ID 토큰의 roles, Bearer 는 access token 의 roles)</li>
  *   <li>그 밖의 {@code /api/**}: 로그인. 없으면 리다이렉트가 아니라 <b>401</b>(SPA 가 로그인 시작 주소로 화면을 옮긴다)</li>
  * </ul>
  * <b>CSRF</b>: 쿠키가 실린 상태 변경 요청만 검사한다(Bearer 만 쓰는 요청은 브라우저가 자동으로 싣는 자격 증명이 없다).
  * 토큰은 쿠키 {@code XSRF-TOKEN}(JS 가 읽음) → SPA 가 헤더 {@code X-XSRF-TOKEN} 또는 폼 {@code _csrf} 로 돌려보낸다.
- * {@code /auth/**} 의 쿠키 요청(기존 refresh·로그아웃)은 auth-service 가 직접 막는다.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebFluxSecurity
@@ -75,7 +73,6 @@ class GatewaySecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .authorizeExchange(exchange -> exchange
-                        .pathMatchers("/auth/**", "/.well-known/jwks.json").permitAll()
                         .pathMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .pathMatchers("/oauth2/authorization/**", "/login/oauth2/code/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/stocks/**", "/api/products", "/api/products/**", "/api/search/**").permitAll()
@@ -110,7 +107,6 @@ class GatewaySecurityConfig {
     private static Mono<ServerWebExchangeMatcher.MatchResult> stateChangeWithCookie(ServerWebExchange exchange) {
         ServerHttpRequest request = exchange.getRequest();
         boolean check = !SAFE_METHODS.contains(request.getMethod())
-                && !request.getPath().value().startsWith("/auth/")
                 && request.getHeaders().containsHeader(HttpHeaders.COOKIE);
         return check ? ServerWebExchangeMatcher.MatchResult.match() : ServerWebExchangeMatcher.MatchResult.notMatch();
     }

@@ -14,8 +14,8 @@
 flowchart LR
     client([client]) -- "POST /api/orders\nBearer JWT" --> gw[gateway\nJWT 1차 검증 · rate limit]
     gw -- "/orders (JWT 재검증)" --> order
-    client -- "/auth/login" --> gw
-    gw --> auth[auth-service\nauth_db · Redis\nJWT 발급 · JWKS]
+    client -- "로그인 (OIDC)" --> auth[auth-service · SAS\nauth_db · Redis\n토큰 발급 · JWKS]
+    gw -- "토큰 교환·갱신 (BFF)" --> auth
     gw -- "/products (공개 조회)\n/admin/products" --> product[product-service\nproduct_db\n상품 · 가격 · 가격 이력]
     product -. "products 테이블 CDC\n(Debezium, ADR 0010)" .-> kafka
     gw -- "/search (공개)" --> search[search-service\nElasticsearch\n상품 검색]
@@ -73,7 +73,7 @@ docker compose -f infra/docker-compose.yml up -d --wait     # Postgres, Kafka, K
 ./gradlew :services:auth-service:bootRun                   # 8086 회원·로그인 (Redis 6380)
 ./gradlew :services:product-service:bootRun                # 8087 상품·가격 (후속 4-1)
 ./gradlew :services:search-service:bootRun                 # 8089 상품 검색 (후속 4-2, Elasticsearch 9200 + product-cdc 커넥터 등록)
-./gradlew :services:gateway:bootRun                        # 8000 API Gateway (/auth/**, /api/**)
+./gradlew :services:gateway:bootRun                        # 8000 API Gateway (BFF 로그인 /oauth2/**, /api/**)
 (cd frontend && pnpm install && pnpm dev:web)          # 사용자 화면 SPA http://localhost:5173 (BFF 로그인). frontend/README.md
 (cd frontend && pnpm dev:admin)                        # 관리자 화면 SPA http://localhost:5174
 ```
@@ -89,8 +89,7 @@ docker compose --env-file infra/app-path.env -f infra/docker-compose.yml -f infr
 ```
 
 ```bash
-TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'Content-Type: application/json' \
-  -d '{"loginId":"user1","password":"local-dev-pass"}' | sed -nE 's/.*"accessToken":"([^"]+)".*/\1/p')   # 개발용 시드 사용자 1
+TOKEN=$(source scripts/lib/auth.sh && access_token 1)     # 개발용 시드 사용자 1 (SAS 의 스크립트용 클라이언트로 로그인, scripts/lib/auth.sh)
 curl -X POST localhost:8000/api/orders -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{"lines":[{"productId":1,"quantity":2,"unitPrice":39000}],"pointAmount":500}'   # 같은 키로 다시 보내면 처음 주문(200)
@@ -101,7 +100,6 @@ scripts/smoke-saga.sh                                      # 정상·품절·결
 scripts/dlt.sh list inventory.command.DLT                  # 처리 못 한 메시지와 원인 (replay 로 재처리)
 scripts/smoke-tracing.sh                                   # 주문 한 건 = trace 하나 + 그 trace 의 로그 (Grafana → Explore → Tempo, span 의 Related logs → Loki)
 scripts/smoke-alerts.sh                                    # 장애 → 경보 firing (Grafana 대시보드 commerce-saga)
-scripts/smoke-auth.sh                                      # 가입·로그인·refresh 회전·재사용 탐지 (auth-service 를 AUTH_REFRESH_GRACE=2s 로 띄우면 GRACE_WAIT=3 로 빨리)
 scripts/smoke-gateway.sh                                   # Gateway·서비스 JWT 검증, 남의 주문 404, 관리자 역할, rate limit
 scripts/smoke-idempotency.sh                               # 같은 Idempotency-Key 재요청·동시 요청에도 주문 하나, 다른 본문 422, 내 주문·결제 목록
 scripts/smoke-signup-points.sh                             # 가입 → auth.events → 포인트 계정(가입 축하 1,000P) → 그 포인트로 주문

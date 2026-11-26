@@ -29,7 +29,7 @@ spring:
   mvc:
     problemdetails:
       enabled: true
-  # refresh token family, 로그인 실패 횟수 (ADR 0008), SSO 로그인 세션 (ADR 0017)
+  # 로그인 실패 횟수 (ADR 0008), SSO 로그인 세션 (ADR 0017)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -64,7 +64,7 @@ auth:
   web-home: ${WEB_HOME:http://localhost:5173/}
   oauth:
     access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:15m}
-    # 갱신할 때마다 새 refresh token(회전, 옛 것은 무효)이라 쓰는 동안 연장된다
+    # 로그인부터 이만큼 (갱신해도 회전하지 않아 늘어나지 않는다, 후속 5-2)
     refresh-token-ttl: ${AUTH_OAUTH_REFRESH_TOKEN_TTL:14d}
     # 모든 토큰이 끝난 인가 기록을 이만큼 지난 뒤 지운다
     authorization-retention: ${AUTH_OAUTH_AUTHORIZATION_RETENTION:1d}
@@ -84,18 +84,16 @@ auth:
         secret: ${GATEWAY_ADMIN_CLIENT_SECRET:}
         redirect-uris: ${ADMIN_REDIRECT_URI:http://localhost:5174/login/oauth2/code/gateway-admin}
         post-logout-redirect-uris: ${ADMIN_POST_LOGOUT_REDIRECT_URIS:http://localhost:5174/}
+    # 시나리오 스크립트(scripts/lib/auth.sh)가 curl 로 사용자 토큰을 받는 공개 클라이언트 (PKCE, 루프백 redirect, 후속 5-3c).
+    # 개발용 시드 사용자가 없는 운영(EKS)에서는 끈다
+    scripts-client:
+      enabled: ${AUTH_SCRIPTS_CLIENT_ENABLED:true}
+      redirect-uri: http://127.0.0.1/scripts/callback
+  # SAS 로그인 폼의 실패 제한 (아이디별, ADR 0008 의 규칙)
   policy:
-    access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:15m}
-    # 쓸 때마다 이만큼 연장한다. 연장해도 처음 로그인부터 refresh-absolute-ttl 을 넘지 않는다
-    refresh-token-ttl: ${AUTH_REFRESH_TOKEN_TTL:14d}
-    refresh-absolute-ttl: ${AUTH_REFRESH_ABSOLUTE_TTL:30d}
-    # 여러 탭이 같은 refresh token 으로 거의 동시에 refresh 할 때 재사용(탈취)으로 오인하지 않는 유예
-    refresh-grace: ${AUTH_REFRESH_GRACE:20s}
     login-max-failures: ${AUTH_LOGIN_MAX_FAILURES:5}
     login-lock: ${AUTH_LOGIN_LOCK:15m}
   jwt:
-    # 기존 /auth/* 토큰도 SAS 와 같은 issuer (후속 5-2. 서비스·Gateway 가 한 값으로 두 토큰을 검증한다)
-    issuer: ${auth.issuer}
     # 서명 키(PKCS#8 PEM)를 고르는 순서 (ADR 0008)
     # 1. 주입받은 키: private-key-location + key-id (k8s 는 Secret 을 파일로 마운트)
     # 2. 로컬 개발용 키 파일: 있으면 쓰고 없으면 만들어 저장한다. 재시작해도 이전 토큰이 검증된다

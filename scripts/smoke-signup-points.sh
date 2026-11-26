@@ -11,6 +11,7 @@
 #   13c. 계정은 사용자 하나에 하나 (point_db 의 그 사용자 행 1개), 다른 사용자 계정은 그대로
 #   13d. 포인트 내역(GET /api/points/me/history) = 최신순으로 주문 사용, 가입 축하 지급. 지급 기록(point_grants)은 1개
 set -euo pipefail
+source "$(dirname "$0")/lib/auth.sh"
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
@@ -22,7 +23,7 @@ COMPOSE=${COMPOSE:-docker compose -f infra/docker-compose.yml}
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
-# Gateway rate limit(auth 경로는 IP 별)에 걸리면 기다렸다 다시 보낸다. 429 는 서비스에 넘기기 전에 거절한 것이라 안전
+# Gateway rate limit 에 걸리면 기다렸다 다시 보낸다. 429 는 서비스에 넘기기 전에 거절한 것이라 안전
 call() { # method path [curl args...] → "<status>\n<body>"
   local method=$1 path=$2 out code i
   shift 2
@@ -42,16 +43,12 @@ login_id="signup_$(date +%s)_$$"
 login_id=${login_id:0:30}
 
 echo "== 13a. 가입하면 포인트 계정이 생긴다"
-res=$(call POST /auth/signup -H 'Content-Type: application/json' \
-  -d "{\"loginId\":\"$login_id\",\"password\":\"$PASSWORD\"}")
-[ "$(status_of <<< "$res")" = 201 ] || fail "가입 → $(status_of <<< "$res")"
-user_id=$(body_of <<< "$res" | field userId)
-[ -n "$user_id" ] || fail "가입 응답에 userId 없음"
+# 가입은 SAS 가입 폼(/register → POST /signup), 토큰은 스크립트용 클라이언트로 (scripts/lib/auth.sh)
+signup_user "$login_id" "$PASSWORD" || fail "가입 실패"
+token=$(user_token "$login_id" "$PASSWORD") || fail "로그인 실패"
+user_id=$(token_sub "$token")
+[ -n "$user_id" ] || fail "토큰에 sub(userId) 없음"
 ok "가입 $login_id → userId $user_id"
-res=$(call POST /auth/login -H 'Content-Type: application/json' -H 'User-Agent: commerce-saga-scripts' \
-  -d "{\"loginId\":\"$login_id\",\"password\":\"$PASSWORD\"}")
-token=$(body_of <<< "$res" | field accessToken)
-[ -n "$token" ] || fail "로그인 실패 ($(status_of <<< "$res"))"
 auth=(-H "Authorization: Bearer $token")
 
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
