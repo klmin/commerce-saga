@@ -550,7 +550,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "4xx 는 검증 실패·인증·재고 부족처럼 서버가 정상으로 거절한 것도 포함한다",
+      "description": "4xx 는 검증 실패·인증·재고 부족처럼 서버가 정상으로 거절한 것도 포함한다. 오류가 없거나 요청이 없는 서비스는 0 으로 보인다",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -575,12 +575,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (service) (rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\",uri!~\"/actuator.*\"}[1m])) / sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m]))",
+          "expr": "(sum by (service) (rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\",uri!~\"/actuator.*\"}[1m])) or sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m])) * 0) / (sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m])) > 0) or sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m])) * 0",
           "legendFormat": "5xx {{service}}"
         },
         {
           "refId": "B",
-          "expr": "sum by (service) (rate(http_server_requests_seconds_count{outcome=\"CLIENT_ERROR\",uri!~\"/actuator.*\"}[1m])) / sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m]))",
+          "expr": "(sum by (service) (rate(http_server_requests_seconds_count{outcome=\"CLIENT_ERROR\",uri!~\"/actuator.*\"}[1m])) or sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m])) * 0) / (sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m])) > 0) or sum by (service) (rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[1m])) * 0",
           "legendFormat": "4xx {{service}}"
         }
       ]
