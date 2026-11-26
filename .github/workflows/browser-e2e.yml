@@ -100,7 +100,7 @@ jobs:
           E2E_BASE_URL: http://localhost:3500
         run: npx playwright test
 
-      - name: Playwright 결과 (실패 시)
+      - name: Playwright 결과·서비스 로그 전체 (실패 시)
         if: failure()
         uses: actions/upload-artifact@v7
         with:
@@ -110,6 +110,7 @@ jobs:
             frontend/apps/web/test-results
             frontend/next/playwright-report
             frontend/next/test-results
+            logs
           retention-days: 7
 
       - name: Logs
