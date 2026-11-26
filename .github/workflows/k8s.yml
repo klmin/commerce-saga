@@ -303,7 +303,7 @@ jobs:
           kubectl -n commerce get pods,kafka,kafkaconnector,gateway,httproute -o wide || true
           kubectl -n commerce get events --sort-by=.lastTimestamp | tail -30 || true
           # Ready 가 아닌 Pod 는 종료 사유(OOMKilled·Error·probe)와 직전 컨테이너 로그까지
-          for p in $(kubectl -n commerce get pods --no-headers | awk '$2 !~ /^([0-9]+)\/\1$/ && $3 != "Completed" {print $1}'); do
+          for p in $(kubectl -n commerce get pods --no-headers | awk '{split($2, r, "/")} r[1] != r[2] && $3 != "Completed" {print $1}'); do
             echo "===== $p"
             kubectl -n commerce get pod "$p" -o jsonpath='{range .status.containerStatuses[*]}{.name} restarts={.restartCount} last={.lastState.terminated.reason}({.lastState.terminated.exitCode}){"\n"}{end}' || true
             kubectl -n commerce logs "$p" --previous --tail=60 || kubectl -n commerce logs "$p" --tail=60 || true
