@@ -600,7 +600,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - Helm: `screens`(web·admin Deployment·Service 80), `edge.mode` host(호스트 3개: 화면 둘 + auth) / path(한 주소에 /·/admin/·/auth/, URLRewrite·X-Forwarded-Prefix). auth 호스트·경로는 지금 auth-service 로 다 보낸다(로그인 화면이 auth-service 의 임시 화면, 인증 화면 SPA 는 5-4)
 - 공개 주소(`edge.host.*` 또는 `edge.path.url`)로 차트가 `AUTH_ISSUER`(모든 서비스), redirect URI·로그아웃 뒤 주소(auth-service upsert), `ADMIN_CLIENT_HOST`·`WEB_HOME`·`ADMIN_HOME`(Gateway), 쿠키 Secure(https 면 켬)를 만든다. edge 를 끄면(scripts/k8s-deploy.sh) 내부 주소 그대로(브라우저 로그인 없음)
 - EKS: 도메인이 없어 경로 방식. 공개 주소(LB DNS)는 처음 배포 뒤 `values-eks.yaml` 의 `edge.path.url` 에 넣는다(지금 EKS 는 띄우지 않음, 사용자 확인). 비어 있으면 화면·edge 는 뜨고 로그인만 안 된다(LB 를 만들어야 주소를 알기 때문)
-- kind(argocd job): 경로 방식, 공개 주소 `http://localhost:18080`(port-forward). curl 로 BFF 로그인 한 바퀴(`scripts/smoke-bff-login.sh`): 화면 → Gateway → SAS 로그인 폼 → 콜백 → `/api/me`·`/api/points/me`
+- kind(argocd job): 경로 방식, 공개 주소 `http://localhost`(Envoy 를 80 으로 port-forward, sudo. 다른 포트면 X-Forwarded-Proto 만 보고 Spring 이 기본 포트로 되돌려 SAS 가 돌려보내는 주소에서 포트가 빠진다). curl 로 BFF 로그인 한 바퀴(`scripts/smoke-bff-login.sh`): 화면 → Gateway → SAS 로그인 폼 → 콜백 → `/api/me`·`/api/points/me`
 - release: 이미지 `web`·`admin`(공용 패키지·workspace 설정이 바뀌면 둘 다). 옛 `frontend` 이미지는 더 쓰지 않는다
 
 **5-5 에서 정한 것** (추천안)

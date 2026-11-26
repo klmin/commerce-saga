@@ -83,8 +83,9 @@ Secret 이름·키는 `observability.alertmanager.discordWebhookSecret` 으로 �
 kind create cluster --name commerce-saga
 REVISION=<push 된 커밋 또는 브랜치> scripts/k8s-argocd.sh   # 이미지 → kind, ArgoCD 설치, root apply, Synced·Healthy 대기
 kubectl -n envoy-gateway-system port-forward svc/$(kubectl -n envoy-gateway-system get svc \
-  -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o jsonpath='{.items[0].metadata.name}') 18080:80
-# 화면: http://localhost:18080 (사용자), /admin/ (관리자), /auth/ (로그인). argocd/apps/values.yaml 이 경로 방식·이 주소로 둔다
+  -l gateway.envoyproxy.io/owning-gateway-name=commerce-edge -o jsonpath='{.items[0].metadata.name}') 80:80   # 80 은 관리자 권한(sudo)
+# 화면: http://localhost (사용자), /admin/ (관리자), /auth/ (로그인). argocd/apps/values.yaml 이 경로 방식·이 주소로 둔다.
+# 80 이 아닌 포트로 열면 로그인 뒤 SAS 가 돌려보내는 주소에서 포트가 빠진다(X-Forwarded-Proto 만 오면 Spring 이 기본 포트로 본다) → 80 으로 연다
 ```
 
 ## 결정 (K-3)

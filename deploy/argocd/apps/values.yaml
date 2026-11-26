@@ -14,9 +14,10 @@ envoyGateway:
 
 # commerce-saga 차트에 넘길 값 (deploy/helm/commerce-saga/values.yaml 위에 덮는다)
 commerceValues:
-  # kind 에는 도메인이 없다 → 경로 방식. CI 는 Envoy 를 localhost:18080 으로 port-forward 해 그 주소로 연다(.github/workflows/k8s.yml)
+  # kind 에는 도메인이 없다 → 경로 방식. CI 는 Envoy 를 localhost:80 으로 port-forward 해 그 주소로 연다(.github/workflows/k8s.yml).
+  # 80 이 아닌 포트로 열면 SAS 가 돌려보내는 주소에서 포트가 빠진다(X-Forwarded-Proto 만 있으면 Spring 이 기본 포트로 본다)
   edge:
     enabled: true
     mode: path
     path:
-      url: http://localhost:18080
+      url: http://localhost
