@@ -31,7 +31,7 @@ http://admin.localhost {
 # auth-service 의 관리 엔드포인트(/actuator) 등은 열지 않는다(인증 화면의 SPA fallback 이 된다)
 http://auth.localhost {
 	request_header -X-Forwarded-Prefix
-	@sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf
+	@sas path /oauth2/* /.well-known/* /userinfo /connect/logout /login /signup /csrf /sessions /sessions/*
 	handle @sas {
 		reverse_proxy auth-service:8086
 	}

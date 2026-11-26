@@ -43,10 +43,14 @@ class SignUpFormController {
     private final RequestCache requestCache = new HttpSessionRequestCache();
     private final ChangeSessionIdAuthenticationStrategy sessionFixation = new ChangeSessionIdAuthenticationStrategy();
 
-    SignUpFormController(SignUpUseCase signUp, TokenClaimsUseCase claims, @Value("${auth.web-home}") String webHome) {
+    private final DeviceLoginRecorder deviceRecorder;
+
+    SignUpFormController(SignUpUseCase signUp, TokenClaimsUseCase claims, @Value("${auth.web-home}") String webHome,
+                         DeviceLoginRecorder deviceRecorder) {
         this.signUp = signUp;
         this.claims = claims;
         this.webHome = webHome;
+        this.deviceRecorder = deviceRecorder;
     }
 
     @PostMapping("/signup")
@@ -65,6 +69,8 @@ class SignUpFormController {
         Authentication authentication = PasswordAuthenticationProvider.authenticated(claims.currentClaims(userId));
         // 로그인 폼과 같이 세션 고정 공격을 막는다(세션 id 교체)
         sessionFixation.onAuthentication(authentication, request, response);
+        // 바뀐 세션을 기기로 남긴다 (로그인 폼과 같은 순서, 후속 5-6)
+        deviceRecorder.onAuthentication(authentication, request, response);
         SecurityContext context = contexts.createEmptyContext();
         context.setAuthentication(authentication);
         contexts.setContext(context);

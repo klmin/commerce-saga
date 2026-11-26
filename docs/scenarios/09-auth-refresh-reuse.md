@@ -1,6 +1,6 @@
 # 시나리오 9. 인증: refresh token 재사용 탐지 → 그 기기 세션 폐기, JWT 로 바꾼 뒤의 소유권 검사(IDOR)
 
-> **9a~9e 는 기록으로만 남긴다 (후속 5-3c, 2026-11-26).** 인증을 Spring Authorization Server + Gateway BFF 로 바꾸면서([ADR 0017](../adr/0017-auth-sas-gateway-bff-spa.md)) 자체 refresh token(family·회전·재사용 탐지·기기 로그아웃)과 `/auth/*` API 를 지웠고 `scripts/smoke-auth.sh` 도 지웠다. refresh token 은 이제 브라우저에 나가지 않고 Gateway 세션에만 있다. 로그인 실패 제한은 SAS 로그인 폼에서 그대로 쓴다(`OAuthFlowIntegrationTest`). SSO·로그아웃·로그인 기기 시나리오는 5-6 에서 새로 쓴다. **9f~9i(Gateway·소유권·관리자·rate limit, `scripts/smoke-gateway.sh`)는 그대로 돈다**(토큰은 SAS 의 스크립트용 클라이언트로 받는다, `scripts/lib/auth.sh`)
+> **9a~9e 는 기록으로만 남긴다 (후속 5-3c, 2026-11-26).** 인증을 Spring Authorization Server + Gateway BFF 로 바꾸면서([ADR 0017](../adr/0017-auth-sas-gateway-bff-spa.md)) 자체 refresh token(family·회전·재사용 탐지·기기 로그아웃)과 `/auth/*` API 를 지웠고 `scripts/smoke-auth.sh` 도 지웠다. refresh token 은 이제 브라우저에 나가지 않고 Gateway 세션에만 있다. 로그인 실패 제한은 SAS 로그인 폼에서 그대로 쓴다(`OAuthFlowIntegrationTest`). SSO·로그아웃·로그인 기기는 [시나리오 19](19-sso-logout-devices.md)(5-6). **9f~9i(Gateway·소유권·관리자·rate limit, `scripts/smoke-gateway.sh`)는 그대로 돈다**(토큰은 SAS 의 스크립트용 클라이언트로 받는다, `scripts/lib/auth.sh`)
 
 브리프 시나리오 9는 "남의 주문 ID 로 조회·취소 → 403(IDOR 방지), refresh token 재사용 감지 시 세션 폐기"다. 9a~9e 는 인증(후속 2 A-1, auth-service), 9f~9i 는 Gateway·서비스 JWT 검증과 소유권(A-2)이다.
 

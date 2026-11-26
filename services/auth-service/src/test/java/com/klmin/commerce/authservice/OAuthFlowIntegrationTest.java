@@ -33,6 +33,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -246,6 +247,85 @@ class OAuthFlowIntegrationTest {
         assertThat(access.getSubject()).isEqualTo(Long.toString(userId));
         assertThat(access.getClaimAsStringList("roles")).containsExactly("USER");
         assertThat(token.has("refresh_token")).isFalse();
+    }
+
+    @Test
+    void 기기_목록은_이_브라우저를_지금_기기로_보이고_다른_기기를_로그아웃하면_그_기기의_refresh_만_막힌다() throws Exception {
+        Browser laptop = new Browser();
+        Tokens laptopTokens = laptop.loginAndExchange(loginId, "password1");
+        Browser phone = new Browser();
+        Tokens phoneTokens = phone.loginAndExchange(loginId, "password1");
+
+        JsonNode devices = json(laptop.perform(get("/sessions").accept(MediaType.APPLICATION_JSON)));
+        assertThat(devices.size()).isEqualTo(2);
+        assertThat(devices.get(0).get("current").asBoolean()).isTrue();
+        String phoneId = devices.get(1).get("id").asString();
+        assertThat(devices.get(1).get("current").asBoolean()).isFalse();
+
+        // CSRF 토큰(헤더) 없이 지우면 403
+        assertThat(laptop.perform(delete("/sessions/" + phoneId)).getResponse().getStatus()).isEqualTo(403);
+        MvcResult deleted = laptop.perform(delete("/sessions/" + phoneId).header("X-CSRF-TOKEN", laptop.csrfToken()));
+        assertThat(deleted.getResponse().getStatus()).isEqualTo(204);
+
+        mvc.perform(refresh(phoneTokens.refreshToken())).andExpect(status().isBadRequest());
+        mvc.perform(refresh(laptopTokens.refreshToken())).andExpect(status().isOk());
+        // 로그아웃된 기기의 SSO 세션도 끝났다: 인가 요청이 로그인 화면으로
+        assertThat(location(phone.perform(authorize(new Pkce())))).isEqualTo("/signin");
+        assertThat(json(laptop.perform(get("/sessions"))).size()).isEqualTo(1);
+    }
+
+    @Test
+    void 지금_기기는_기기_API_로_지우지_않고_없는_기기는_404() throws Exception {
+        Browser mine = new Browser();
+        mine.loginAndExchange(loginId, "password1");
+        String current = json(mine.perform(get("/sessions"))).get(0).get("id").asString();
+
+        String csrf = mine.csrfToken();
+        assertThat(mine.perform(delete("/sessions/" + current).header("X-CSRF-TOKEN", csrf))
+                .getResponse().getStatus()).isEqualTo(400);
+        assertThat(mine.perform(delete("/sessions/" + UUID.randomUUID()).header("X-CSRF-TOKEN", csrf))
+                .getResponse().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    void 다른_기기_모두_로그아웃은_지금_기기만_남긴다() throws Exception {
+        Browser mine = new Browser();
+        Tokens mineTokens = mine.loginAndExchange(loginId, "password1");
+        Tokens other1 = new Browser().loginAndExchange(loginId, "password1");
+        Tokens other2 = new Browser().loginAndExchange(loginId, "password1");
+
+        assertThat(mine.perform(delete("/sessions").header("X-CSRF-TOKEN", mine.csrfToken()))
+                .getResponse().getStatus()).isEqualTo(204);
+
+        mvc.perform(refresh(other1.refreshToken())).andExpect(status().isBadRequest());
+        mvc.perform(refresh(other2.refreshToken())).andExpect(status().isBadRequest());
+        mvc.perform(refresh(mineTokens.refreshToken())).andExpect(status().isOk());
+    }
+
+    @Test
+    void 로그인하지_않은_기기_API_는_401_이고_기기_화면_주소는_로그인을_거쳐_돌아온다() throws Exception {
+        mvc.perform(get("/sessions").accept(MediaType.APPLICATION_JSON)).andExpect(status().isUnauthorized());
+
+        Browser browser = new Browser();
+        assertThat(location(browser.perform(get("/sessions/login").accept(MediaType.TEXT_HTML)))).isEqualTo("/signin");
+        String back = location(browser.submitLogin(loginId, "password1"));
+        assertThat(back).startsWith("http://localhost/sessions/login");
+        assertThat(location(browser.perform(get(URI.create(back)).accept(MediaType.TEXT_HTML)))).isEqualTo("/devices");
+    }
+
+    @Test
+    void SSO_로그아웃은_이_기기의_인가_기록만_지운다() throws Exception {
+        Browser laptop = new Browser();
+        Tokens laptopTokens = laptop.loginAndExchange(loginId, "password1");
+        Tokens phoneTokens = new Browser().loginAndExchange(loginId, "password1");
+
+        laptop.perform(get(UriComponentsBuilder.fromPath("/connect/logout")
+                .queryParam("id_token_hint", laptopTokens.idToken())
+                .queryParam("post_logout_redirect_uri", "http://localhost:5173/")
+                .encode().build().toUri()));
+
+        mvc.perform(refresh(laptopTokens.refreshToken())).andExpect(status().isBadRequest());
+        mvc.perform(refresh(phoneTokens.refreshToken())).andExpect(status().isOk());
     }
 
     // ---- helpers ----

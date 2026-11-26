@@ -298,6 +298,7 @@ jobs:
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
           # 인증 화면 /auth/ (로그인·가입 화면, <base href> 는 /auth/), /auth → /auth/
           curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost/auth/sessions)" = 401 ]
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/auth)" = http://localhost/auth/ ]
           # SAS 는 /auth 아래 (issuer 에 경로가 붙는다)
           curl -sf http://localhost/auth/.well-known/openid-configuration | grep -q '"issuer":"http://localhost/auth"'

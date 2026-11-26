@@ -25,7 +25,12 @@ export function SiteHeader() {
                 <Link to={to}>{label}</Link>
               </Button>
             ))}
-            {/* 관리자 화면은 따로(관리자 SPA, 다른 호스트·경로). 로그인 기기 관리는 5-6 */}
+            {/* 관리자 화면은 따로(관리자 SPA, 다른 호스트·경로). 로그인 기기는 인증 화면(SAS 주소, Gateway 가 알려 줌) */}
+            {me.data.devicesUrl && (
+              <Button variant="ghost" size="sm" asChild>
+                <a href={me.data.devicesUrl}>로그인 기기</a>
+              </Button>
+            )}
             <span className="px-2 text-sm text-muted-foreground">사용자 #{me.data.userId}</span>
             <LogoutForm />
           </nav>

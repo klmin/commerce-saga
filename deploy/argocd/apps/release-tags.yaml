@@ -1,10 +1,10 @@
 # release 워크플로가 쓴다 (release/eks 에만 있다, scripts/release-plan.sh). 손으로 고치지 않는다
 # 이미지마다 마지막으로 다시 빌드된 main 커밋. 이번에 안 바뀐 이미지는 이전 태그 그대로 → 그 Deployment 는 롤링하지 않는다
-releasedCommit: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
+releasedCommit: 139eedd6ce711ce638e51552c419c43195a3b694
 commerceValues:
   image:
     tags:
-      auth-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
+      auth-service: 139eedd6ce711ce638e51552c419c43195a3b694
       product-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
       search-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
       order-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
@@ -12,8 +12,8 @@ commerceValues:
       point-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
       payment-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
       notification-service: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
-      gateway: 85234608c8e62d67a2dcf9d22ca6344a26d51a75
-      web: 604b39e18ffb8a23795f13f9539a69b80f4df33d
-      admin: 604b39e18ffb8a23795f13f9539a69b80f4df33d
-      auth: 604b39e18ffb8a23795f13f9539a69b80f4df33d
+      gateway: 139eedd6ce711ce638e51552c419c43195a3b694
+      web: 139eedd6ce711ce638e51552c419c43195a3b694
+      admin: 139eedd6ce711ce638e51552c419c43195a3b694
+      auth: 139eedd6ce711ce638e51552c419c43195a3b694
       connect: 604b39e18ffb8a23795f13f9539a69b80f4df33d

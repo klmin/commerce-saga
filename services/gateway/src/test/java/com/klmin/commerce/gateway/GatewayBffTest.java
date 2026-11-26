@@ -158,7 +158,9 @@ class GatewayBffTest {
         login("/", "localhost:5173");
         HttpResponse<String> me = get("/api/me", "localhost:5173");
         assertThat(me.statusCode()).isEqualTo(200);
-        assertThat(me.body()).isEqualTo("{\"userId\":8,\"roles\":[\"ADMIN\",\"USER\"]}");
+        // 로그인 기기 화면 주소 = SAS 공개 주소 + /sessions/login (후속 5-6)
+        assertThat(me.body()).isEqualTo("{\"userId\":8,\"roles\":[\"ADMIN\",\"USER\"],\"devicesUrl\":\""
+                + ISSUER + "/sessions/login\"}");
         // 서비스로 넘기지 않는다
         assertThat(LAST_API.get()).isNull();
     }
