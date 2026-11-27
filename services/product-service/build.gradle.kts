@@ -8,6 +8,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
+    implementation("com.github.f4b6a3:uuid-creator:6.1.1") // 상품 id UUIDv7 (ADR 0018)
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.testcontainers:testcontainers-postgresql")

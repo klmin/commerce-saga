@@ -33,7 +33,7 @@ export async function setPaymentFaults(settings: FaultSettings): Promise<FaultSe
 // --- 상품 관리 (product-service /admin/products, 후속 4-3) ---
 
 const product = z.object({
-  id: z.number().int(),
+  id: z.uuid(),
   name: z.string(),
   description: z.string(),
   price: z.number().int(),
@@ -67,17 +67,27 @@ const auditPage = z.object({
 /** 한 화면에 보여 줄 수 (product-service size 최대 100) */
 export const ADMIN_PAGE_SIZE = 50;
 
-/** 상품 id 로 쓸 수 있는 값 (양의 안전한 정수). URL 에서 온 값이라 믿지 않는다 */
-export function isProductId(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+/** 상품 id: UUID(v7) 문자열 (ADR 0018) */
+export type ProductId = string;
+
+const PRODUCT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 상품 id 로 쓸 수 있는 값 (UUID 형식). URL 에서 온 값이라 믿지 않는다 */
+export function isProductId(value: unknown): value is ProductId {
+  return typeof value === "string" && PRODUCT_ID.test(value);
 }
 
-/** URL 경로 조각. 숫자가 아니면 요청하지 않는다(다른 경로로 새지 않게) */
-function idPath(productId: number): string {
+/** 화면에 보일 짧은 id (UUID 앞 8자). 전체 값은 title 등으로 함께 둔다 */
+export function shortProductId(productId: ProductId): string {
+  return productId.slice(0, 8);
+}
+
+/** URL 경로 조각. UUID 가 아니면 요청하지 않는다(다른 경로로 새지 않게) */
+function idPath(productId: ProductId): string {
   if (!isProductId(productId)) {
     throw new Error(`invalid product id: ${String(productId)}`);
   }
-  return encodeURIComponent(String(productId));
+  return encodeURIComponent(productId);
 }
 
 /** 판매 중지 포함 전체 (id 순) */
@@ -90,13 +100,13 @@ export async function listAllProducts(
 }
 
 /** 상품 하나 (판매 중지 포함). 없으면 ApiError(404) */
-export async function getProduct(productId: number): Promise<Product> {
+export async function getProduct(productId: ProductId): Promise<Product> {
   return product.parse(await api<unknown>(`/api/products/${idPath(productId)}`));
 }
 
 /** 관리 이력 (최근부터). 없는 상품이면 ApiError(404) */
 export async function productAuditLog(
-  productId: number,
+  productId: ProductId,
   page: number,
 ): Promise<{ items: AuditEntry[]; hasNext: boolean }> {
   return auditPage.parse(
@@ -112,7 +122,10 @@ export async function registerProduct(input: RegisterInput): Promise<Product> {
   );
 }
 
-export async function describeProduct(productId: number, input: DescribeInput): Promise<Product> {
+export async function describeProduct(
+  productId: ProductId,
+  input: DescribeInput,
+): Promise<Product> {
   return product.parse(
     await api<unknown>(`/api/admin/products/${idPath(productId)}`, {
       method: "PUT",
@@ -121,7 +134,7 @@ export async function describeProduct(productId: number, input: DescribeInput): 
   );
 }
 
-export async function changeProductPrice(productId: number, price: number): Promise<Product> {
+export async function changeProductPrice(productId: ProductId, price: number): Promise<Product> {
   return product.parse(
     await api<unknown>(`/api/admin/products/${idPath(productId)}/price`, {
       method: "PUT",
@@ -131,7 +144,7 @@ export async function changeProductPrice(productId: number, price: number): Prom
 }
 
 export async function changeProductSaleStatus(
-  productId: number,
+  productId: ProductId,
   onSale: boolean,
 ): Promise<Product> {
   return product.parse(

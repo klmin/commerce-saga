@@ -15,15 +15,18 @@
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 INVENTORY_URL=${INVENTORY_URL:-http://localhost:8082}
 POINT_URL=${POINT_URL:-http://localhost:8083}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 USER_ID=${USER_ID:-2}
-PRODUCT_ID=${PRODUCT_ID:-3}
+# 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
+PRODUCT_ID=$(product_id "${PRODUCT_ID:-3}")
 # 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
-UNIT_PRICE=${UNIT_PRICE:-$(case $PRODUCT_ID in 1) echo 39000;; 2) echo 25000;; 3) echo 18000;; 4) echo 12000;; *) echo 45000;; esac)}
+UNIT_PRICE=${UNIT_PRICE:-$(seed_price "$PRODUCT_ID")}
 POINT_AMOUNT=${POINT_AMOUNT:-100}
 # order-service 의 saga.timeout 값과 맞춘다
 STEP_TIMEOUT_SECONDS=${STEP_TIMEOUT_SECONDS:-10}
@@ -85,7 +88,7 @@ cleanup() { point_up || start_point; }
 trap cleanup EXIT
 
 place_order() {
-  local body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
+  local body="{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
   curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" \
     | field orderId
 }
@@ -116,7 +119,7 @@ echo "  point-service 복구"
 wait_until "주문 COMPLETED" "$TIMEOUT_SECONDS" order_status_is "$id" COMPLETED
 echo "  ok  복구 후 주문 …${id: -8} COMPLETED"
 expect_eq "포인트 잔액 (재전송해도 한 번만 차감)" $(( points_before - POINT_AMOUNT )) "$(points "$USER_ID")"
-expect_eq "상품 $PRODUCT_ID available" $(( avail_before - 1 )) "$(stock "$PRODUCT_ID" | field available)"
+expect_eq "상품 $(product_label "$PRODUCT_ID") available" $(( avail_before - 1 )) "$(stock "$PRODUCT_ID" | field available)"
 wait_until "재고 판매 확정" "$TIMEOUT_SECONDS" stock_reserved_is "$reserved_before"
 
 echo "== 4b. point-service 긴 장애 → 재전송 포기 → 역순 보상 → 복구 후 CANCELLED"
@@ -141,8 +144,8 @@ echo "  ok  복구 후 주문 …${id: -8} CANCELLED"
 order_json "$id" | field cancelReason | grep -q "^timeout: no reply in USING_POINT" \
   || { echo "FAIL: cancelReason 이 타임아웃이 아님: $(order_json "$id" | field cancelReason)" >&2; exit 1; }
 expect_eq "포인트 잔액 (차감 후 환불)" "$points_before" "$(points "$USER_ID")"
-expect_eq "상품 $PRODUCT_ID available (해제)" "$avail_before" "$(stock "$PRODUCT_ID" | field available)"
-expect_eq "상품 $PRODUCT_ID reserved (해제)" "$reserved_before" "$(stock "$PRODUCT_ID" | field reserved)"
+expect_eq "상품 $(product_label "$PRODUCT_ID") available (해제)" "$avail_before" "$(stock "$PRODUCT_ID" | field available)"
+expect_eq "상품 $(product_label "$PRODUCT_ID") reserved (해제)" "$reserved_before" "$(stock "$PRODUCT_ID" | field reserved)"
 echo "  Saga 기록:"
 saga_json "$id" | grep -oE '"event":"[A-Z_]+","state":"[A-Z_]+"' | sed -E 's/"event":"([A-Z_]+)","state":"([A-Z_]+)"/    \1 -> \2/'
 

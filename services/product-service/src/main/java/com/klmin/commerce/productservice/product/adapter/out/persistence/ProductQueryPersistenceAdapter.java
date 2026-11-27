@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 class ProductQueryPersistenceAdapter implements LoadProductPort {
@@ -31,7 +32,7 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
     }
 
     @Override
-    public ProductAuditPageResult auditLog(long productId, int page, int size) {
+    public ProductAuditPageResult auditLog(UUID productId, int page, int size) {
         Slice<ProductAuditLogJpaEntity> slice =
                 auditLogRepository.findByProductIdOrderByChangedAtDescIdDesc(productId, PageRequest.of(page, size));
         return new ProductAuditPageResult(slice.getContent().stream().map(e -> new ProductAuditResult(
@@ -51,7 +52,7 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
     }
 
     @Override
-    public Optional<ProductResult> findById(long productId) {
+    public Optional<ProductResult> findById(UUID productId) {
         return productRepository.findById(productId).map(ProductQueryPersistenceAdapter::toResult);
     }
 
@@ -66,19 +67,19 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
     }
 
     @Override
-    public List<ProductResult> findByIds(Collection<Long> productIds) {
+    public List<ProductResult> findByIds(Collection<UUID> productIds) {
         return productRepository.findByIdInOrderByIdAsc(productIds).stream()
                 .map(ProductQueryPersistenceAdapter::toResult)
                 .toList();
     }
 
     @Override
-    public boolean exists(long productId) {
+    public boolean exists(UUID productId) {
         return productRepository.existsById(productId);
     }
 
     @Override
-    public List<PriceChangeResult> priceHistory(long productId) {
+    public List<PriceChangeResult> priceHistory(UUID productId) {
         return priceHistoryRepository.findByProductIdOrderByChangedAtDescIdDesc(productId).stream()
                 .map(h -> new PriceChangeResult(h.getOldPrice(), h.getNewPrice(), h.getChangedBy(),
                         h.getChangedAt()))

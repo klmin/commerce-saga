@@ -14,6 +14,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -26,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(SearchController.class)
 class SearchControllerTest {
 
+    private static final UUID ID = UUID.fromString("01900000-0000-7000-8000-000000000001");
+
     @Autowired
     MockMvc mvc;
 
@@ -35,11 +38,12 @@ class SearchControllerTest {
     @Test
     void search_isPublic_andPassesParameters() throws Exception {
         given(searchProductsUseCase.search(any())).willReturn(new ProductSearchResult(
-                List.of(new ProductSearchResult.Item(1, "무선 키보드", "", 39_000, true)), 1, 0, 20));
+                List.of(new ProductSearchResult.Item(ID, "무선 키보드", "", 39_000, true)), 1, 0, 20));
 
         mvc.perform(get("/search/products").param("q", "키보드").param("maxPrice", "50000").param("sort", "price-asc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(ID.toString()))
                 .andExpect(jsonPath("$.items[0].name").value("무선 키보드"))
                 .andExpect(jsonPath("$.items[0].onSale").value(true));
 

@@ -40,6 +40,8 @@ test("가입하면 바로 로그인되고 가입 축하 포인트 1,000P 가 생
   const loginId = `e2e_${Date.now().toString(36)}`;
   await page.goto("/");
   await page.getByRole("link", { name: "회원가입" }).click();
+  // 로그인·가입 화면 모두 "아이디" 칸이 있어, 가입 화면으로 바뀌기 전에 입력하면 로그인 화면 칸에 들어간다
+  await expect(page.getByRole("heading", { name: "회원가입" })).toBeVisible();
   await page.getByLabel("아이디").fill(loginId);
   await page.getByLabel("비밀번호").fill("e2e-password");
   await page.getByRole("button", { name: "가입하고 로그인" }).click();

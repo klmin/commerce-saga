@@ -13,6 +13,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 /** cart_items ((user_id, product_id) PK). 엔티티 없이 JdbcClient 로 (행 하나 = 값 하나라 매핑할 것이 적다) */
 @Component
@@ -31,7 +32,7 @@ class CartPersistenceAdapter implements CartPort {
                         where user_id = ? order by added_at, product_id
                         """)
                 .param(userId.value())
-                .query((rs, n) -> new CartItem(ProductId.of(rs.getLong("product_id")),
+                .query((rs, n) -> new CartItem(ProductId.of(rs.getObject("product_id", UUID.class)),
                         Quantity.of(rs.getInt("quantity")), Money.of(rs.getLong("added_price")),
                         rs.getTimestamp("added_at").toInstant()))
                 .list();

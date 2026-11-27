@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_APPROVED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_FAILED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.POINT_REFUNDED;
@@ -60,8 +61,8 @@ class OrderServiceTest {
     /** 합계 2,500 */
     private Order place(long userId, long pointAmount) {
         return service.placeOrder(new PlaceOrderCommand(userId, List.of(
-                new PlaceOrderCommand.Line(10L, 2, 1_000L),
-                new PlaceOrderCommand.Line(11L, 1, 500L)), pointAmount)).order();
+                new PlaceOrderCommand.Line(pid(10), 2, 1_000L),
+                new PlaceOrderCommand.Line(pid(11), 1, 500L)), pointAmount)).order();
     }
 
     private void reply(Order order, SagaEventType type) {
@@ -90,8 +91,8 @@ class OrderServiceTest {
 
     @Test
     void sameIdempotencyKey_sameBody_returnsFirstOrder_withoutSecondSaga() {
-        PlaceOrderResult first = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(10L, 2, 1_000L));
-        PlaceOrderResult again = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(10L, 2, 1_000L));
+        PlaceOrderResult first = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        PlaceOrderResult again = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
         assertThat(first.created()).isTrue();
         assertThat(again.created()).isFalse();
@@ -104,9 +105,9 @@ class OrderServiceTest {
     @Test
     void sameIdempotencyKey_lineOrderDiffers_isSameRequest() {
         PlaceOrderResult first = placeWithKey(1L, "k-1", 0L,
-                new PlaceOrderCommand.Line(10L, 2, 1_000L), new PlaceOrderCommand.Line(11L, 1, 500L));
+                new PlaceOrderCommand.Line(pid(10), 2, 1_000L), new PlaceOrderCommand.Line(pid(11), 1, 500L));
         PlaceOrderResult again = placeWithKey(1L, "k-1", 0L,
-                new PlaceOrderCommand.Line(11L, 1, 500L), new PlaceOrderCommand.Line(10L, 2, 1_000L));
+                new PlaceOrderCommand.Line(pid(11), 1, 500L), new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
         assertThat(again.created()).isFalse();
         assertThat(again.order().id()).isEqualTo(first.order().id());
@@ -114,11 +115,11 @@ class OrderServiceTest {
 
     @Test
     void sameIdempotencyKey_differentBody_isRejected_andCreatesNothing() {
-        placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(10L, 2, 1_000L));
+        placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
-        assertThatThrownBy(() -> placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(10L, 3, 1_000L)))
+        assertThatThrownBy(() -> placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 3, 1_000L)))
                 .isInstanceOf(IdempotencyKeyReusedException.class);
-        assertThatThrownBy(() -> placeWithKey(1L, "k-1", 500L, new PlaceOrderCommand.Line(10L, 2, 1_000L)))
+        assertThatThrownBy(() -> placeWithKey(1L, "k-1", 500L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L)))
                 .isInstanceOf(IdempotencyKeyReusedException.class);
         assertThat(orders.store).hasSize(1);
         assertThat(sent.log).hasSize(1);
@@ -126,8 +127,8 @@ class OrderServiceTest {
 
     @Test
     void idempotencyKey_isScopedPerUser() {
-        PlaceOrderResult mine = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(10L, 2, 1_000L));
-        PlaceOrderResult theirs = placeWithKey(2L, "k-1", 0L, new PlaceOrderCommand.Line(10L, 2, 1_000L));
+        PlaceOrderResult mine = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        PlaceOrderResult theirs = placeWithKey(2L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
         assertThat(theirs.created()).isTrue();
         assertThat(theirs.order().id()).isNotEqualTo(mine.order().id());
@@ -145,7 +146,7 @@ class OrderServiceTest {
 
     @Test
     void invalidIdempotencyKey_isDomainValidationError() {
-        List<PlaceOrderCommand.Line> lines = List.of(new PlaceOrderCommand.Line(10L, 1, 1_000L));
+        List<PlaceOrderCommand.Line> lines = List.of(new PlaceOrderCommand.Line(pid(10), 1, 1_000L));
 
         assertThatThrownBy(() -> new PlaceOrderCommand(1L, lines, 0L, ""))
                 .isInstanceOf(DomainValidationException.class);

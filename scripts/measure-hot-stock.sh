@@ -15,13 +15,16 @@
 #   2. 리스너 한 건 처리 시간: /actuator/prometheus 의 spring_kafka_listener 타이머(측정 전후 차이)의 평균
 #   3. 락 대기: 처리 중 pg_stat_activity 를 0.05초마다 훑어 재고 행 락(wait_event_type = Lock)을 기다리던 연결 수
 #
-# 측정용 상품(9001~)은 재고 행이 없는 id 만 쓴다(이미 있으면 중단). 넉넉히 넣었다가 끝나면 이번 실행이 만든 행과 예약 기록만
+# 측정용 상품(9001~)은 재고 행이 없는 id 만 쓴다(이미 있으면 중단). 상품 id 는 UUID 라 번호 n 은
+# 01900000-0000-7000-8000-<n 을 12자리로> 로 바꿔 쓴다(scripts/lib/products.sh, 1~5 = 시드). UUID 를 그대로 줘도 된다. 넉넉히 넣었다가 끝나면 이번 실행이 만든 행과 예약 기록만
 # 지운다. 커맨드가 다 처리되기 전에 끝나면(타임아웃·중단) 남은 커맨드가 나중에 처리될 수 있어 기록을 남기고,
 # 다 처리된 뒤 CLEANUP_RUN=<run> PRODUCTS="..." 로 정리한다. 응답(inventory.reply)은
 # order-service 가 "Saga 없는 주문의 응답"으로 무시한다. 검증(PASS/FAIL)이 아니라 측정용
 set -euo pipefail
 # Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 Windows 경로로 바꾸지 않게
 export MSYS_NO_PATHCONV=1
+# 상품 번호 → UUID (product_id)
+source "$(dirname "$0")/lib/products.sh"
 
 # 같은 컨슈머 그룹의 inventory-service 인스턴스들 (공백으로 구분)
 INVENTORY_URLS=${INVENTORY_URLS:-http://localhost:8082}
@@ -42,6 +45,13 @@ stop_sampler() {
   psql_q "select pg_cancel_backend(pid) from pg_stat_activity where application_name = 'hot-stock-sampler'" > /dev/null
   wait "$sampler_pid" 2> /dev/null || true
   sampler_pid=
+}
+# PRODUCTS(번호·UUID, 공백 구분) → products 배열(UUID)과 SQL 목록 ids('uuid','uuid')
+read_products() {
+  local p
+  products=()
+  for p in $PRODUCTS; do products+=("$(product_id "$p")"); done
+  ids=$(printf "'%s'," "${products[@]}"); ids=${ids%,}
 }
 # 측정용 재고는 available + reserved = STOCK_MARK 로 넣는다 (예약은 available → reserved 로 옮길 뿐이라 합이 유지된다).
 # 정리할 때 이 합인 행만 지워, 다른 재고 행을 지우지 않는다
@@ -72,8 +82,7 @@ trap cleanup EXIT
 
 # 앞선 실패 실행 정리 모드
 if [ -n "${CLEANUP_RUN:-}" ]; then
-  read -r -a products <<< "$PRODUCTS"
-  ids=$(IFS=,; echo "${products[*]}")
+  read_products
   left=$(psql_q "select count(*) from stock_reservations where order_id::text like 'eeeeeeee-$CLEANUP_RUN%'")
   purge "$CLEANUP_RUN" "$ids"
   echo "run=$CLEANUP_RUN 정리: 예약 기록 ${left}건, 측정용 재고(${ids}) 삭제"
@@ -90,17 +99,16 @@ listener() { # -> "count sum" (리스너 타이머 누적, 성공한 처리만. 
     END { printf "%d %.6f\n", c, s }'
 }
 
-read -r -a products <<< "$PRODUCTS"
+read_products
 echo "== 18. 재고 예약 경합 측정 (N=$N, products=${products[*]}, run=$RUN)"
 
 # 측정용 재고 (끝나도 모자라지 않게). 이미 있는 재고 행(시드 상품 1~5 등)은 덮어쓰거나 지우지 않도록 중단한다
-ids=$(IFS=,; echo "${products[*]}")
 existing=$(psql_q "select string_agg(product_id::text, ',') from stocks where product_id in ($ids)")
 if [ -n "$existing" ]; then
   echo "FAIL: 재고 행이 이미 있는 상품($existing)은 측정에 쓰지 않는다. 없는 상품 id(9001~ 등)를 PRODUCTS 로 준다" >&2
   exit 1
 fi
-values=$(for p in "${products[@]}"; do printf "(%d, %d, 0, now())," "$p" "$STOCK_MARK"; done)
+values=$(for p in "${products[@]}"; do printf "('%s', %d, 0, now())," "$p" "$STOCK_MARK"; done)
 psql_q "insert into stocks (product_id, available, reserved, updated_at) values ${values%,}" > /dev/null
 created_stocks=$ids
 
@@ -109,7 +117,7 @@ for i in $(seq 1 "$N"); do
   p=${products[$(( i % ${#products[@]} ))]}
   order=$(printf '%s-4000-8000-%012x' "$PREFIX" "$i")
   msg=$(printf 'ffffffff-%s-4000-8000-%012x' "$RUN" "$i")
-  printf 'id:%s,type:ReserveStock\t%s\t{"orderId":"%s","lines":[{"productId":%d,"quantity":1}]}\n' \
+  printf 'id:%s,type:ReserveStock\t%s\t{"orderId":"%s","lines":[{"productId":"%s","quantity":1}]}\n' \
     "$msg" "$order" "$order" "$p"
 done > "$tmp/commands"
 

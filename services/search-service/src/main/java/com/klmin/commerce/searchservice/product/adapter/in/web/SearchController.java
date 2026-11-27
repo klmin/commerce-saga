@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 상품 검색 (공개, Gateway {@code GET /api/search/products}). 결과 가격은 안내용이다: 주문 때 order-service 가
@@ -43,7 +44,7 @@ class SearchController {
 
     record SearchResponse(List<Item> items, long total, int page, int size) {
 
-        record Item(long id, String name, String description, long price, boolean onSale) {
+        record Item(UUID id, String name, String description, long price, boolean onSale) {
         }
     }
 }

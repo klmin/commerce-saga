@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,18 +34,25 @@ class ProductPersistenceIntegrationTest {
     @Autowired
     GetProductUseCase query;
 
+    // V2 시드 (inventory 재고 시드와 같은 고정 UUID, ADR 0018)
+    private static UUID seed(int n) {
+        return UUID.fromString("01900000-0000-7000-8000-00000000000" + n);
+    }
+
     @Test
     void seededProducts_matchFrontendAndInventoryIds() {
-        List<ProductResult> seeded = query.findByIds(List.of(1L, 2L, 3L, 4L, 5L, 999L));
+        List<ProductResult> seeded = query.findByIds(
+                List.of(seed(1), seed(2), seed(3), seed(4), seed(5),
+                        UUID.fromString("01900000-0000-7000-8000-000000000999")));
 
-        assertThat(seeded).extracting(ProductResult::id).containsExactly(1L, 2L, 3L, 4L, 5L);
+        assertThat(seeded).extracting(ProductResult::id).containsExactly(seed(1), seed(2), seed(3), seed(4), seed(5));
         assertThat(seeded.getFirst().price()).isEqualTo(39_000);
     }
 
     @Test
-    void register_startsAt1000_andChangePriceKeepsHistory() {
+    void register_assignsUuidV7_andChangePriceKeepsHistory() {
         ProductResult created = manage.register(new RegisterProductCommand("테스트 상품", "설명", 10_000, 1000));
-        assertThat(created.id()).isGreaterThanOrEqualTo(1000);
+        assertThat(created.id().version()).isEqualTo(7);
 
         manage.changePrice(new ChangePriceCommand(created.id(), 12_000, 1000));
         manage.changePrice(new ChangePriceCommand(created.id(), 12_000, 1000));

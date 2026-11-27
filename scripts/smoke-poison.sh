@@ -15,6 +15,8 @@
 set -euo pipefail
 # Windows Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 윈도 경로로 바꾸지 않게 한다 (리눅스에서는 영향 없음)
 export MSYS_NO_PATHCONV=1
+# 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
+source "$(dirname "$0")/lib/products.sh"
 
 INVENTORY_URL=${INVENTORY_URL:-http://localhost:8082}
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
@@ -59,7 +61,7 @@ dlt_position() { # key -> P:O
 }
 
 reserved() {
-  curl -sf "$INVENTORY_URL/stocks/1" | sed -nE 's/.*"reserved":([0-9]+).*/\1/p'
+  curl -sf "$INVENTORY_URL/stocks/$PRODUCT_KEYBOARD" | sed -nE 's/.*"reserved":([0-9]+).*/\1/p'
 }
 
 expect_eq() { # name expected actual
@@ -95,7 +97,7 @@ order=$(uuid)
 message_id=$(uuid)
 before=$(reserved)
 produce "$DLT" "id:$message_id,type:ReserveStock,kafka_dlt-original-topic:inventory.command" "$order" \
-  "{\"orderId\":\"$order\",\"lines\":[{\"productId\":1,\"quantity\":1}]}"
+  "{\"orderId\":\"$order\",\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":1}]}"
 position=$(dlt_position "$order")
 [ -n "$position" ] || { echo "FAIL: DLT 에 넣은 메시지를 찾지 못함" >&2; exit 1; }
 scripts/dlt.sh replay "$DLT" --offset "$position" | sed 's/^/      /'

@@ -1,5 +1,7 @@
 package com.klmin.commerce.productservice.product.application.service;
 
+import com.github.f4b6a3.uuid.UuidCreator;
+import com.klmin.commerce.productservice.common.error.DomainValidationException;
 import com.klmin.commerce.productservice.product.application.ProductNotFoundException;
 import com.klmin.commerce.productservice.product.application.port.in.ChangePriceCommand;
 import com.klmin.commerce.productservice.product.application.port.in.ChangeSaleStatusCommand;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * 상품 쓰기. 수정은 행을 잠그고(SELECT … FOR UPDATE) 바꾼다.
@@ -53,8 +56,8 @@ class ProductService implements ManageProductUseCase {
     public ProductResult register(RegisterProductCommand command) {
         UserId changedBy = UserId.of(command.changedBy());
         Instant now = clock.instant();
-        Product saved = productPort.save(Product.register(command.name(), command.description(),
-                Money.of(command.price()), now));
+        Product saved = productPort.insert(Product.register(ProductId.of(UuidCreator.getTimeOrderedEpoch()),
+                command.name(), command.description(), Money.of(command.price()), now));
         auditPort.save(ProductChange.registered(saved, changedBy, now));
         log.info("상품 등록 (productId={}, price={}, by={})", saved.id().value(), saved.price().value(),
                 command.changedBy());
@@ -108,9 +111,9 @@ class ProductService implements ManageProductUseCase {
         return ProductResult.from(productPort.save(product));
     }
 
-    private Product load(long productId) {
-        if (productId <= 0) {
-            throw new ProductNotFoundException(productId);
+    private Product load(UUID productId) {
+        if (productId == null) {
+            throw new DomainValidationException("productId must not be null");
         }
         return productPort.findByIdForUpdate(ProductId.of(productId))
                 .orElseThrow(() -> new ProductNotFoundException(productId));

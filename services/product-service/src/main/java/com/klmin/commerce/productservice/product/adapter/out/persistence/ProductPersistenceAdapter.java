@@ -29,17 +29,19 @@ class ProductPersistenceAdapter implements ProductPort, PriceHistoryPort, Produc
     }
 
     @Override
+    public Product insert(Product product) {
+        ProductJpaEntity entity = productRepository.save(new ProductJpaEntity(product.id().value(), product.name(),
+                product.description(), product.price().value(), product.onSale(), product.createdAt(),
+                product.updatedAt()));
+        return toDomain(entity);
+    }
+
+    @Override
     public Product save(Product product) {
-        ProductJpaEntity entity;
-        if (product.id() == null) {
-            entity = productRepository.save(new ProductJpaEntity(product.name(), product.description(),
-                    product.price().value(), product.onSale(), product.createdAt(), product.updatedAt()));
-        } else {
-            // findByIdForUpdate 로 읽은 같은 트랜잭션 안이라 영속성 컨텍스트에 있다
-            entity = productRepository.findById(product.id().value()).orElseThrow();
-            entity.update(product.name(), product.description(), product.price().value(), product.onSale(),
-                    product.updatedAt());
-        }
+        // findByIdForUpdate 로 읽은 같은 트랜잭션 안이라 영속성 컨텍스트에 있다
+        ProductJpaEntity entity = productRepository.findById(product.id().value()).orElseThrow();
+        entity.update(product.name(), product.description(), product.price().value(), product.onSale(),
+                product.updatedAt());
         return toDomain(entity);
     }
 

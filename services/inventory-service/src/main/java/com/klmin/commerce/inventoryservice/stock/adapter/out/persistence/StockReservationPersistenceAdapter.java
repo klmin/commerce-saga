@@ -49,7 +49,7 @@ class StockReservationPersistenceAdapter implements StockReservationPort {
                 e.getLines().stream()
                         // 값 객체 도입 전에는 잘못된 커맨드(수량 0 등)를 거절할 때 그 줄도 저장했다. 그런 기록은 REJECTED 라
                         // 줄을 쓰지 않으므로 건너뛴다. 복원이 실패하면 같은 주문의 보상(ReleaseStock)이 계속 재시도된다
-                        .filter(l -> l.getProductId() > 0 && l.getQuantity() > 0)
+                        .filter(l -> l.getProductId() != null && l.getQuantity() > 0)
                         .map(l -> ReservationLine.of(l.getProductId(), l.getQuantity()))
                         .toList(),
                 e.getCreatedAt(), e.getUpdatedAt());

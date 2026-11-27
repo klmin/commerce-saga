@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { login } from "./helpers";
+import { login, SEED_PRODUCT } from "./helpers";
 
 // 상품 검색 (후속 4-2c, ADR 0010). product-cdc 커넥터 → search-service → Elasticsearch 가 떠 있어야 한다.
 const products = (page: Page) =>
@@ -26,7 +26,7 @@ test("검색어로 상품을 찾고, 조건은 URL 에 남으며, 전체 보기�
   // 검색 결과에서 바로 주문 화면으로 (가격은 주문 때 다시 확인)
   await expect(
     products(page).filter({ hasText: "무선 마우스" }).getByRole("link", { name: "주문" }),
-  ).toHaveAttribute("href", "/orders/new?productId=2");
+  ).toHaveAttribute("href", `/orders/new?productId=${SEED_PRODUCT.mouse}`);
 
   await page.getByRole("link", { name: "전체 보기" }).click();
   await expect(page).toHaveURL(/\/$/);

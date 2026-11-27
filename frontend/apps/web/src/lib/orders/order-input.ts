@@ -1,4 +1,4 @@
-import type { Product } from "@/lib/products";
+import type { Product, ProductId } from "@/lib/products";
 
 // 백엔드(order-service) 규칙과 같다. 백엔드가 최종 검사하고, 여기서는 왕복 없이 바로 알려 주려고 한 번 더 본다
 export const MAX_QUANTITY = 1_000;
@@ -6,12 +6,12 @@ const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,100}$/;
 
 export type OrderFormValues = {
   /** 상품 id → 수량 (0 이면 주문 안 함) */
-  quantities: Record<number, number>;
+  quantities: Record<ProductId, number>;
   pointAmount: number;
 };
 
 export type OrderInput = {
-  lines: { productId: number; quantity: number; unitPrice: number }[];
+  lines: { productId: ProductId; quantity: number; unitPrice: number }[];
   pointAmount: number;
 };
 
@@ -19,7 +19,7 @@ export type OrderInput = {
 export type ShownProduct = Pick<Product, "id" | "name" | "price">;
 
 export function orderTotal(
-  quantities: Record<number, number>,
+  quantities: Record<ProductId, number>,
   products: readonly Pick<Product, "id" | "price">[],
 ): number {
   return products.reduce((sum, p) => sum + p.price * (quantities[p.id] ?? 0), 0);
@@ -41,12 +41,12 @@ function wholeNumber(raw: unknown): number | undefined {
  */
 export function toOrderInput(
   raw: {
-    quantities: Record<number, unknown>;
+    quantities: Record<ProductId, unknown>;
     pointAmount: unknown;
   },
   products: readonly ShownProduct[],
 ): { input: OrderInput; values: OrderFormValues } | { error: string; values: OrderFormValues } {
-  const quantities: Record<number, number> = {};
+  const quantities: Record<ProductId, number> = {};
   let invalid: string | undefined;
   for (const p of products) {
     const q = wholeNumber(raw.quantities[p.id]);

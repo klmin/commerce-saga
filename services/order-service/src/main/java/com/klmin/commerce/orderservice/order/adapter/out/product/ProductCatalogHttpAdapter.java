@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClientException;
 import java.net.http.HttpClient;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -37,7 +38,7 @@ class ProductCatalogHttpAdapter implements ProductCatalogPort {
     }
 
     @Override
-    public List<CatalogProduct> findByIds(Collection<Long> productIds) {
+    public List<CatalogProduct> findByIds(Collection<UUID> productIds) {
         String ids = productIds.stream().map(String::valueOf).collect(Collectors.joining(","));
         ProductsResponse response;
         try {
@@ -59,6 +60,6 @@ class ProductCatalogHttpAdapter implements ProductCatalogPort {
     record ProductsResponse(List<Item> items) {
     }
 
-    record Item(long id, String name, long price, boolean onSale) {
+    record Item(UUID id, String name, long price, boolean onSale) {
     }
 }

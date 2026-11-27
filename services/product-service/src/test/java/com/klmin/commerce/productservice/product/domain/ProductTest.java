@@ -4,6 +4,7 @@ import com.klmin.commerce.productservice.common.error.DomainValidationException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -12,16 +13,17 @@ class ProductTest {
 
     private static final Instant T0 = Instant.parse("2026-11-25T00:00:00Z");
     private static final Instant T1 = T0.plusSeconds(60);
+    private static final ProductId ID = ProductId.of(UUID.fromString("01900000-0000-7000-8000-000000000001"));
 
     private static Product product() {
-        return Product.restore(ProductId.of(1), "키보드", "", Money.of(39_000), true, T0, T0);
+        return Product.restore(ID, "키보드", "", Money.of(39_000), true, T0, T0);
     }
 
     @Test
     void register_trimsNameAndDefaultsDescription() {
-        Product p = Product.register("  키보드 ", null, Money.of(1_000), T0);
+        Product p = Product.register(ID, "  키보드 ", null, Money.of(1_000), T0);
 
-        assertThat(p.id()).isNull();
+        assertThat(p.id()).isEqualTo(ID);
         assertThat(p.name()).isEqualTo("키보드");
         assertThat(p.description()).isEmpty();
         assertThat(p.onSale()).isTrue();
@@ -29,11 +31,12 @@ class ProductTest {
 
     @Test
     void register_rejectsZeroPriceAndBlankName() {
-        assertThatThrownBy(() -> Product.register("a", "", Money.of(0), T0))
+        assertThatThrownBy(() -> Product.register(ID, "a", "", Money.of(0), T0))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> Product.register(" ", "", Money.of(1), T0))
+        assertThatThrownBy(() -> Product.register(ID, " ", "", Money.of(1), T0))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> Product.register("a".repeat(Product.MAX_NAME_LENGTH + 1), "", Money.of(1), T0))
+        assertThatThrownBy(() -> Product.register(ID, "a".repeat(Product.MAX_NAME_LENGTH + 1), "",
+                Money.of(1), T0))
                 .isInstanceOf(DomainValidationException.class);
     }
 

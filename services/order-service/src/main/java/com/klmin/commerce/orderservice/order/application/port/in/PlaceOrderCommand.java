@@ -3,6 +3,7 @@ package com.klmin.commerce.orderservice.order.application.port.in;
 import com.klmin.commerce.orderservice.common.error.DomainValidationException;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * @param pointAmount    사용할 포인트 (0 이상 합계 이하). 나머지를 결제한다
@@ -38,6 +39,6 @@ public record PlaceOrderCommand(long userId, List<Line> lines, long pointAmount,
         return key.chars().allMatch(c -> c >= 0x21 && c <= 0x7E);
     }
 
-    public record Line(long productId, int quantity, long unitPrice) {
+    public record Line(UUID productId, int quantity, long unitPrice) {
     }
 }

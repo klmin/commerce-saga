@@ -44,7 +44,7 @@ scripts/smoke-basic-flow.sh
 | # | 동작 | 기대 |
 |---|---|---|
 | 1 | 상품 1을 2개 주문 | 생성 직후 `PENDING`, 잠시 후 `CONFIRMED`. 상품 1 `available` -2, `reserved` +2 |
-| 2 | 상품 2(재고 있음) + 상품 5(품절)를 한 주문으로 | `REJECTED`, `rejectReason = insufficient stock: productId=5`. 상품 2 재고도 그대로 (전부 아니면 전무) |
+| 2 | 상품 2(재고 있음) + 상품 5(품절)를 한 주문으로 | `REJECTED`, `rejectReason = insufficient stock: productId=01900000-0000-7000-8000-000000000005`. 상품 2 재고도 그대로 (전부 아니면 전무) |
 | 3 | 사용자 2가 사용자 1의 주문 조회 | `404` (존재 여부도 숨김) |
 
 ## 실제 결과
@@ -58,7 +58,7 @@ CI `e2e` 실행 로그 ([2026-11-22 실행](https://github.com/klmin/commerce-sa
   ok  상품 1 available = 98
   ok  상품 1 reserved = 2
 == 2. 품절 상품 포함 주문 -> REJECTED, 아무 재고도 잡지 않음
-  ok  rejectReason = insufficient stock: productId=5
+  ok  rejectReason = insufficient stock: productId=01900000-0000-7000-8000-000000000005
   ok  상품 2 available = 100
 == 3. 다른 사용자의 주문 조회 -> 404
   ok  user 2 -> user 1 주문 = 404

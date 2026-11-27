@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /** 상품 관리 이력. INSERT 만 한다. before_* 는 등록이면 null, 옮겨 온 옛 가격 이력은 가격만 있다 */
 @Entity
@@ -19,7 +20,7 @@ class ProductAuditLogJpaEntity {
     private Long id;
 
     @Column(name = "product_id", nullable = false, updatable = false)
-    private long productId;
+    private UUID productId;
 
     @Column(name = "action", nullable = false, updatable = false)
     private String action;
@@ -57,7 +58,7 @@ class ProductAuditLogJpaEntity {
     protected ProductAuditLogJpaEntity() {
     }
 
-    ProductAuditLogJpaEntity(long productId, String action, String beforeName, String beforeDescription,
+    ProductAuditLogJpaEntity(UUID productId, String action, String beforeName, String beforeDescription,
                              Long beforePrice, Boolean beforeOnSale, String afterName, String afterDescription,
                              Long afterPrice, Boolean afterOnSale, long changedBy, Instant changedAt) {
         this.productId = productId;

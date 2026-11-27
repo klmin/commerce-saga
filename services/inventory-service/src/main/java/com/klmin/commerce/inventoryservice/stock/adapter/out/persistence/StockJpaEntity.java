@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "stocks")
@@ -13,7 +14,7 @@ class StockJpaEntity {
 
     @Id
     @Column(name = "product_id")
-    private Long productId;
+    private UUID productId;
 
     @Column(nullable = false)
     private int available;
@@ -33,7 +34,7 @@ class StockJpaEntity {
         this.updatedAt = updatedAt;
     }
 
-    Long getProductId() {
+    UUID getProductId() {
         return productId;
     }
 

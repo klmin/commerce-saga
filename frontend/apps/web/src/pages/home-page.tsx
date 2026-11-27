@@ -13,7 +13,7 @@ import { ListSkeleton, ValueSkeleton } from "@commerce/ui/skeletons";
 import { ApiError } from "@commerce/bff/api";
 import { cartErrorCode } from "@/lib/cart-errors";
 import { MAX_QUANTITY } from "@/lib/orders/order-input";
-import { type Product, won } from "@/lib/products";
+import { type Product, type ProductId, won } from "@/lib/products";
 import { parseSearch, type SearchCriteria, SORTS } from "@/lib/search";
 
 type Listing = { products: Product[]; total?: number; notice?: string };
@@ -142,14 +142,14 @@ function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
 function ProductList({ products }: { products: Product[] }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [adding, setAdding] = useState<number>();
+  const [adding, setAdding] = useState<ProductId>();
   const stocks = useQuery({
     queryKey: ["stocks", products.map((p) => p.id)],
     queryFn: () => stocksByProduct(products),
   });
 
   /** "담기": 이미 있으면 하나 더. 결과는 장바구니 화면에서 본다 */
-  async function addToCart(productId: number) {
+  async function addToCart(productId: ProductId) {
     setAdding(productId);
     try {
       const current = (await getCart()).items.find((i) => i.productId === productId)?.quantity ?? 0;
@@ -195,7 +195,7 @@ function ProductList({ products }: { products: Product[] }) {
               담기
             </Button>
             <Button size="sm" variant={stock === 0 ? "outline" : "default"} asChild>
-              <Link to={`/orders/new?productId=${p.id}`}>주문</Link>
+              <Link to={`/orders/new?productId=${encodeURIComponent(p.id)}`}>주문</Link>
             </Button>
           </li>
         );

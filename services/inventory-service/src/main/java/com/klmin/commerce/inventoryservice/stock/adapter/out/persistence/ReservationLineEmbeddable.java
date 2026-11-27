@@ -3,11 +3,13 @@ package com.klmin.commerce.inventoryservice.stock.adapter.out.persistence;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
+import java.util.UUID;
+
 @Embeddable
 class ReservationLineEmbeddable {
 
     @Column(name = "product_id", nullable = false)
-    private long productId;
+    private UUID productId;
 
     @Column(nullable = false)
     private int quantity;
@@ -15,12 +17,12 @@ class ReservationLineEmbeddable {
     protected ReservationLineEmbeddable() {
     }
 
-    ReservationLineEmbeddable(long productId, int quantity) {
+    ReservationLineEmbeddable(UUID productId, int quantity) {
         this.productId = productId;
         this.quantity = quantity;
     }
 
-    long getProductId() {
+    UUID getProductId() {
         return productId;
     }
 

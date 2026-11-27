@@ -14,6 +14,8 @@
 # 끝나면 가격·판매 상태를 원래대로 돌려놓는다
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 export MSYS_NO_PATHCONV=1
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
@@ -22,7 +24,7 @@ KAFKA_EXEC=${KAFKA_EXEC:-docker compose -f $COMPOSE_FILE exec -T kafka}
 KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:29092}
 SKIP_OUTAGE=${SKIP_OUTAGE:-false}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
-PRODUCT_ID=2   # 무선 마우스
+PRODUCT_ID=$PRODUCT_MOUSE   # 무선 마우스 (시드 2)
 ADMIN=100
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -41,7 +43,7 @@ search() { # 검색어 [추가 쿼리]
 price_in() { # 검색어 [추가 쿼리]
   local out; out=$(search "$@")
   [ "$(tail -n1 <<< "$out")" = 200 ] || return 0
-  head -n -1 <<< "$out" | grep -oE "\{\"id\":$PRODUCT_ID,[^}]*\}" | field price || true
+  head -n -1 <<< "$out" | grep -oE "\{\"id\":\"$PRODUCT_ID\",[^}]*\}" | field price || true
 }
 wait_until() { # 설명 명령...
   local what=$1; shift
@@ -84,7 +86,7 @@ admin_put /sale '{"onSale":true}'
 wait_until "판매 재개가 반영되지 않음" reflected
 
 echo "== 17d. 늦게 온 옛 변경은 무시"
-old_row="{\"id\":$PRODUCT_ID,\"name\":\"$name\",\"description\":\"\",\"price\":1,\"on_sale\":true,\"updated_at\":\"2020-01-01T00:00:00Z\"}"
+old_row="{\"id\":\"$PRODUCT_ID\",\"name\":\"$name\",\"description\":\"\",\"price\":1,\"on_sale\":true,\"updated_at\":\"2020-01-01T00:00:00Z\"}"
 # shellcheck disable=SC2086
 printf '__lsn:1\t%s\t%s\n' "$PRODUCT_ID" "$old_row" | $KAFKA_EXEC /opt/kafka/bin/kafka-console-producer.sh \
   --bootstrap-server "$KAFKA_BOOTSTRAP" --topic product.cdc.products \

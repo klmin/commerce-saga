@@ -18,11 +18,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * product.cdc.products 구독 (ADR 0010, 토픽 계약은 docs/scenarios/16-product-cdc.md).
- * 값은 products 의 변경 후 행(평평한 JSON), 키는 상품 id, 헤더 {@code __lsn}(원본 WAL 위치 → 색인 외부 버전),
+ * 값은 products 의 변경 후 행(평평한 JSON), 키는 상품 id(UUID 문자열), 헤더 {@code __lsn}(원본 WAL 위치 → 색인 외부 버전),
  * {@code __source_ts_ms}(원본 커밋 시각 → 색인 지연 지표). 값이 null 이면 tombstone(행 삭제).
  * <p>
  * 커맨드·이벤트 토픽과 달리 {@code type} 헤더가 없다(비즈니스 코드가 발행하지 않는 테이블 복제). 본문·키·헤더가 계약과
@@ -57,7 +58,7 @@ class ProductCdcListener {
 
     @KafkaListener(topics = TOPIC)
     void onMessage(ConsumerRecord<String, String> record) {
-        long productId = productId(record.key());
+        UUID productId = productId(record.key());
         Long version = longHeader(record, LSN_HEADER);
         boolean done;
         if (record.value() == null) {
@@ -75,10 +76,10 @@ class ProductCdcListener {
         }
     }
 
-    private IndexProductCommand toCommand(ConsumerRecord<String, String> record, long productId, long version) {
+    private IndexProductCommand toCommand(ConsumerRecord<String, String> record, UUID productId, long version) {
         JsonNode row = json.readTree(record.value());
-        long id = requireLong(row, "id", record);
-        if (id != productId) {
+        UUID id = requireUuid(row, "id", record);
+        if (!id.equals(productId)) {
             throw new NonRetryableMessageException("key " + productId + " != id " + id + ": " + describe(record));
         }
         return new IndexProductCommand(id, requireText(row, "name", record), optionalText(row, "description"),
@@ -86,11 +87,23 @@ class ProductCdcListener {
                 requireInstant(row, "updated_at", record), version);
     }
 
-    private static long productId(String key) {
-        try {
-            return Long.parseLong(key);
-        } catch (NumberFormatException | NullPointerException e) {
+    private static UUID productId(String key) {
+        UUID id = parseUuid(key);
+        if (id == null) {
             throw new NonRetryableMessageException("key is not a product id: " + key);
+        }
+        return id;
+    }
+
+    /** 표준 표기(8-4-4-4-12)만 받는다. UUID.fromString 은 "1-1-1-1-1" 같은 표기도 받아 준다 */
+    private static UUID parseUuid(String text) {
+        if (text == null || text.length() != 36) {
+            return null;
+        }
+        try {
+            return UUID.fromString(text);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 
@@ -113,6 +126,14 @@ class ProductCdcListener {
             throw new NonRetryableMessageException(field + " missing or not a number: " + describe(record));
         }
         return node.longValue();
+    }
+
+    private static UUID requireUuid(JsonNode row, String field, ConsumerRecord<String, String> record) {
+        UUID id = parseUuid(requireText(row, field, record));
+        if (id == null) {
+            throw new NonRetryableMessageException(field + " is not a uuid: " + describe(record));
+        }
+        return id;
     }
 
     private static String requireText(JsonNode row, String field, ConsumerRecord<String, String> record) {

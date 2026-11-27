@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -90,7 +91,7 @@ class SagaTimeoutIntegrationTest {
 
     private Order place(long userId) {
         return placeOrderUseCase.placeOrder(new PlaceOrderCommand(userId, List.of(
-                new PlaceOrderCommand.Line(10L, 1, 1_000L)), 0L)).order();
+                new PlaceOrderCommand.Line(pid(10), 1, 1_000L)), 0L)).order();
     }
 
     @Test

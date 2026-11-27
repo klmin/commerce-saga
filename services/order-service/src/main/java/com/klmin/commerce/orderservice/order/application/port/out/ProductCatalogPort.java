@@ -2,6 +2,7 @@ package com.klmin.commerce.orderservice.order.application.port.out;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 상품의 지금 가격 (product-service 동기 조회, ADR 0016). 주문 API 요청 안에서 DB 트랜잭션 밖에서만 부른다.
@@ -14,8 +15,8 @@ public interface ProductCatalogPort {
      *
      * @throws com.klmin.commerce.orderservice.order.application.ProductCatalogUnavailableException 응답이 없거나(타임아웃) 오류
      */
-    List<CatalogProduct> findByIds(Collection<Long> productIds);
+    List<CatalogProduct> findByIds(Collection<UUID> productIds);
 
-    record CatalogProduct(long productId, String name, long price, boolean onSale) {
+    record CatalogProduct(UUID productId, String name, long price, boolean onSale) {
     }
 }

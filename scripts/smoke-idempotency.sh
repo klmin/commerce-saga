@@ -13,6 +13,8 @@
 #   10e. 내 주문·결제 목록: 최신순 커서 페이징, 다른 사용자에게는 안 보임
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
+source "$(dirname "$0")/lib/products.sh"
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
@@ -41,7 +43,7 @@ get() { # path userId → 본문 (200 이 아니면 실패)
 }
 points() { get /api/points/me "$1" | field balance; }
 body() { # quantity
-  printf '{"lines":[{"productId":2,"quantity":%s,"unitPrice":25000}],"pointAmount":%s}' "$1" "$POINT"
+  printf '{"lines":[{"productId":"%s","quantity":%s,"unitPrice":25000}],"pointAmount":%s}' "$PRODUCT_MOUSE" "$1" "$POINT"
 }
 place() { # key quantity → "status orderId replayed"
   local out headers status i

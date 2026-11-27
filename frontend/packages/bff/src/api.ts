@@ -7,8 +7,8 @@ export type ProblemDetail = {
   status?: number;
   detail?: string;
   errors?: { field: string; message: string }[];
-  /** 주문 가격이 바뀌었을 때(409) 요청한 상품의 지금 가격 (ADR 0016) */
-  currentPrices?: { productId: number; price: number }[];
+  /** 주문 가격이 바뀌었을 때(409) 요청한 상품의 지금 가격 (ADR 0016). productId 는 UUID 문자열 (ADR 0018) */
+  currentPrices?: { productId: string; price: number }[];
 };
 
 export class ApiError extends Error {

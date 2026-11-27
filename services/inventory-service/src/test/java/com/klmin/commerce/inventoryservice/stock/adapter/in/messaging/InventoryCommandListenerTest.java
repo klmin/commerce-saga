@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class InventoryCommandListenerTest {
 
+    static final UUID PRODUCT_ID = UUID.fromString("01900000-0000-7000-8000-0000000000a1");
     static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
 
     private final ReserveStockUseCase reserve = mock(ReserveStockUseCase.class);
@@ -47,9 +48,9 @@ class InventoryCommandListenerTest {
         UUID orderId = UUID.randomUUID();
 
         listener.onMessage(record(ReserveStock.TYPE,
-                "{\"orderId\":\"" + orderId + "\",\"lines\":[{\"productId\":1,\"quantity\":2}]}"));
+                "{\"orderId\":\"" + orderId + "\",\"lines\":[{\"productId\":\"" + PRODUCT_ID + "\",\"quantity\":2}]}"));
 
-        verify(reserve).reserve(MESSAGE_ID, new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(1L, 2))));
+        verify(reserve).reserve(MESSAGE_ID, new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(PRODUCT_ID, 2))));
     }
 
     @Test
@@ -89,7 +90,7 @@ class InventoryCommandListenerTest {
 
     @Test
     void unknownOrMissingType_isNonRetryable() {
-        String body = "{\"orderId\":\"" + UUID.randomUUID() + "\",\"lines\":[{\"productId\":1,\"quantity\":1}]}";
+        String body = "{\"orderId\":\"" + UUID.randomUUID() + "\",\"lines\":[{\"productId\":\"" + PRODUCT_ID + "\",\"quantity\":1}]}";
 
         assertThatThrownBy(() -> listener.onMessage(record("Something", body)))
                 .isInstanceOf(NonRetryableMessageException.class);

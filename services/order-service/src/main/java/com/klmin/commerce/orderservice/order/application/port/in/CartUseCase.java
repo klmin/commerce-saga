@@ -1,5 +1,7 @@
 package com.klmin.commerce.orderservice.order.application.port.in;
 
+import java.util.UUID;
+
 /** 내 장바구니 (JWT sub 의 것만. 장바구니 id 를 받지 않는다) */
 public interface CartUseCase {
 
@@ -7,7 +9,7 @@ public interface CartUseCase {
     CartResult get(long userId);
 
     /** 담기·수량 바꾸기. 없는·판매 중지 상품은 422, product 장애 503 */
-    CartResult put(long userId, long productId, int quantity);
+    CartResult put(long userId, UUID productId, int quantity);
 
-    CartResult remove(long userId, long productId);
+    CartResult remove(long userId, UUID productId);
 }

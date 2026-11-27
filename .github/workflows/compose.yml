@@ -44,7 +44,7 @@ jobs:
         run: |
           # 사용자 / , 관리자 /admin/, 인증 화면 /auth/ (<base href> 가 앞 경로), /admin → /admin/, SAS issuer 에 /auth
           curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
-          curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
+          curl -sf http://localhost/admin/products/01900000-0000-7000-8000-000000000001 | grep -q '<base href="/admin/" />'
           curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'
           # 로그인 기기 API 는 auth-service 로(로그인 안 했으면 401), 기기 화면은 인증 화면
           [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost/auth/sessions)" = 401 ]
@@ -78,7 +78,7 @@ jobs:
       - name: 호스트 방식 화면·SAS·로그인
         run: |
           curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
-          curl -sf http://admin.localhost/products/1 | grep -q '<base href="/" />'
+          curl -sf http://admin.localhost/products/01900000-0000-7000-8000-000000000001 | grep -q '<base href="/" />'
           curl -sf http://auth.localhost/.well-known/openid-configuration | grep -q '"issuer":"http://auth.localhost"'
           curl -sf http://auth.localhost/signin | grep -q '<base href="/" />'
           [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://auth.localhost/sessions)" = 401 ]
