@@ -4,9 +4,11 @@ import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.inventory.ReleaseStock;
 import com.klmin.commerce.contract.inventory.ReserveStock;
+import com.klmin.commerce.contract.inventory.ReturnStock;
 import com.klmin.commerce.contract.inventory.StockReleased;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
+import com.klmin.commerce.contract.inventory.StockReturned;
 import com.klmin.commerce.contract.order.OrderCompleted;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ConfirmStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
@@ -248,6 +250,26 @@ class ReserveStockIntegrationTest {
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore));
         assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2);
+    }
+
+    // 완료 후 취소 (ADR 0020): 판매 확정된 재고를 ReturnStock 으로 다시 들이고, 중복 반환에도 한 번만 늘고 매번 응답한다
+    @Test
+    void returnStock_afterOrderCompleted_restocksOnce_andRepliesStockReturned() {
+        int availableBefore = getStockUseCase.getStock(P3).available();
+        UUID orderId = UUID.randomUUID();
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 2))));
+        awaitReplies(orderId, 1);
+        send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId,
+                UUID.fromString("01900000-0000-7000-8001-000000000001"), 2000L, 0L, 2000L));
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2));
+
+        send(Topics.INVENTORY_COMMAND, orderId, ReturnStock.TYPE, new ReturnStock(orderId));
+        send(Topics.INVENTORY_COMMAND, orderId, ReturnStock.TYPE, new ReturnStock(orderId)); // 중복 반환
+
+        List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
+        assertThat(replies.subList(1, 3)).allMatch(r -> StockReturned.TYPE.equals(header(r, MessageHeaders.TYPE)));
+        assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore);
     }
 
     // 해제(inventory.command)와 확정(order.events)이 같은 주문에 동시에 와도 하나만 반영되고 둘 다 실패하지 않는다

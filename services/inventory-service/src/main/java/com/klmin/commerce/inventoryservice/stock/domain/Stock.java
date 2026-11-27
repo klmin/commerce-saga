@@ -66,6 +66,15 @@ public final class Stock {
     }
 
     /**
+     * 완료 후 취소로 판매 확정된 수량을 가용으로 다시 들인다 (ADR 0020). 보상이라 거절하지 않는다:
+     * 관리자 입고는 합계를 {@link #MAX_TOTAL} 로 막으므로 반환분을 더해도 int 를 넘지 않는다
+     */
+    public void restock(Quantity quantity, Instant now) {
+        available = Math.addExact(available, quantity.value());
+        updatedAt = now;
+    }
+
+    /**
      * 관리자 조정 (ADR 0019): 입고(+)·차감(-)을 가용 재고에 더한다. 예약 중인 수량(reserved)은 건드리지 않는다.
      * 수량을 덮어쓰지 않고 더하므로, 같은 행을 잠근 예약과 순서대로 반영돼 서로의 변경을 지우지 않는다.
      *

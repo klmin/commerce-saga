@@ -113,6 +113,17 @@ class StockTest {
     }
 
     @Test
+    void restock_addsToAvailable_withoutTouchingReserved() {
+        Stock stock = Stock.restore(P1, 5, 2, T0);
+
+        stock.restock(Quantity.of(3), T0.plusSeconds(1));
+
+        assertThat(stock.available()).isEqualTo(8);
+        assertThat(stock.reserved()).isEqualTo(2);
+        assertThat(stock.updatedAt()).isEqualTo(T0.plusSeconds(1));
+    }
+
+    @Test
     void quantityMustBePositive_andProductIdNotNull() {
         assertThatThrownBy(() -> Quantity.of(0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> ProductId.of(null)).isInstanceOf(NullPointerException.class);

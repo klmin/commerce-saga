@@ -7,6 +7,7 @@ import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStoc
 import com.klmin.commerce.inventoryservice.stock.application.port.in.GetStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockCommand;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ReturnStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.ProcessedMessagePort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.SendStockReplyPort;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.StockPort;
@@ -39,7 +40,8 @@ import java.util.stream.Collectors;
  * ("트랜잭션 하나 = 애그리거트 하나"의 예외, 주문 단위 전부-아니면-전무 예약이 필요해서. ADR 0002).
  */
 @Service
-class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmStockUseCase, GetStockUseCase {
+class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ReturnStockUseCase, ConfirmStockUseCase,
+        GetStockUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(StockService.class);
 
@@ -135,6 +137,37 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
         replyPort.stockReleased(orderId);
     }
 
+    // 완료 후 취소 (ADR 0020). 재고 변경 + 예약 기록 + 응답(outbox) = 한 트랜잭션
+    @Override
+    @Transactional
+    public void returnStock(UUID messageId, UUID orderId) {
+        if (alreadyProcessed(messageId, "ReturnStock", orderId)) {
+            return;
+        }
+        Instant now = clock.instant();
+        Optional<StockReservation> found = reservationPort.findByOrderIdForUpdate(orderId);
+        if (found.isEmpty()) {
+            // 완료된 주문이면 예약 기록이 있어야 한다. 되돌릴 근거가 없으므로 재고는 건드리지 않고 응답만 한다
+            log.warn("예약 기록 없는 재고 반환 요청 (orderId={})", orderId);
+        } else {
+            StockReservation reservation = found.get();
+            switch (reservation.returnStock(now)) {
+                case RESTOCK -> {
+                    applyToStocks(reservation, (stock, quantity) -> stock.restock(quantity, now));
+                    reservationPort.update(reservation);
+                }
+                // OrderCompleted 가 아직 처리되지 않았다: 예약을 푼다. 뒤늦은 OrderCompleted 는 RETURNED 라 확정하지 않는다
+                case RELEASE -> {
+                    applyToStocks(reservation, (stock, quantity) -> stock.release(quantity, now));
+                    reservationPort.update(reservation);
+                }
+                case NOTHING -> log.info("반환할 재고 없음: 예약 상태 {} (orderId={})", reservation.status(), orderId);
+            }
+        }
+        // 보상은 결과가 하나뿐이다. 되돌렸든 되돌릴 게 없었든 오케스트레이터가 다음 단계로 가도록 항상 응답한다
+        replyPort.stockReturned(orderId);
+    }
+
     @Override
     @Transactional
     public void confirm(UUID messageId, UUID orderId) {
@@ -199,7 +232,8 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
     private void reply(StockReservation reservation) {
         if (reservation.isReserved()) {
             replyPort.stockReserved(reservation.orderId());
-        } else if (reservation.status() == ReservationStatus.RELEASED) {
+        } else if (reservation.status() == ReservationStatus.RELEASED
+                || reservation.status() == ReservationStatus.RETURNED) {
             replyPort.stockReservationFailed(reservation.orderId(), "reservation already released");
         } else {
             replyPort.stockReservationFailed(reservation.orderId(), reservation.reason());
