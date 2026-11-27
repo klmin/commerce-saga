@@ -252,7 +252,7 @@ services:
   # 웹훅 URL 은 비밀값이라 저장소에 넣지 않는다: DISCORD_WEBHOOK_URL 을 셸에서 export 하거나 infra/.env(gitignore)에 둔다.
   # 없으면 null receiver 로 뜬다(경보는 http://localhost:9095 UI·API 에서만). 호스트 포트는 표준 9093 에서 비킴
   alertmanager:
-    image: prom/alertmanager:v0.29.0
+    image: prom/alertmanager:v0.35.0
     entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
     environment:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
