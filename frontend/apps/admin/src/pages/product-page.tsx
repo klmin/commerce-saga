@@ -28,6 +28,7 @@ import {
 
 import { NotFoundPage } from "./not-found-page";
 import { ProductEditForms, type SubmitResult } from "./product-forms";
+import { StockSection } from "./stock-section";
 
 function ProductManagement({ productId }: { productId: ProductId }) {
   const queryClient = useQueryClient();
@@ -107,6 +108,7 @@ function ProductManagement({ productId }: { productId: ProductId }) {
           />
         </CardContent>
       </Card>
+      <StockSection productId={productId} />
       <Card>
         <CardHeader>
           <CardTitle>관리 이력</CardTitle>

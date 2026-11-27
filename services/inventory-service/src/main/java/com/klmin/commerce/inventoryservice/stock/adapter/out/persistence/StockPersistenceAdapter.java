@@ -5,6 +5,7 @@ import com.klmin.commerce.inventoryservice.stock.domain.ProductId;
 import com.klmin.commerce.inventoryservice.stock.domain.Stock;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -39,6 +40,11 @@ class StockPersistenceAdapter implements StockPort {
                     .orElseThrow(() -> new IllegalStateException("stock not found: " + stock.productId()));
             entity.change(stock.available(), stock.reserved(), stock.updatedAt());
         }
+    }
+
+    @Override
+    public void createIfAbsent(ProductId productId, Instant now) {
+        repository.insertIfAbsent(productId.value(), now);
     }
 
     private static Stock toDomain(StockJpaEntity e) {

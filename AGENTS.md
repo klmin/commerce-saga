@@ -20,7 +20,7 @@ libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 �
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 frontend/apps/web/         사용자 화면 SPA (Vite + React). 토큰을 모르고 같은 출처 /api 를 BFF 세션 쿠키로 부른다 (ADR 0017)
-frontend/apps/admin/       관리자 화면 SPA (상품 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
+frontend/apps/admin/       관리자 화면 SPA (상품·재고 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
 frontend/apps/auth/        인증 화면 SPA (SAS 로그인·가입). 폼은 auth-service 로 그대로 POST, CSRF 는 GET csrf 본문 (설계 문서 4절)
 frontend/packages/ui/      화면 SPA 공용 shadcn/ui 컴포넌트·테마
 frontend/packages/bff/     화면 SPA 공용 Gateway(BFF) 호출·로그인 확인·로그아웃
@@ -34,7 +34,7 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | 서비스 | 역할 |
 |---|---|
 | order-service | 주문 애그리거트 + 주문 Saga 오케스트레이터 (Saga 상태를 DB에 저장) |
-| inventory-service | 재고 예약 / 해제 |
+| inventory-service | 재고 예약 / 해제, 관리자 입고·차감(ADR 0019) |
 | point-service | 포인트 차감 / 환불 |
 | payment-service | 가짜 PG (지연·실패·타임아웃 주입) |
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |

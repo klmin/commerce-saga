@@ -13,17 +13,20 @@ export type SubmitResult = { saved?: string; error?: string };
 
 /**
  * 폼 하나. 입력은 비제어이고 실패해도 입력한 값이 남는다. 성공하면 부모가 다시 읽은 값으로 key 를 바꿔
- * 입력을 새 값으로 다시 그린다(저장 문구는 이 폼의 상태라 남는다)
+ * 입력을 새 값으로 다시 그린다(저장 문구는 이 폼의 상태라 남는다). resetOnSuccess 면 성공한 뒤 입력을 비운다
+ * (재고 조정처럼 같은 값을 다시 누르면 한 번 더 반영되는 폼)
  */
-function ActionForm({
+export function ActionForm({
   onSubmit,
   submitLabel,
   label,
+  resetOnSuccess = false,
   children,
 }: {
   onSubmit: (formData: FormData) => Promise<SubmitResult>;
   submitLabel: string;
   label: string;
+  resetOnSuccess?: boolean;
   children: ReactNode;
 }) {
   const [pending, setPending] = useState(false);
@@ -34,10 +37,15 @@ function ActionForm({
     if (pending) {
       return;
     }
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setPending(true);
     try {
-      setState(await onSubmit(formData));
+      const result = await onSubmit(formData);
+      if (resetOnSuccess && result.saved && !result.error) {
+        form.reset();
+      }
+      setState(result);
     } catch (e) {
       setState({ error: failureMessage(e) });
     } finally {

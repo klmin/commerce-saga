@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** 재고 조회 (시연·확인용). 재고 관리 API 는 관리자 권한이 생기는 4단계 이후 */
+/** 재고 조회 (상품 화면·시연용, 로그인 없이). 입고·차감은 AdminStockController (ADR 0019) */
 @RestController
 @RequestMapping("/stocks")
 class StockController {

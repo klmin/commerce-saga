@@ -99,6 +99,12 @@ spring:
               predicates:
                 - Path=/api/admin/products,/api/admin/products/**
               filters: *user-api
+            # 관리자 재고 조정: /api/admin/stocks/** → inventory-service /admin/stocks/** (ADMIN 역할, ADR 0019)
+            - id: admin-stocks
+              uri: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/admin/stocks/**
+              filters: *user-api
 
 # 이 주소에서 온 연결만 X-Forwarded-For 를 믿는다 (rate limit 의 IP, ADR 0011). 화면의 BFF(Next 서버) 주소·대역.
 # 로컬은 Next 가 같은 PC 에서 돈다. 배포에서는 BFF 대역만 둔다. 비우면 아무도 믿지 않는다
