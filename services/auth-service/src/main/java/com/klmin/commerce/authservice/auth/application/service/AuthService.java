@@ -1,5 +1,6 @@
 package com.klmin.commerce.authservice.auth.application.service;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.klmin.commerce.authservice.auth.application.DuplicateLoginIdException;
 import com.klmin.commerce.authservice.auth.application.InvalidCredentialsException;
 import com.klmin.commerce.authservice.auth.application.LoginLockedException;
@@ -15,12 +16,14 @@ import com.klmin.commerce.authservice.auth.application.port.out.UserEventPort;
 import com.klmin.commerce.authservice.auth.application.port.out.UserPort;
 import com.klmin.commerce.authservice.auth.domain.PasswordPolicy;
 import com.klmin.commerce.authservice.auth.domain.User;
+import com.klmin.commerce.authservice.auth.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -49,13 +52,15 @@ public class AuthService implements SignUpUseCase, AuthenticateUseCase, TokenCla
 
     @Override
     @Transactional
-    public long signUp(SignUpCommand command) {
+    public UUID signUp(SignUpCommand command) {
         PasswordPolicy.validate(command.password());
-        User user = User.register(command.loginId(), passwordHasher.hash(command.password()), clock.instant());
+        // id 는 앱이 만든다(UUIDv7, ADR 0018). DB 시퀀스가 없어 저장 전에 정해진다
+        User user = User.register(UserId.of(UuidCreator.getTimeOrderedEpoch()), command.loginId(),
+                passwordHasher.hash(command.password()), clock.instant());
         if (users.findByLoginId(user.loginId()).isPresent()) {
             throw new DuplicateLoginIdException();
         }
-        long userId = users.save(user).id();
+        UUID userId = users.save(user).id().value();
         // 사용자 저장 + UserRegistered outbox = 한 트랜잭션. 가입이 롤백되면 이벤트도 없다 (point 가 계정을 만든다)
         userEvents.userRegistered(userId, user.createdAt());
         return userId;
@@ -72,12 +77,13 @@ public class AuthService implements SignUpUseCase, AuthenticateUseCase, TokenCla
     }
 
     @Override
-    public AuthenticatedUserResult currentClaims(long userId) {
-        return claimsOf(users.findById(userId).filter(User::isActive).orElseThrow(InvalidCredentialsException::new));
+    public AuthenticatedUserResult currentClaims(UUID userId) {
+        return claimsOf(users.findById(UserId.of(userId)).filter(User::isActive)
+                .orElseThrow(InvalidCredentialsException::new));
     }
 
     private static AuthenticatedUserResult claimsOf(User user) {
-        return new AuthenticatedUserResult(user.id(),
+        return new AuthenticatedUserResult(user.id().value(),
                 user.roles().stream().map(Enum::name).collect(Collectors.toSet()));
     }
 

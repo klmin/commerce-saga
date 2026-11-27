@@ -75,6 +75,10 @@ class PaymentService implements PayUseCase, CancelPaymentUseCase, GetPaymentUseC
             recorder.replyInvalid(messageId, command.orderId(), "invalid command: amount must be positive");
             return;
         }
+        if (command.userId() == null) {
+            recorder.replyInvalid(messageId, command.orderId(), "invalid command: userId missing");
+            return;
+        }
         // PG 를 부르기 전에 이 주문의 호출을 예약한다(커밋). 봉인된 주문이면 PG 는 한 번도 불리지 않았고 앞으로도
         // 불리지 않는다(앞선 처리가 회로 열림으로 거절을 확정했다) → 같은 거절을 기록한다(이미 있으면 재시도 때 재응답)
         OptionalInt claim = attemptPort.claim(command.orderId());

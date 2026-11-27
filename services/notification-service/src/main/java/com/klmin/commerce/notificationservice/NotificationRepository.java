@@ -1,5 +1,6 @@
 package com.klmin.commerce.notificationservice;
 
+import com.github.f4b6a3.uuid.UuidCreator;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -19,23 +20,27 @@ class NotificationRepository {
         this.jdbc = JdbcClient.create(dataSource);
     }
 
-    /** @return 새로 만들었으면 true, 같은 주문·종류의 알림이 이미 있으면 false (중복 이벤트) */
-    boolean insertIfAbsent(UUID orderId, long userId, String type, String message) {
+    /**
+     * id 는 저장 전에 UUIDv7 로 만든다 (ADR 0018). 시간순이라 id 순 = 최신순이고, 커서 페이징이 id 로 그대로 된다.
+     *
+     * @return 새로 만들었으면 true, 같은 주문·종류의 알림이 이미 있으면 false (중복 이벤트)
+     */
+    boolean insertIfAbsent(UUID orderId, UUID userId, String type, String message) {
         return jdbc.sql("""
-                        insert into notifications (order_id, user_id, type, message)
-                        values (?, ?, ?, ?)
+                        insert into notifications (id, order_id, user_id, type, message)
+                        values (?, ?, ?, ?, ?)
                         on conflict (order_id, type) do nothing
                         """)
-                .params(orderId, userId, type, message)
+                .params(UuidCreator.getTimeOrderedEpoch(), orderId, userId, type, message)
                 .update() == 1;
     }
 
     /** 최신순. beforeId 가 있으면 그보다 오래된 것 (커서 페이징) */
-    List<Notification> findByUser(long userId, Long beforeId, int size) {
+    List<Notification> findByUser(UUID userId, UUID beforeId, int size) {
         return jdbc.sql("""
                         select id, order_id, type, message, created_at
                         from notifications
-                        where user_id = :userId and (:beforeId::bigint is null or id < :beforeId)
+                        where user_id = :userId and (:beforeId::uuid is null or id < :beforeId::uuid)
                         order by id desc
                         limit :size
                         """)
@@ -46,6 +51,6 @@ class NotificationRepository {
                 .list();
     }
 
-    record Notification(long id, UUID orderId, String type, String message, Instant createdAt) {
+    record Notification(UUID id, UUID orderId, String type, String message, Instant createdAt) {
     }
 }

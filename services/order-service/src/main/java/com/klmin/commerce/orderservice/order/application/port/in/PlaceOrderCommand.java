@@ -10,7 +10,7 @@ import java.util.UUID;
  * @param idempotencyKey 클라이언트가 정한 요청 키 (없으면 null). 같은 사용자·같은 키면 주문을 한 번만 만든다
  * @param fromCart       장바구니 주문이면 true. 주문한 상품의 장바구니 줄을 주문과 같은 트랜잭션에서 지운다 (ADR 0016)
  */
-public record PlaceOrderCommand(long userId, List<Line> lines, long pointAmount, String idempotencyKey,
+public record PlaceOrderCommand(UUID userId, List<Line> lines, long pointAmount, String idempotencyKey,
                                 boolean fromCart) {
 
     public static final int IDEMPOTENCY_KEY_MAX_LENGTH = 100;
@@ -23,11 +23,11 @@ public record PlaceOrderCommand(long userId, List<Line> lines, long pointAmount,
         }
     }
 
-    public PlaceOrderCommand(long userId, List<Line> lines, long pointAmount, String idempotencyKey) {
+    public PlaceOrderCommand(UUID userId, List<Line> lines, long pointAmount, String idempotencyKey) {
         this(userId, lines, pointAmount, idempotencyKey, false);
     }
 
-    public PlaceOrderCommand(long userId, List<Line> lines, long pointAmount) {
+    public PlaceOrderCommand(UUID userId, List<Line> lines, long pointAmount) {
         this(userId, lines, pointAmount, null, false);
     }
 

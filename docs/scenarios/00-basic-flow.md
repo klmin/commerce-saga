@@ -14,7 +14,7 @@ sequenceDiagram
     participant K as Kafka
     participant I as inventory-service
 
-    C->>O: POST /orders (X-User-Id: 1)
+    C->>O: POST /orders (user1 access token)
     Note over O: tx: orders INSERT (PENDING)<br/>+ outbox INSERT (ReserveStock)
     O-->>C: 201 PENDING
     O->>K: relay: inventory.command / key=orderId

@@ -39,7 +39,7 @@ class OrderIdempotencyPersistenceAdapter implements OrderIdempotencyPort, Idempo
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public Optional<KeyRecord> claim(long userId, String key, String requestHash, UUID orderId, Instant now) {
+    public Optional<KeyRecord> claim(UUID userId, String key, String requestHash, UUID orderId, Instant now) {
         if (jdbc.sql(INSERT).params(userId, key, requestHash, orderId, Timestamp.from(now)).update() == 1) {
             return Optional.empty();
         }
@@ -61,7 +61,7 @@ class OrderIdempotencyPersistenceAdapter implements OrderIdempotencyPort, Idempo
     }
 
     @Override
-    public Optional<KeyRecord> find(long userId, String key) {
+    public Optional<KeyRecord> find(UUID userId, String key) {
         return jdbc.sql(SELECT).params(userId, key)
                 .query((rs, n) -> new KeyRecord(rs.getObject("order_id", UUID.class), rs.getString("request_hash")))
                 .optional();

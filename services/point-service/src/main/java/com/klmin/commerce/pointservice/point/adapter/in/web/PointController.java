@@ -32,14 +32,14 @@ class PointController {
     }
 
     @GetMapping("/me")
-    PointBalanceResponse getMyBalance(@CurrentUserId long userId) {
+    PointBalanceResponse getMyBalance(@CurrentUserId UUID userId) {
         PointAccount account = getPointBalanceUseCase.getBalance(userId);
         return new PointBalanceResponse(account.userId().value(), account.balance().value());
     }
 
     /** 본인 포인트 내역 (주문 사용 + 지급, 최신순 커서 페이징). 다음 쪽은 마지막 entryId 를 before 로 */
     @GetMapping("/me/history")
-    List<PointHistoryEntryResponse> getMyHistory(@CurrentUserId long userId,
+    List<PointHistoryEntryResponse> getMyHistory(@CurrentUserId UUID userId,
                                                  @RequestParam(required = false) UUID before,
                                                  @RequestParam(defaultValue = "20") @Min(1)
                                                  @Max(ListMyPointHistoryQuery.MAX_SIZE) int size) {
@@ -48,7 +48,7 @@ class PointController {
                 .toList();
     }
 
-    record PointBalanceResponse(long userId, long balance) {
+    record PointBalanceResponse(UUID userId, long balance) {
     }
 
     /** kind: ORDER(주문 사용) 또는 지급 종류(SIGNUP_BONUS). status: USED·REJECTED·REFUNDED 또는 GRANTED */

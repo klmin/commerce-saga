@@ -54,16 +54,16 @@ CI `e2e` 가 두 relay 모드 모두 서비스 기동 직후 이 스크립트를
 PASS
 ```
 
-CI(PR #30, `e2e` run 45172504591)에서 두 relay 모드 모두 위와 같은 줄로 PASS 했다. 가입한 사용자가 `userId=1` 인 것은 그때는 시드 사용자가 없었기 때문이다(A-2 부터 가입 id 는 1000 부터).
+CI(PR #30, `e2e` run 45172504591)에서 두 relay 모드 모두 위와 같은 줄로 PASS 했다. 가입한 사용자가 `userId=1` 인 것은 그때는 시드 사용자가 없었기 때문이다(A-2 부터 가입 id 는 1000 부터, 후속 6-2 부터는 auth-service 가 만드는 UUIDv7, ADR 0018).
 
 ## 9f~9i. Gateway 와 서비스의 JWT 검증, 소유권 (A-2)
 
-JWT 로 바꾼 뒤에도 남의 리소스를 볼 수 없는지, Gateway 와 서비스가 각각 토큰을 검증하는지 본다. 사용자는 auth-service 개발용 시드(`user1`~`user4` = id 1~4, `admin` = 100)다.
+JWT 로 바꾼 뒤에도 남의 리소스를 볼 수 없는지, Gateway 와 서비스가 각각 토큰을 검증하는지 본다. 사용자는 auth-service 개발용 시드(`user1`~`user4`, `admin`)다. id 는 고정 UUID(`01900000-0000-7000-8001-00000000000{1..4}`, admin `…-000000000100`, `scripts/lib/users.sh`, ADR 0018).
 
 1. 인프라, 다섯 서비스, auth-service, gateway(8000)를 띄운다. rate limit 을 보려면 gateway 를 `GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10` 으로
 2. `scripts/smoke-gateway.sh`
    - **9f** 토큰 없이 Gateway → `401`, 서비스에 직접 → `401`, 위조 토큰 → `401`
-   - **9g** 사용자 1 이 Gateway 로 주문 → 본인은 `200`, 사용자 2 는 주문·Saga·결제 모두 `404`. 사용자 2 가 `X-User-Id: 1` 을 붙여도(Gateway 경유든 서비스 직접이든) `404`
+   - **9g** 사용자 1 이 Gateway 로 주문 → 본인은 `200`, 사용자 2 는 주문·Saga·결제 모두 `404`. 사용자 2 가 `X-User-Id: <사용자 1 의 UUID>` 를 붙여도(Gateway 경유든 서비스 직접이든) `404`
    - **9h** `/api/admin/payment-faults`: 일반 사용자 `403`, 관리자 `200`
    - **9i** 사용자 3 이 30번 몰아서 요청 → 일부 `429`, 그동안 사용자 4 는 `200`
 
@@ -93,7 +93,7 @@ JWT 로 바꾼 뒤에도 남의 리소스를 볼 수 없는지, Gateway 와 서�
 PASS
 ```
 
-CI(PR #31, `e2e` run 45180044249)에서 두 relay 모드 모두 9a~9i PASS. 가입 사용자는 시드 다음 id(`sub=1000`)부터 나왔고, rate limit(초당 5, 버스트 10)은 연속 30번 중 scheduler 모드 429 15번, debezium 모드 429 20번이었다. 9f~9h 의 응답 코드는 위 로컬 결과와 같다.
+CI(PR #31, `e2e` run 45180044249)에서 두 relay 모드 모두 9a~9i PASS. 가입 사용자는 시드 다음 id(`sub=1000`)부터 나왔고(그때 기준, 지금은 UUIDv7), rate limit(초당 5, 버스트 10)은 연속 30번 중 scheduler 모드 429 15번, debezium 모드 429 20번이었다. 9f~9h 의 응답 코드는 위 로컬 결과와 같다.
 
 ## 만들면서 정한 것
 

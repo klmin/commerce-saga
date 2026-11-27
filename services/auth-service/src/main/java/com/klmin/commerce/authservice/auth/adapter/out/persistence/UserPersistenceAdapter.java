@@ -3,6 +3,7 @@ package com.klmin.commerce.authservice.auth.adapter.out.persistence;
 import com.klmin.commerce.authservice.auth.application.DuplicateLoginIdException;
 import com.klmin.commerce.authservice.auth.application.port.out.UserPort;
 import com.klmin.commerce.authservice.auth.domain.User;
+import com.klmin.commerce.authservice.auth.domain.UserId;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -33,7 +34,7 @@ class UserPersistenceAdapter implements UserPort {
     }
 
     @Override
-    public Optional<User> findById(long id) {
-        return repository.findById(id).map(UserJpaEntity::toDomain);
+    public Optional<User> findById(UserId id) {
+        return repository.findById(id.value()).map(UserJpaEntity::toDomain);
     }
 }

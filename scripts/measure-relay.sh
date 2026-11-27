@@ -18,7 +18,7 @@
 #
 # k6 대신 bash + curl 을 쓴다 (CI·로컬에 추가 도구 없이 같은 방식으로 돌리려고)
 set -euo pipefail
-# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+# access token (ADR 0008). 개발용 시드 사용자 USER1~USER4, 관리자 ADMIN (고정 UUID, lib/users.sh)
 source "$(dirname "$0")/lib/auth.sh"
 # 시드 상품 1~3 의 고정 UUID·가격 (product-service V2). 서버 가격과 다르면 주문이 409 (ADR 0016)
 source "$(dirname "$0")/lib/products.sh"
@@ -28,7 +28,7 @@ PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
 ORDERS=${ORDERS:-30}
 CONCURRENCY=${CONCURRENCY:-5}
-USER_ID=${USER_ID:-3}
+USER_ID=$(user_id "${USER_ID:-3}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
 IDLE_SECONDS=${IDLE_SECONDS:-30}
 STATS_SETTLE_SECONDS=${STATS_SETTLE_SECONDS:-11}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
@@ -63,7 +63,7 @@ delta() { # before after db col(2=commits,3=scans)
   echo $(( a - b ))
 }
 
-curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
+curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' \
   -d '{"mode":"APPROVE","delayMillis":0}' > /dev/null
 
 mode=$(psql_q postgres "select case when count(*) filter (where active) > 0 then 'debezium' else 'scheduler' end from pg_replication_slots")
@@ -101,7 +101,7 @@ while [ "$sent" -lt "$ORDERS" ]; do
   rm -rf "$tmp/ids"; mkdir -p "$tmp/ids"   # 주문 id 파일만 정리 (probe_* 카운터는 구간 끝까지 유지)
   for j in $(seq 1 "$batch"); do
     product=$(product_id $(( ((sent + j) % 3) + 1 )))
-    curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
+    curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth "$USER_ID")" \
       -d "{\"lines\":[{\"productId\":\"$product\",\"quantity\":1,\"unitPrice\":$(seed_price "$product")}],\"pointAmount\":10}" \
       | field orderId > "$tmp/ids/$j" &
   done

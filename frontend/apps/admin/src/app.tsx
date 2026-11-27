@@ -1,5 +1,6 @@
 import { routerBasename } from "@commerce/bff/base";
 import { createQueryClient, LogoutForm, SessionGate, useMe } from "@commerce/bff/session";
+import { shortId } from "@commerce/bff/short-id";
 import { Button } from "@commerce/ui/button";
 import { Page } from "@commerce/ui/page";
 import { createBrowserRouter, Link, Outlet } from "react-router";
@@ -24,7 +25,9 @@ function SiteHeader() {
             <Button variant="ghost" size="sm" asChild>
               <Link to="/products">상품 관리</Link>
             </Button>
-            <span className="px-2 text-sm text-muted-foreground">관리자 #{me.data.userId}</span>
+            <span className="px-2 text-sm text-muted-foreground" title={me.data.userId}>
+              관리자 #{shortId(me.data.userId)}
+            </span>
             <LogoutForm />
           </nav>
         )}

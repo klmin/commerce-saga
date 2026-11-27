@@ -22,7 +22,7 @@ class PaymentJpaEntity {
     private UUID orderId;
 
     @Column(name = "user_id", nullable = false)
-    private long userId;
+    private UUID userId;
 
     @Column(nullable = false)
     private long amount;
@@ -49,7 +49,7 @@ class PaymentJpaEntity {
     protected PaymentJpaEntity() {
     }
 
-    PaymentJpaEntity(UUID id, UUID orderId, long userId, long amount, PaymentStatus status, String transactionId,
+    PaymentJpaEntity(UUID id, UUID orderId, UUID userId, long amount, PaymentStatus status, String transactionId,
                      String reason, boolean cancelRequested, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.orderId = orderId;
@@ -79,7 +79,7 @@ class PaymentJpaEntity {
         return orderId;
     }
 
-    long getUserId() {
+    UUID getUserId() {
         return userId;
     }
 

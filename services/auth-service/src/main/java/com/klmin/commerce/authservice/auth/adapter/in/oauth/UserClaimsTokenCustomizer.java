@@ -13,10 +13,11 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.UUID;
 
 /**
  * SAS 가 만드는 access token·ID token 에 {@code roles} 를 넣는다 (ADR 0017, 클레임은 ADR 0008 과 같다).
- * {@code sub} 는 principal 이름(= userId, {@link PasswordAuthenticationProvider}) 그대로다.
+ * {@code sub} 는 principal 이름(= userId 의 UUID 문자열, {@link PasswordAuthenticationProvider}) 그대로다.
  * <p>
  * 역할은 로그인 때 값이 아니라 <b>토큰을 만들 때마다 DB 에서</b> 읽는다. refresh 로 새 토큰을 받을 때 역할 변경이 반영되고,
  * 정지·삭제된 사용자는 {@code invalid_grant} 로 갱신이 거절된다.
@@ -37,13 +38,9 @@ class UserClaimsTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         if (!accessToken && !idToken) {
             return;
         }
-        long userId;
-        try {
-            userId = Long.parseLong(context.getPrincipal().getName());
-        } catch (NumberFormatException e) {
-            // 우리 로그인 폼을 거치지 않은 principal. client_credentials 같은 grant 는 등록하지 않는다
-            throw new OAuth2AuthenticationException(new OAuth2Error(OAuth2ErrorCodes.INVALID_GRANT));
-        }
+        // 우리 로그인 폼을 거치지 않은 principal 이면 거절. client_credentials 같은 grant 는 등록하지 않는다
+        UUID userId = UserPrincipal.userId(context.getPrincipal().getName())
+                .orElseThrow(() -> new OAuth2AuthenticationException(new OAuth2Error(OAuth2ErrorCodes.INVALID_GRANT)));
         AuthenticatedUserResult user;
         try {
             user = useCase.currentClaims(userId);

@@ -9,13 +9,13 @@ create table products (
     updated_at  timestamptz  not null
 );
 
--- 가격 변경 이력 (audit). 가격을 바꾼 트랜잭션에서 INSERT 만 한다. changed_by = 관리자 사용자 id (JWT sub)
+-- 가격 변경 이력 (audit). 가격을 바꾼 트랜잭션에서 INSERT 만 한다. changed_by = 관리자 사용자 id (JWT sub, UUIDv7)
 create table product_price_history (
     id         bigint generated always as identity primary key,
     product_id uuid        not null references products (id),
     old_price  bigint      not null,
     new_price  bigint      not null,
-    changed_by bigint      not null,
+    changed_by uuid        not null,
     changed_at timestamptz not null
 );
 

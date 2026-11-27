@@ -51,7 +51,7 @@ class AdminProductController {
     }
 
     @PostMapping
-    ResponseEntity<ProductResponse> register(@CurrentUserId long adminId,
+    ResponseEntity<ProductResponse> register(@CurrentUserId UUID adminId,
                                              @Valid @RequestBody ProductRequests.Register request) {
         ProductResult result = manageProductUseCase.register(
                 new RegisterProductCommand(request.name(), request.description(), request.price(), adminId));
@@ -59,21 +59,21 @@ class AdminProductController {
     }
 
     @PutMapping("/{productId}")
-    ProductResponse describe(@CurrentUserId long adminId, @PathVariable UUID productId,
+    ProductResponse describe(@CurrentUserId UUID adminId, @PathVariable UUID productId,
                              @Valid @RequestBody ProductRequests.Describe request) {
         return ProductResponse.from(manageProductUseCase.describe(
                 new DescribeProductCommand(productId, request.name(), request.description(), adminId)));
     }
 
     @PutMapping("/{productId}/price")
-    ProductResponse changePrice(@CurrentUserId long adminId, @PathVariable UUID productId,
+    ProductResponse changePrice(@CurrentUserId UUID adminId, @PathVariable UUID productId,
                                 @Valid @RequestBody ProductRequests.ChangePrice request) {
         return ProductResponse.from(manageProductUseCase.changePrice(
                 new ChangePriceCommand(productId, request.price(), adminId)));
     }
 
     @PutMapping("/{productId}/sale")
-    ProductResponse changeSaleStatus(@CurrentUserId long adminId, @PathVariable UUID productId,
+    ProductResponse changeSaleStatus(@CurrentUserId UUID adminId, @PathVariable UUID productId,
                                      @Valid @RequestBody ProductRequests.ChangeSaleStatus request) {
         return ProductResponse.from(manageProductUseCase.changeSaleStatus(
                 new ChangeSaleStatusCommand(productId, request.onSale(), adminId)));

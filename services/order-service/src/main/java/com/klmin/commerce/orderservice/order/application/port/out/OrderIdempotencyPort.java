@@ -15,10 +15,10 @@ public interface OrderIdempotencyPort {
      *
      * @return 선점했으면 empty, 이미 있으면 그 기록
      */
-    Optional<KeyRecord> claim(long userId, String key, String requestHash, UUID orderId, Instant now);
+    Optional<KeyRecord> claim(UUID userId, String key, String requestHash, UUID orderId, Instant now);
 
     /** 이미 선점된 키의 기록 (선점하지 않고 읽기만) */
-    Optional<KeyRecord> find(long userId, String key);
+    Optional<KeyRecord> find(UUID userId, String key);
 
     record KeyRecord(UUID orderId, String requestHash) {
     }

@@ -19,19 +19,18 @@ source "$(dirname "$0")/lib/products.sh"
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
 # 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
 PRODUCT_ID=$(product_id "${PRODUCT_ID:-3}")
-ADMIN=100
-USER_ID=1
+USER_ID=$USER1
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 admin_put() { # path json
-  curl -sf -X PUT "$GATEWAY_URL/api/admin/products/$PRODUCT_ID$1" -H "$(auth $ADMIN)" \
+  curl -sf -X PUT "$GATEWAY_URL/api/admin/products/$PRODUCT_ID$1" -H "$(auth "$ADMIN")" \
     -H 'Content-Type: application/json' -d "$2" > /dev/null
 }
 order() { # key unitPrice → "status body"
   local out
-  out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth $USER_ID)" \
+  out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth "$USER_ID")" \
     -H 'Content-Type: application/json' -H "Idempotency-Key: $1" \
     -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$2}],\"pointAmount\":0}")
   echo "$(tail -n1 <<< "$out") $(head -n -1 <<< "$out")"
@@ -40,15 +39,15 @@ order() { # key unitPrice → "status body"
 original=$(curl -sf "$GATEWAY_URL/api/products/$PRODUCT_ID" | field price)
 [ -n "$original" ] || fail "상품 $PRODUCT_ID 조회 실패 (product-service·Gateway 확인)"
 changed=$(( original + 1000 ))
-trap 'admin_put /price "{\"price\":$original}" || true; admin_put /sale "{\"onSale\":true}" || true; curl -s -o /dev/null -X DELETE "$GATEWAY_URL/api/cart/items/$PRODUCT_ID" -H "$(auth $USER_ID)" || true' EXIT
+trap 'admin_put /price "{\"price\":$original}" || true; admin_put /sale "{\"onSale\":true}" || true; curl -s -o /dev/null -X DELETE "$GATEWAY_URL/api/cart/items/$PRODUCT_ID" -H "$(auth "$USER_ID")" || true' EXIT
 
 # 14e 준비: 가격을 바꾸기 전에 장바구니에 담는다 (담을 때 가격 = 원래 가격)
-curl -sf -X PUT "$GATEWAY_URL/api/cart/items/$PRODUCT_ID" -H "$(auth $USER_ID)" -H 'Content-Type: application/json' \
+curl -sf -X PUT "$GATEWAY_URL/api/cart/items/$PRODUCT_ID" -H "$(auth "$USER_ID")" -H 'Content-Type: application/json' \
   -d '{"quantity":1}' > /dev/null || fail "장바구니 담기 실패"
 
 echo "== 14a. 관리자가 가격 변경 → 이력"
 admin_put /price "{\"price\":$changed}"
-latest=$(curl -sf "$GATEWAY_URL/api/admin/products/$PRODUCT_ID/price-history" -H "$(auth $ADMIN)")
+latest=$(curl -sf "$GATEWAY_URL/api/admin/products/$PRODUCT_ID/price-history" -H "$(auth "$ADMIN")")
 [ "$(field oldPrice <<< "$latest")" = "$original" ] && [ "$(field newPrice <<< "$latest")" = "$changed" ] \
   && [ "$(field changedBy <<< "$latest")" = "$ADMIN" ] || fail "가격 이력이 다름: $latest"
 ok "이력 $original → $changed (관리자 $ADMIN)"
@@ -71,14 +70,14 @@ read -r code body <<< "$(order "$key" "$changed")"
 ok "같은 키 재요청은 같은 주문 (200)"
 
 echo "== 14e. 장바구니: 가격 변경 표시, 장바구니 주문은 주문한 줄을 뺀다"
-cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth $USER_ID)")
+cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth "$USER_ID")")
 grep -q "\"productId\":\"$PRODUCT_ID\",[^}]*\"addedPrice\":$original,\"currentPrice\":$changed,[^}]*\"priceChanged\":true" <<< "$cart" \
   || fail "장바구니에 가격 변경이 보이지 않음: $cart"
 ok "장바구니 담을 때 $original → 지금 $changed"
-out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth $USER_ID)" -H 'Content-Type: application/json' \
+out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth "$USER_ID")" -H 'Content-Type: application/json' \
   -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$changed}],\"pointAmount\":0,\"fromCart\":true}")
 [ "$(tail -n1 <<< "$out")" = 201 ] || fail "장바구니 주문 → $(tail -n1 <<< "$out")"
-cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth $USER_ID)")
+cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth "$USER_ID")")
 grep -q "\"productId\":\"$PRODUCT_ID\"," <<< "$cart" && fail "주문한 상품이 장바구니에 남음: $cart"
 ok "장바구니 주문 201, 주문한 줄이 빠짐"
 

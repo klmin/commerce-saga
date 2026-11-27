@@ -1,6 +1,6 @@
 -- 상품 관리 이력 (audit, 후속 4-3, ADR 0010 결정 12). 상품을 바꾼 트랜잭션에서 INSERT 만 한다.
 -- 바꾼 전·후 값을 열로 남긴다(검색·CDC 와 무관, 이 테이블은 커넥터 column.include.list 밖).
--- changed_by = 관리자 사용자 id (JWT sub). 등록은 before_* 가 null
+-- changed_by = 관리자 사용자 id (JWT sub, UUIDv7). 등록은 before_* 가 null
 create table product_audit_log (
     id                 bigint generated always as identity primary key,
     product_id         uuid         not null references products (id),
@@ -14,7 +14,7 @@ create table product_audit_log (
     after_description  varchar(500),
     after_price        bigint,
     after_on_sale      boolean,
-    changed_by         bigint       not null,
+    changed_by         uuid         not null,
     changed_at         timestamptz  not null
 );
 

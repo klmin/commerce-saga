@@ -31,11 +31,13 @@ sequenceDiagram
 docker compose -f infra/docker-compose.yml up -d --wait
 # 네 서비스 bootRun (inventory 8082, point 8083, payment 8084, order 8081)
 
-curl -X PUT localhost:8084/admin/payment-faults -H 'Content-Type: application/json' -d '{"mode":"DECLINE","delayMillis":0}'
-curl -X POST localhost:8081/orders -H 'X-User-Id: 2' -H 'Content-Type: application/json' \
+# access token: auth-service(8086) 도 띄우고 스크립트용 함수를 읽는다 (USER2·ADMIN = 시드 사용자 고정 UUID, scripts/lib/users.sh)
+source scripts/lib/auth.sh
+curl -X PUT localhost:8084/admin/payment-faults -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' -d '{"mode":"DECLINE","delayMillis":0}'
+curl -X POST localhost:8081/orders -H "$(auth "$USER2")" -H 'Content-Type: application/json' \
   -d '{"lines":[{"productId":"01900000-0000-7000-8000-000000000003","quantity":1,"unitPrice":2000}],"pointAmount":300}'
-curl localhost:8081/orders/<orderId>/saga -H 'X-User-Id: 2'   # 단계 타임라인
-curl -X PUT localhost:8084/admin/payment-faults -H 'Content-Type: application/json' -d '{"mode":"APPROVE","delayMillis":0}'
+curl localhost:8081/orders/<orderId>/saga -H "$(auth "$USER2")"   # 단계 타임라인
+curl -X PUT localhost:8084/admin/payment-faults -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' -d '{"mode":"APPROVE","delayMillis":0}'
 ```
 
 `scripts/smoke-saga.sh`의 3번이 위 과정을 자동으로 하고 결과를 검증한다 (CI `e2e`).

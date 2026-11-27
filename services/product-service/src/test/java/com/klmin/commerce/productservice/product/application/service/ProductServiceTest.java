@@ -34,7 +34,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ProductServiceTest {
 
-    private static final long ADMIN = 1000;
+    private static final UUID ADMIN = UUID.fromString("01900000-0000-7000-8001-000000000100");
+    private static final UUID OTHER_ADMIN = UUID.fromString("01900000-0000-7000-8001-000000000101");
 
     private final InMemoryProducts products = new InMemoryProducts();
     private final ProductService service = new ProductService(products, products, products,
@@ -64,19 +65,19 @@ class ProductServiceTest {
     void changePrice_recordsPriceHistoryAndAudit() {
         ProductResult created = registerKeyboard();
 
-        ProductResult changed = service.changePrice(new ChangePriceCommand(created.id(), 35_000, 1001));
+        ProductResult changed = service.changePrice(new ChangePriceCommand(created.id(), 35_000, OTHER_ADMIN));
 
         assertThat(changed.price()).isEqualTo(35_000);
         assertThat(products.history).singleElement().satisfies(h -> {
             assertThat(h.oldPrice().value()).isEqualTo(39_000);
             assertThat(h.newPrice().value()).isEqualTo(35_000);
-            assertThat(h.changedBy().value()).isEqualTo(1001);
+            assertThat(h.changedBy().value()).isEqualTo(OTHER_ADMIN);
         });
         assertThat(products.audit).singleElement().satisfies(a -> {
             assertThat(a.action()).isEqualTo(ProductAction.PRICE_CHANGED);
             assertThat(a.before().price().value()).isEqualTo(39_000);
             assertThat(a.after().price().value()).isEqualTo(35_000);
-            assertThat(a.changedBy().value()).isEqualTo(1001);
+            assertThat(a.changedBy().value()).isEqualTo(OTHER_ADMIN);
         });
     }
 
@@ -137,7 +138,7 @@ class ProductServiceTest {
                 .isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> service.describe(new DescribeProductCommand(created.id(), " ", "", ADMIN)))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> service.changeSaleStatus(new ChangeSaleStatusCommand(created.id(), false, 0)))
+        assertThatThrownBy(() -> service.changeSaleStatus(new ChangeSaleStatusCommand(created.id(), false, null)))
                 .isInstanceOf(DomainValidationException.class);
         assertThat(products.history).isEmpty();
         assertThat(products.audit).isEmpty();

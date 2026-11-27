@@ -2,6 +2,7 @@ package com.klmin.commerce.authservice.auth.adapter.out.persistence;
 
 import com.klmin.commerce.authservice.auth.domain.Role;
 import com.klmin.commerce.authservice.auth.domain.User;
+import com.klmin.commerce.authservice.auth.domain.UserId;
 import com.klmin.commerce.authservice.auth.domain.UserStatus;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -10,8 +11,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
@@ -20,14 +19,15 @@ import java.time.Instant;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 @Entity
 @Table(name = "users")
 class UserJpaEntity {
 
+    // 가입할 때 앱이 만든 UUIDv7 (ADR 0018). DB 가 만들지 않는다
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private UUID id;
 
     @Column(name = "login_id", nullable = false, length = 30)
     private String loginId;
@@ -57,7 +57,7 @@ class UserJpaEntity {
 
     static UserJpaEntity from(User user) {
         UserJpaEntity entity = new UserJpaEntity();
-        entity.id = user.id();
+        entity.id = user.id().value();
         entity.loginId = user.loginId();
         entity.passwordHash = user.passwordHash();
         entity.status = user.status();
@@ -68,6 +68,6 @@ class UserJpaEntity {
     }
 
     User toDomain() {
-        return new User(id, loginId, passwordHash, EnumSet.copyOf(roles), status, createdAt, updatedAt);
+        return new User(UserId.of(id), loginId, passwordHash, EnumSet.copyOf(roles), status, createdAt, updatedAt);
     }
 }

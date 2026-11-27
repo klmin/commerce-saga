@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SagaTimeoutServiceTest {
@@ -39,7 +40,7 @@ class SagaTimeoutServiceTest {
             new SagaTimeoutProperties(STEP, 1, 2, 100), clock);
 
     private Order place(long pointAmount) {
-        return orderService.placeOrder(new PlaceOrderCommand(1L, List.of(
+        return orderService.placeOrder(new PlaceOrderCommand(uid(1), List.of(
                 new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), pointAmount)).order();
     }
 
@@ -123,8 +124,8 @@ class SagaTimeoutServiceTest {
             scan();
         }
 
-        assertThat(sent.log).endsWith("pay:" + order.id() + ":1:2000", "pay:" + order.id() + ":1:2000",
-                "cancelPayment:" + order.id() + ":1:2000");
+        assertThat(sent.log).endsWith("pay:" + order.id() + ":" + uid(1) + ":2000", "pay:" + order.id() + ":" + uid(1) + ":2000",
+                "cancelPayment:" + order.id() + ":" + uid(1) + ":2000");
         assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.CANCELLING_PAYMENT);
 
         reply(order, SagaEventType.PAYMENT_CANCELLED);

@@ -6,10 +6,10 @@ import java.util.UUID;
 public interface CartUseCase {
 
     /** 지금 가격과 함께. product-service 가 응답하지 않으면 담을 때 가격만 (pricesAvailable=false) */
-    CartResult get(long userId);
+    CartResult get(UUID userId);
 
     /** 담기·수량 바꾸기. 없는·판매 중지 상품은 422, product 장애 503 */
-    CartResult put(long userId, UUID productId, int quantity);
+    CartResult put(UUID userId, UUID productId, int quantity);
 
-    CartResult remove(long userId, UUID productId);
+    CartResult remove(UUID userId, UUID productId);
 }

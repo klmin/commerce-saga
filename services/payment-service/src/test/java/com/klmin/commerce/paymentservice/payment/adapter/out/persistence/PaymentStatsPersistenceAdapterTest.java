@@ -67,8 +67,8 @@ class PaymentStatsPersistenceAdapterTest {
     private void payment(String status, boolean cancelRequested, Instant createdAt, Instant updatedAt) {
         jdbc.sql("""
                         insert into payments (id, order_id, user_id, amount, status, cancel_requested, created_at, updated_at)
-                        values (?, ?, 1, 1000, ?, ?, ?, ?)""")
-                .params(UUID.randomUUID(), UUID.randomUUID(), status, cancelRequested, Timestamp.from(createdAt),
+                        values (?, ?, ?, 1000, ?, ?, ?, ?)""")
+                .params(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), status, cancelRequested, Timestamp.from(createdAt),
                         Timestamp.from(updatedAt))
                 .update();
     }

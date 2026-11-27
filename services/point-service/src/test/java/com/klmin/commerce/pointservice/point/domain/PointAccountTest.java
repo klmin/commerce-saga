@@ -15,7 +15,7 @@ class PointAccountTest {
 
     @Test
     void use_and_refund() {
-        PointAccount account = PointAccount.restore(UserId.of(1L), Points.of(1_000L), T0);
+        PointAccount account = PointAccount.restore(UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000001")), Points.of(1_000L), T0);
 
         account.use(Points.of(300L), T0);
         assertThat(account.balance()).isEqualTo(Points.of(700L));
@@ -26,7 +26,7 @@ class PointAccountTest {
 
     @Test
     void canUse_upToBalance_andPositiveOnly() {
-        PointAccount account = PointAccount.restore(UserId.of(1L), Points.of(100L), T0);
+        PointAccount account = PointAccount.restore(UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000001")), Points.of(100L), T0);
 
         assertThat(account.canUse(Points.of(100L))).isTrue();
         assertThat(account.canUse(Points.of(101L))).isFalse();
@@ -37,19 +37,19 @@ class PointAccountTest {
 
     @Test
     void refund_nonPositive_isInvariantViolation() {
-        PointAccount account = PointAccount.restore(UserId.of(1L), Points.of(100L), T0);
+        PointAccount account = PointAccount.restore(UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000001")), Points.of(100L), T0);
 
         assertThatThrownBy(() -> account.refund(Points.ZERO, T0)).isInstanceOf(InvariantViolationException.class);
     }
 
     @Test
     void usage_refundOnlyFromUsed() {
-        PointUsage used = PointUsage.used(UUID.randomUUID(), UserId.of(1L), Points.of(100L), T0);
+        PointUsage used = PointUsage.used(UUID.randomUUID(), UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000001")), Points.of(100L), T0);
         assertThat(used.refund(T0)).isTrue();
         assertThat(used.status()).isEqualTo(PointUsageStatus.REFUNDED);
         assertThat(used.refund(T0)).isFalse();
 
-        PointUsage rejected = PointUsage.rejected(UUID.randomUUID(), 1L, 100L, "insufficient", T0);
+        PointUsage rejected = PointUsage.rejected(UUID.randomUUID(), UUID.fromString("01900000-0000-7000-8001-000000000001"), 100L, "insufficient", T0);
         assertThat(rejected.refund(T0)).isFalse();
         assertThat(rejected.status()).isEqualTo(PointUsageStatus.REJECTED);
     }

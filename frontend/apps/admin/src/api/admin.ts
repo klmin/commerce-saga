@@ -1,4 +1,5 @@
 import { api } from "@commerce/bff/api";
+import { shortId } from "@commerce/bff/short-id";
 import { z } from "zod";
 
 import { FAULT_MODES, type FaultSettings } from "@/lib/fault-input";
@@ -57,7 +58,8 @@ const auditPage = z.object({
       action: z.enum(AUDIT_ACTIONS),
       before: snapshot.nullable(),
       after: snapshot,
-      changedBy: z.number().int(),
+      // 바꾼 관리자 userId: UUID 문자열 (ADR 0018)
+      changedBy: z.string(),
       changedAt: z.string(),
     }),
   ),
@@ -77,9 +79,9 @@ export function isProductId(value: unknown): value is ProductId {
   return typeof value === "string" && PRODUCT_ID.test(value);
 }
 
-/** 화면에 보일 짧은 id (UUID 앞 8자). 전체 값은 title 등으로 함께 둔다 */
+/** 화면에 보일 짧은 id (UUID 끝 8자, UUIDv7 앞부분은 시각이라 겹친다). 전체 값은 title 등으로 함께 둔다 */
 export function shortProductId(productId: ProductId): string {
-  return productId.slice(0, 8);
+  return shortId(productId);
 }
 
 /** URL 경로 조각. UUID 가 아니면 요청하지 않는다(다른 경로로 새지 않게) */

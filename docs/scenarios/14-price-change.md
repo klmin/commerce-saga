@@ -19,7 +19,7 @@
 ## 재현
 
 1. 인프라, 서비스 전부(product-service 포함), gateway 를 띄운다
-2. `scripts/smoke-price-change.sh` (관리자 = 시드 사용자 100, 주문 = 사용자 1, 상품 3. 가격을 바꾸기 전에 장바구니에 담아 둔다)
+2. `scripts/smoke-price-change.sh` (관리자 = 시드 admin `ADMIN`, 주문 = user1 `USER1`(고정 UUID, `scripts/lib/users.sh`), 상품 3. 가격을 바꾸기 전에 장바구니에 담아 둔다)
 
 CI `e2e` 가 두 relay 모드에서 Idempotency-Key 시나리오(10) 다음에 돈다.
 
@@ -27,7 +27,7 @@ CI `e2e` 가 두 relay 모드에서 Idempotency-Key 시나리오(10) 다음에 �
 
 ```
 == 14a. 관리자가 가격 변경 → 이력
-  ok  이력 18000 → 19000 (관리자 100)
+  ok  이력 18000 → 19000 (관리자 01900000-0000-7000-8001-000000000100)
 == 14b. 옛 가격으로 주문 → 409 + 지금 가격
   ok  409, currentPrices 에 19000
 == 14c. 같은 키로 새 가격 → 주문, 가격 스냅샷

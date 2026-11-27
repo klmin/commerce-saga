@@ -4,6 +4,7 @@ import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.order.OrderCancelled;
 import com.klmin.commerce.contract.order.OrderCompleted;
+import com.jayway.jsonpath.JsonPath;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +47,7 @@ class NotificationIntegrationTest {
 
     @Test
     void orderEvents_createOneNotificationEach_evenIfDelivered_twice() throws Exception {
-        long userId = 900L + (System.nanoTime() % 1000);
+        UUID userId = UUID.randomUUID();
         UUID completed = UUID.randomUUID();
         UUID cancelled = UUID.randomUUID();
 
@@ -60,19 +61,31 @@ class NotificationIntegrationTest {
         await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted(() ->
                 assertThat(repository.findByUser(userId, null, 10)).hasSize(2));
 
-        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject(String.valueOf(userId)))))
+        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject(userId.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].type").value(OrderCancelled.TYPE))
                 .andExpect(jsonPath("$[1].type").value(OrderCompleted.TYPE));
-        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject(String.valueOf(userId + 1)))))
+
+        // 커서: id 가 UUIDv7 이라 id 순 = 최신순. 첫 장의 마지막 id 를 before 로 넘기면 그보다 오래된 것
+        String newest = JsonPath.read(mvc.perform(get("/notifications/me").param("size", "1")
+                        .with(jwt().jwt(j -> j.subject(userId.toString()))))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].type").value(OrderCancelled.TYPE))
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+        assertThat(UUID.fromString(newest).version()).as("UUIDv7").isEqualTo(7);
+        mvc.perform(get("/notifications/me").param("before", newest)
+                        .with(jwt().jwt(j -> j.subject(userId.toString()))))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].type").value(OrderCompleted.TYPE));
+        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))))
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
     void myNotifications_validatesInput() throws Exception {
         mvc.perform(get("/notifications/me")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject("1"))).param("size", "500"))
+        mvc.perform(get("/notifications/me").with(jwt().jwt(j -> j.subject("01900000-0000-7000-8001-000000000001"))).param("size", "500"))
                 .andExpect(status().isBadRequest());
     }
 

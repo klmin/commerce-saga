@@ -66,7 +66,7 @@ class OAuthPathModeIntegrationTest {
     @Test
     void 로그인_화면_리다이렉트와_세션_쿠키_경로에_auth_가_붙고_토큰까지_받는다() throws Exception {
         String loginId = "p" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        long userId = signUp.signUp(new SignUpCommand(loginId, "password1"));
+        UUID userId = signUp.signUp(new SignUpCommand(loginId, "password1"));
         OAuthFlowIntegrationTest.Pkce pkce = new OAuthFlowIntegrationTest.Pkce();
 
         // 인가 요청을 세션에 저장하며 SSO 세션 쿠키가 생긴다. 경로는 /auth (같은 도메인의 Gateway 세션 GW_SESSION 은 /)
@@ -97,7 +97,7 @@ class OAuthPathModeIntegrationTest {
                 .getResponse().getContentAsString(StandardCharsets.UTF_8));
         SignedJWT access = SignedJWT.parse(token.get("access_token").asString());
         assertThat(access.getJWTClaimsSet().getIssuer()).isEqualTo(ISSUER);
-        assertThat(access.getJWTClaimsSet().getSubject()).isEqualTo(Long.toString(userId));
+        assertThat(access.getJWTClaimsSet().getSubject()).isEqualTo(userId.toString());
     }
 
     // 앞단 프록시가 한 것처럼: 공개 호스트와 /auth 접두어를 헤더로

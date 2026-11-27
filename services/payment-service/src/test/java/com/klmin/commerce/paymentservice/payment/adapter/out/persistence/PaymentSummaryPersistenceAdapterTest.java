@@ -23,6 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers(disabledWithoutDocker = true)
 class PaymentSummaryPersistenceAdapterTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+    static final UUID USER_2 = UUID.fromString("01900000-0000-7000-8001-000000000002");
+    static final UUID USER_3 = UUID.fromString("01900000-0000-7000-8001-000000000003");
+
     @Container
     static final PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:18-alpine"));
 
@@ -44,23 +48,23 @@ class PaymentSummaryPersistenceAdapterTest {
 
     @Test
     void newestFirst_withCursor_onlyMine() {
-        UUID first = payment(1L, "APPROVED", null);
-        UUID second = payment(1L, "DECLINED", "card declined");
-        UUID third = payment(1L, "REFUNDED", "refunded: order cancelled");
-        payment(2L, "APPROVED", null);
+        UUID first = payment(USER_1, "APPROVED", null);
+        UUID second = payment(USER_1, "DECLINED", "card declined");
+        UUID third = payment(USER_1, "REFUNDED", "refunded: order cancelled");
+        payment(USER_2, "APPROVED", null);
 
-        List<PaymentSummaryResult> page1 = adapter.findByUser(1L, null, 2);
-        List<PaymentSummaryResult> page2 = adapter.findByUser(1L, page1.getLast().paymentId(), 2);
+        List<PaymentSummaryResult> page1 = adapter.findByUser(USER_1, null, 2);
+        List<PaymentSummaryResult> page2 = adapter.findByUser(USER_1, page1.getLast().paymentId(), 2);
 
         assertThat(page1).extracting(PaymentSummaryResult::paymentId).containsExactly(third, second);
         assertThat(page2).extracting(PaymentSummaryResult::paymentId).containsExactly(first);
         assertThat(page1.get(1).status()).isEqualTo("DECLINED");
         assertThat(page1.get(1).reason()).isEqualTo("card declined");
         assertThat(page1.get(1).amount()).isEqualTo(1_000L);
-        assertThat(adapter.findByUser(3L, null, 20)).isEmpty();
+        assertThat(adapter.findByUser(USER_3, null, 20)).isEmpty();
     }
 
-    private UUID payment(long userId, String status, String reason) {
+    private UUID payment(UUID userId, String status, String reason) {
         UUID id = UuidCreator.getTimeOrderedEpoch();
         jdbc.sql("""
                         insert into payments (id, order_id, user_id, amount, status, reason, created_at, updated_at)

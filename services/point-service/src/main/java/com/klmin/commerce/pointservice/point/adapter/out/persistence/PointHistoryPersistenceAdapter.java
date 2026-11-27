@@ -43,7 +43,7 @@ class PointHistoryPersistenceAdapter implements LoadPointHistoryPort {
     }
 
     @Override
-    public List<PointHistoryEntryResult> findByUser(long userId, UUID before, int size) {
+    public List<PointHistoryEntryResult> findByUser(UUID userId, UUID before, int size) {
         return jdbc.sql(SELECT)
                 .param("userId", userId)
                 .param("before", before)

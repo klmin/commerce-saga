@@ -1,5 +1,5 @@
 create table point_accounts (
-    user_id    bigint primary key,
+    user_id    uuid primary key,
     balance    bigint      not null check (balance >= 0),
     updated_at timestamptz not null
 );
@@ -7,7 +7,7 @@ create table point_accounts (
 -- 주문별 포인트 사용 기록. 같은 주문의 커맨드가 다시 와도 이 행으로 판단해 두 번 차감·환불하지 않는다
 create table point_usages (
     order_id   uuid primary key,
-    user_id    bigint,                 -- 사용 전에 환불 요청이 온 기록은 사용자를 모른다
+    user_id    uuid,                   -- 사용 전에 환불 요청이 온 기록은 사용자를 모른다
     amount     bigint       not null,
     status     varchar(20)  not null,
     reason     varchar(200),

@@ -28,7 +28,7 @@ class OrderSagaController {
     }
 
     @GetMapping("/{orderId}/saga")
-    SagaResponse getSaga(@CurrentUserId long userId, @PathVariable UUID orderId) {
+    SagaResponse getSaga(@CurrentUserId UUID userId, @PathVariable UUID orderId) {
         OrderSaga saga = getOrderSagaUseCase.getSaga(new GetOrderQuery(orderId, userId));
         return new SagaResponse(saga.orderId(), saga.state().name(), saga.state().isFinished(),
                 saga.state().isCompensating(), saga.pointUsed(), saga.failureReason(),

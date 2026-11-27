@@ -33,7 +33,7 @@ class PaymentController {
 
     /** 본인 결제 목록 (최신순, 커서 페이징). 다음 쪽은 마지막 paymentId 를 before 로 */
     @GetMapping
-    List<PaymentResponse> myPayments(@CurrentUserId long userId,
+    List<PaymentResponse> myPayments(@CurrentUserId UUID userId,
                                      @RequestParam(required = false) UUID before,
                                      @RequestParam(defaultValue = "20") @Min(1) @Max(ListMyPaymentsQuery.MAX_SIZE)
                                      int size) {
@@ -44,7 +44,7 @@ class PaymentController {
 
     /** 주문의 결제 결과. 본인 결제가 아니면 404 */
     @GetMapping("/orders/{orderId}")
-    PaymentResponse getByOrder(@CurrentUserId long userId,
+    PaymentResponse getByOrder(@CurrentUserId UUID userId,
                                @PathVariable UUID orderId) {
         return PaymentResponse.from(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, userId)));
     }

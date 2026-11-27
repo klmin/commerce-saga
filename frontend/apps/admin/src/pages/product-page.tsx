@@ -1,4 +1,5 @@
 import { ApiError } from "@commerce/bff/api";
+import { shortId } from "@commerce/bff/short-id";
 import { Button } from "@commerce/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@commerce/ui/card";
 import { LoadError, Page } from "@commerce/ui/page";
@@ -123,8 +124,8 @@ function ProductManagement({ productId }: { productId: ProductId }) {
                 <li key={`${entry.changedAt}-${i}`} className="flex flex-col gap-1 py-2">
                   <span className="flex flex-wrap items-baseline gap-x-2">
                     <strong>{AUDIT_ACTION_LABEL[entry.action]}</strong>
-                    <span className="text-muted-foreground">
-                      {formatTime(entry.changedAt)} · 관리자 #{entry.changedBy}
+                    <span className="text-muted-foreground" title={entry.changedBy}>
+                      {formatTime(entry.changedAt)} · 관리자 #{shortId(entry.changedBy)}
                     </span>
                   </span>
                   <ul className="flex flex-col gap-0.5 pl-2">

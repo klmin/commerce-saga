@@ -28,7 +28,7 @@ class PaymentSummaryPersistenceAdapter implements LoadPaymentSummariesPort {
     }
 
     @Override
-    public List<PaymentSummaryResult> findByUser(long userId, UUID before, int size) {
+    public List<PaymentSummaryResult> findByUser(UUID userId, UUID before, int size) {
         return jdbc.sql(SELECT)
                 .param("userId", userId)
                 .param("before", before)

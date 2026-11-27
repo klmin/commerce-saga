@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -40,13 +41,13 @@ class OrderSagaControllerTest {
     @Test
     void getSaga_returnsStateAndTimeline() throws Exception {
         Instant t0 = Instant.parse("2026-11-22T00:00:00Z");
-        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(pid(1), 1, 1_000L)), Points.ZERO, t0);
+        Order order = Order.place(UUID.randomUUID(), UserId.of(uid(1)), List.of(OrderLine.of(pid(1), 1, 1_000L)), Points.ZERO, t0);
         OrderSaga saga = OrderSaga.start(order, t0);
         saga.handle(SagaEventType.STOCK_RESERVED, null, t0.plusSeconds(1));
         saga.handle(SagaEventType.PAYMENT_FAILED, "declined", t0.plusSeconds(2));
-        given(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), 1L))).willReturn(saga);
+        given(getOrderSagaUseCase.getSaga(new GetOrderQuery(order.id(), uid(1)))).willReturn(saga);
 
-        mvc.perform(get("/orders/{id}/saga", order.id()).with(jwt().jwt(j -> j.subject("1"))))
+        mvc.perform(get("/orders/{id}/saga", order.id()).with(jwt().jwt(j -> j.subject(uid(1).toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.state").value("RELEASING_STOCK"))
                 .andExpect(jsonPath("$.compensating").value(true))
@@ -58,9 +59,9 @@ class OrderSagaControllerTest {
     @Test
     void getSaga_notFoundOrNotOwned_returns404() throws Exception {
         UUID id = UUID.randomUUID();
-        given(getOrderSagaUseCase.getSaga(new GetOrderQuery(id, 2L))).willThrow(new SagaNotFoundException(id));
+        given(getOrderSagaUseCase.getSaga(new GetOrderQuery(id, uid(2)))).willThrow(new SagaNotFoundException(id));
 
-        mvc.perform(get("/orders/{id}/saga", id).with(jwt().jwt(j -> j.subject("2")))).andExpect(status().isNotFound());
+        mvc.perform(get("/orders/{id}/saga", id).with(jwt().jwt(j -> j.subject(uid(2).toString())))).andExpect(status().isNotFound());
     }
 
     @Test

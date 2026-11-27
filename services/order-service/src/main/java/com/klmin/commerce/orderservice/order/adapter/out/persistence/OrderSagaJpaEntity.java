@@ -27,7 +27,7 @@ class OrderSagaJpaEntity {
     private UUID orderId;
 
     @Column(name = "user_id", nullable = false)
-    private long userId;
+    private UUID userId;
 
     @Column(name = "point_amount", nullable = false)
     private long pointAmount;
@@ -66,7 +66,7 @@ class OrderSagaJpaEntity {
     protected OrderSagaJpaEntity() {
     }
 
-    OrderSagaJpaEntity(UUID orderId, long userId, long pointAmount, long paidAmount, SagaState state,
+    OrderSagaJpaEntity(UUID orderId, UUID userId, long pointAmount, long paidAmount, SagaState state,
                        boolean pointUsed, String failureReason, int stepResends, Instant createdAt,
                        Instant updatedAt, List<SagaHistoryEmbeddable> history) {
         this.orderId = orderId;
@@ -99,7 +99,7 @@ class OrderSagaJpaEntity {
         return orderId;
     }
 
-    long getUserId() {
+    UUID getUserId() {
         return userId;
     }
 

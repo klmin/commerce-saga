@@ -29,7 +29,7 @@ class PriceHistoryJpaEntity {
     private long newPrice;
 
     @Column(name = "changed_by", nullable = false, updatable = false)
-    private long changedBy;
+    private UUID changedBy;
 
     @Column(name = "changed_at", nullable = false, updatable = false)
     private Instant changedAt;
@@ -37,7 +37,7 @@ class PriceHistoryJpaEntity {
     protected PriceHistoryJpaEntity() {
     }
 
-    PriceHistoryJpaEntity(UUID productId, long oldPrice, long newPrice, long changedBy, Instant changedAt) {
+    PriceHistoryJpaEntity(UUID productId, long oldPrice, long newPrice, UUID changedBy, Instant changedAt) {
         this.productId = productId;
         this.oldPrice = oldPrice;
         this.newPrice = newPrice;
@@ -53,7 +53,7 @@ class PriceHistoryJpaEntity {
         return newPrice;
     }
 
-    long getChangedBy() {
+    UUID getChangedBy() {
         return changedBy;
     }
 

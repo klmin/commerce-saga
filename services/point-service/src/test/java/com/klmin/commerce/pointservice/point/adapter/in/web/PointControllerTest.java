@@ -32,6 +32,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(PointController.class)
 class PointControllerTest {
 
+    static final UUID USER_3 = UUID.fromString("01900000-0000-7000-8001-000000000003");
+    static final UUID USER_5 = UUID.fromString("01900000-0000-7000-8001-000000000005");
+    static final UUID USER_9 = UUID.fromString("01900000-0000-7000-8001-000000000009");
+
     @Autowired
     MockMvc mvc;
 
@@ -43,11 +47,11 @@ class PointControllerTest {
 
     @Test
     void getMyBalance_usesHeaderUser() throws Exception {
-        given(getPointBalanceUseCase.getBalance(3L)).willReturn(PointAccount.restore(UserId.of(3L), Points.of(700L), Instant.now()));
+        given(getPointBalanceUseCase.getBalance(USER_3)).willReturn(PointAccount.restore(UserId.of(USER_3), Points.of(700L), Instant.now()));
 
-        mvc.perform(get("/points/me").with(jwt().jwt(j -> j.subject("3"))))
+        mvc.perform(get("/points/me").with(jwt().jwt(j -> j.subject(USER_3.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value(3))
+                .andExpect(jsonPath("$.userId").value(USER_3.toString()))
                 .andExpect(jsonPath("$.balance").value(700));
     }
 
@@ -58,9 +62,9 @@ class PointControllerTest {
 
     @Test
     void getMyBalance_noAccount_returns404() throws Exception {
-        given(getPointBalanceUseCase.getBalance(9L)).willThrow(new PointAccountNotFoundException(9L));
+        given(getPointBalanceUseCase.getBalance(USER_9)).willThrow(new PointAccountNotFoundException(USER_9));
 
-        mvc.perform(get("/points/me").with(jwt().jwt(j -> j.subject("9")))).andExpect(status().isNotFound());
+        mvc.perform(get("/points/me").with(jwt().jwt(j -> j.subject(USER_9.toString())))).andExpect(status().isNotFound());
     }
 
     @Test
@@ -68,13 +72,13 @@ class PointControllerTest {
         UUID before = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         Instant at = Instant.parse("2026-11-24T01:00:00Z");
-        given(listMyPointHistoryUseCase.listMyHistory(new ListMyPointHistoryQuery(5L, before, 2))).willReturn(List.of(
+        given(listMyPointHistoryUseCase.listMyHistory(new ListMyPointHistoryQuery(USER_5, before, 2))).willReturn(List.of(
                 new PointHistoryEntryResult(orderId, "ORDER", orderId, 300L, "REFUNDED", "order cancelled", at, at),
                 new PointHistoryEntryResult(UUID.randomUUID(), "SIGNUP_BONUS", null, 1_000L, "GRANTED", null, at,
                         at)));
 
         mvc.perform(get("/points/me/history").param("before", before.toString()).param("size", "2")
-                        .with(jwt().jwt(j -> j.subject("5"))))
+                        .with(jwt().jwt(j -> j.subject(USER_5.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].entryId").value(orderId.toString()))
                 .andExpect(jsonPath("$[0].kind").value("ORDER"))
@@ -86,20 +90,20 @@ class PointControllerTest {
 
     @Test
     void getMyHistory_defaultSize20() throws Exception {
-        given(listMyPointHistoryUseCase.listMyHistory(new ListMyPointHistoryQuery(5L, null, 20))).willReturn(List.of());
+        given(listMyPointHistoryUseCase.listMyHistory(new ListMyPointHistoryQuery(USER_5, null, 20))).willReturn(List.of());
 
-        mvc.perform(get("/points/me/history").with(jwt().jwt(j -> j.subject("5"))))
+        mvc.perform(get("/points/me/history").with(jwt().jwt(j -> j.subject(USER_5.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
     void getMyHistory_badSizeOrCursor_returns400_withoutToken_401() throws Exception {
-        mvc.perform(get("/points/me/history").param("size", "51").with(jwt().jwt(j -> j.subject("5"))))
+        mvc.perform(get("/points/me/history").param("size", "51").with(jwt().jwt(j -> j.subject(USER_5.toString()))))
                 .andExpect(status().isBadRequest());
-        mvc.perform(get("/points/me/history").param("size", "0").with(jwt().jwt(j -> j.subject("5"))))
+        mvc.perform(get("/points/me/history").param("size", "0").with(jwt().jwt(j -> j.subject(USER_5.toString()))))
                 .andExpect(status().isBadRequest());
-        mvc.perform(get("/points/me/history").param("before", "not-a-uuid").with(jwt().jwt(j -> j.subject("5"))))
+        mvc.perform(get("/points/me/history").param("before", "not-a-uuid").with(jwt().jwt(j -> j.subject(USER_5.toString()))))
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/points/me/history")).andExpect(status().isUnauthorized());
         then(listMyPointHistoryUseCase).should(never()).listMyHistory(any());

@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -89,14 +90,14 @@ class SagaTimeoutIntegrationTest {
         consumer.close();
     }
 
-    private Order place(long userId) {
+    private Order place(UUID userId) {
         return placeOrderUseCase.placeOrder(new PlaceOrderCommand(userId, List.of(
                 new PlaceOrderCommand.Line(pid(10), 1, 1_000L)), 0L)).order();
     }
 
     @Test
     void noReply_resendsReserveStock_thenReleasesStock_andCancelsOrder() {
-        Order order = place(21L);
+        Order order = place(uid(21));
 
         // 처음 + 재전송 1번. 재전송은 새 메시지 id 라 참여 서비스가 처리 기록으로 건너뛰지 않는다
         awaitCount(order, ReserveStock.TYPE, 2);
@@ -120,7 +121,7 @@ class SagaTimeoutIntegrationTest {
 
     @Test
     void replyToResentCommand_continuesSaga() {
-        Order order = place(22L);
+        Order order = place(uid(22));
         awaitCount(order, ReserveStock.TYPE, 2);
 
         // 참여 서비스가 복구되어 재전송된 커맨드에 응답했다

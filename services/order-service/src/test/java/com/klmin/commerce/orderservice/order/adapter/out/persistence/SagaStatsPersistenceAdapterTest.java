@@ -78,12 +78,12 @@ class SagaStatsPersistenceAdapterTest {
         Timestamp at = Timestamp.from(createdAt);
         jdbc.sql("""
                         insert into orders (id, user_id, status, total_amount, created_at, updated_at, version)
-                        values (?, 1, 'PENDING', 1000, ?, ?, 0)""")
+                        values (?, '01900000-0000-7000-8001-000000000001', 'PENDING', 1000, ?, ?, 0)""")
                 .params(id, at, at).update();
         jdbc.sql("""
                         insert into order_sagas (order_id, user_id, point_amount, paid_amount, state, point_used,
                                                  created_at, updated_at, version)
-                        values (?, 1, 0, 1000, ?, false, ?, ?, 0)""")
+                        values (?, '01900000-0000-7000-8001-000000000001', 0, 1000, ?, false, ?, ?, 0)""")
                 .params(id, state.name(), at, at).update();
         return id;
     }

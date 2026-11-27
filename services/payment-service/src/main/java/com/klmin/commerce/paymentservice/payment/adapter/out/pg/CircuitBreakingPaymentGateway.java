@@ -72,7 +72,7 @@ class CircuitBreakingPaymentGateway implements PaymentGatewayPort {
     }
 
     @Override
-    public GatewayResult approve(UUID orderId, long userId, Money amount) {
+    public GatewayResult approve(UUID orderId, UUID userId, Money amount) {
         if (!enabled) {
             return delegate.approve(orderId, userId, amount);
         }

@@ -6,6 +6,7 @@ plugins {
 // 발행하는 메시지가 없어 outbox 도 쓰지 않는다
 dependencies {
     implementation(project(":libs:messaging-contract"))
+    implementation("com.github.f4b6a3:uuid-creator:6.1.1") // 알림 id UUIDv7 (ADR 0018)
 
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")

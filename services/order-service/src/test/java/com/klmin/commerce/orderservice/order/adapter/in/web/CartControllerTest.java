@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -33,10 +34,10 @@ class CartControllerTest {
 
     @Test
     void get_usesTokenSubject_andShowsPriceChange() throws Exception {
-        given(cartUseCase.get(7L)).willReturn(new CartResult(
+        given(cartUseCase.get(uid(7))).willReturn(new CartResult(
                 List.of(new CartResult.Item(pid(1), "키보드", 2, 39_000L, 42_000L, true)), true));
 
-        mvc.perform(get("/cart").with(jwt().jwt(j -> j.subject("7"))))
+        mvc.perform(get("/cart").with(jwt().jwt(j -> j.subject(uid(7).toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].productId").value(pid(1).toString()))
                 .andExpect(jsonPath("$.items[0].priceChanged").value(true))
@@ -52,10 +53,10 @@ class CartControllerTest {
 
     @Test
     void put_invalidQuantity_400() throws Exception {
-        mvc.perform(put("/cart/items/" + pid(1)).with(jwt().jwt(j -> j.subject("7")))
+        mvc.perform(put("/cart/items/" + pid(1)).with(jwt().jwt(j -> j.subject(uid(7).toString())))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":0}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(put("/cart/items/" + pid(1)).with(jwt().jwt(j -> j.subject("7")))
+        mvc.perform(put("/cart/items/" + pid(1)).with(jwt().jwt(j -> j.subject(uid(7).toString())))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1001}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(cartUseCase);
@@ -63,7 +64,7 @@ class CartControllerTest {
 
     @Test
     void put_malformedProductId_400() throws Exception {
-        mvc.perform(put("/cart/items/1").with(jwt().jwt(j -> j.subject("7")))
+        mvc.perform(put("/cart/items/1").with(jwt().jwt(j -> j.subject(uid(7).toString())))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(cartUseCase);

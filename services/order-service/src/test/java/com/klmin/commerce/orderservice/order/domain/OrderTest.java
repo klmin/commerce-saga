@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -17,7 +18,7 @@ class OrderTest {
 
     private static final Instant T0 = Instant.parse("2026-11-22T00:00:00Z");
     private static final Instant T1 = T0.plusSeconds(1);
-    private static final UserId USER = UserId.of(1L);
+    private static final UserId USER = UserId.of(uid(1));
 
     private static Order pending(long pointAmount) {
         return Order.place(UUID.randomUUID(), USER,
@@ -53,7 +54,7 @@ class OrderTest {
         assertThatThrownBy(() -> Order.place(id, USER,
                 Collections.nCopies(Order.MAX_LINES + 1, OrderLine.of(pid(10), 1, 100L)), Points.ZERO, T0))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> UserId.of(0L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> UserId.of(null)).isInstanceOf(DomainValidationException.class);
     }
 
     @Test
@@ -102,7 +103,7 @@ class OrderTest {
     void isOwnedBy() {
         Order order = pending(0L);
 
-        assertThat(order.isOwnedBy(UserId.of(1L))).isTrue();
-        assertThat(order.isOwnedBy(UserId.of(2L))).isFalse();
+        assertThat(order.isOwnedBy(UserId.of(uid(1)))).isTrue();
+        assertThat(order.isOwnedBy(UserId.of(uid(2)))).isFalse();
     }
 }

@@ -28,7 +28,7 @@ class OrderEventsListenerTest {
         UUID orderId = UUID.randomUUID();
 
         listener.onMessage(record(Topics.ORDER_EVENTS, OrderCompleted.TYPE,
-                "{\"orderId\":\"" + orderId + "\",\"userId\":1,\"totalAmount\":100,\"pointAmount\":0,\"paidAmount\":100}"));
+                "{\"orderId\":\"" + orderId + "\",\"userId\":\"01900000-0000-7000-8001-000000000001\",\"totalAmount\":100,\"pointAmount\":0,\"paidAmount\":100}"));
 
         verify(confirm).confirm(MESSAGE_ID, orderId);
     }
@@ -58,7 +58,7 @@ class OrderEventsListenerTest {
         assertThatThrownBy(() -> listener.onMessage(record(Topics.ORDER_EVENTS, OrderCompleted.TYPE, "{}")))
                 .isInstanceOfAny(NonRetryableMessageException.class, JacksonException.class);
         assertThatThrownBy(() -> listener.onMessage(record(Topics.ORDER_EVENTS, OrderCompleted.TYPE,
-                "{\"userId\":1,\"totalAmount\":1,\"pointAmount\":0,\"paidAmount\":1}")))
+                "{\"userId\":\"01900000-0000-7000-8001-000000000001\",\"totalAmount\":1,\"pointAmount\":0,\"paidAmount\":1}")))
                 .isInstanceOf(NonRetryableMessageException.class);
         verifyNoInteractions(confirm);
     }

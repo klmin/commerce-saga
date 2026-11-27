@@ -4,12 +4,13 @@ import com.klmin.commerce.productservice.product.application.port.in.ProductAudi
 import com.klmin.commerce.productservice.product.application.port.in.ProductAuditResult;
 
 import java.time.Instant;
+import java.util.UUID;
 import java.util.List;
 
 /** 관리 이력 한 쪽. before 는 등록이면 null, 옮겨 온 옛 가격 이력은 price 외 값이 null */
 record ProductAuditPageResponse(List<Item> items, boolean hasNext) {
 
-    record Item(String action, Snapshot before, Snapshot after, long changedBy, Instant changedAt) {
+    record Item(String action, Snapshot before, Snapshot after, UUID changedBy, Instant changedAt) {
     }
 
     record Snapshot(String name, String description, Long price, Boolean onSale) {

@@ -3,6 +3,9 @@ package com.klmin.commerce.orderservice.order.domain;
 import com.klmin.commerce.orderservice.common.error.DomainValidationException;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
+
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -36,10 +39,10 @@ class ValueObjectTest {
     }
 
     @Test
-    void quantityAndUserId_mustBePositive_productIdNotNull() {
+    void quantityMustBePositive_userIdAndProductIdNotNull() {
         assertThatThrownBy(() -> Quantity.of(0)).isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> UserId.of(0L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> UserId.of(null)).isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> ProductId.of(null)).isInstanceOf(DomainValidationException.class);
-        assertThat(UserId.of(7L)).isEqualTo(UserId.of(7L));
+        assertThat(UserId.of(uid(7))).isEqualTo(UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000007")));
     }
 }

@@ -55,8 +55,8 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
   await expect(history(page).nth(2)).toContainText("가격 변경");
   await expect(history(page).nth(2)).toContainText("50,000원 → 60,000원");
   await expect(history(page).nth(3)).toContainText("등록");
-  // 바꾼 사람 = 로그인한 관리자 (토큰의 sub)
-  await expect(history(page).first()).toContainText(/관리자 #\d+/);
+  // 바꾼 사람 = 로그인한 관리자 (토큰의 sub, UUID 끝 8자로 보인다)
+  await expect(history(page).first()).toContainText(/관리자 #[0-9a-f]{8}/);
 
   // 관리 목록에는 판매 중지 상품도 보인다
   await page.getByRole("link", { name: "← 상품 관리" }).click();

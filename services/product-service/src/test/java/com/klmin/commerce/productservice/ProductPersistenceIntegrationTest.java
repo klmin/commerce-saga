@@ -35,6 +35,13 @@ class ProductPersistenceIntegrationTest {
     GetProductUseCase query;
 
     // V2 시드 (inventory 재고 시드와 같은 고정 UUID, ADR 0018)
+    private static final UUID ADMIN = admin(0);
+
+    // 관리 이력의 바꾼 사람 (관리자 userId). 서로 다른 관리자를 구분하려고 끝자리만 바꾼다
+    private static UUID admin(int n) {
+        return UUID.fromString("01900000-0000-7000-8001-%012d".formatted(100 + n));
+    }
+
     private static UUID seed(int n) {
         return UUID.fromString("01900000-0000-7000-8000-00000000000" + n);
     }
@@ -51,28 +58,28 @@ class ProductPersistenceIntegrationTest {
 
     @Test
     void register_assignsUuidV7_andChangePriceKeepsHistory() {
-        ProductResult created = manage.register(new RegisterProductCommand("테스트 상품", "설명", 10_000, 1000));
+        ProductResult created = manage.register(new RegisterProductCommand("테스트 상품", "설명", 10_000, ADMIN));
         assertThat(created.id().version()).isEqualTo(7);
 
-        manage.changePrice(new ChangePriceCommand(created.id(), 12_000, 1000));
-        manage.changePrice(new ChangePriceCommand(created.id(), 12_000, 1000));
-        manage.changePrice(new ChangePriceCommand(created.id(), 11_000, 1001));
+        manage.changePrice(new ChangePriceCommand(created.id(), 12_000, ADMIN));
+        manage.changePrice(new ChangePriceCommand(created.id(), 12_000, ADMIN));
+        manage.changePrice(new ChangePriceCommand(created.id(), 11_000, admin(1)));
 
         assertThat(query.get(created.id()).price()).isEqualTo(11_000);
         assertThat(query.priceHistory(created.id()))
                 .extracting(h -> h.oldPrice() + "->" + h.newPrice() + "@" + h.changedBy())
-                .containsExactly("12000->11000@1001", "10000->12000@1000");
+                .containsExactly("12000->11000@" + admin(1), "10000->12000@" + ADMIN);
     }
 
     // 동시 변경이 서로 덮어써도 이력의 old_price 가 직전 가격과 이어진다 (행 잠금)
     @Test
     void concurrentPriceChanges_historyIsContinuous() {
-        ProductResult created = manage.register(new RegisterProductCommand("동시성 상품", "", 1_000, 1000));
+        ProductResult created = manage.register(new RegisterProductCommand("동시성 상품", "", 1_000, ADMIN));
         List<CompletableFuture<?>> futures = new ArrayList<>();
         for (int i = 1; i <= 10; i++) {
             long price = 1_000 + i;
             futures.add(CompletableFuture.runAsync(
-                    () -> manage.changePrice(new ChangePriceCommand(created.id(), price, 1000))));
+                    () -> manage.changePrice(new ChangePriceCommand(created.id(), price, ADMIN))));
         }
         futures.forEach(CompletableFuture::join);
 
@@ -89,19 +96,19 @@ class ProductPersistenceIntegrationTest {
     // 등록·정보 수정·가격·판매 상태가 누가·전후 값과 함께 최근부터 남고, 같은 값 요청은 남지 않는다
     @Test
     void auditLog_recordsEveryChangeNewestFirst() {
-        ProductResult created = manage.register(new RegisterProductCommand("이력 상품", "", 7_000, 1000));
-        manage.describe(new DescribeProductCommand(created.id(), "이력 상품 2", "설명", 1001));
-        manage.changePrice(new ChangePriceCommand(created.id(), 8_000, 1002));
-        manage.changePrice(new ChangePriceCommand(created.id(), 8_000, 1002));
-        manage.changeSaleStatus(new ChangeSaleStatusCommand(created.id(), false, 1003));
+        ProductResult created = manage.register(new RegisterProductCommand("이력 상품", "", 7_000, ADMIN));
+        manage.describe(new DescribeProductCommand(created.id(), "이력 상품 2", "설명", admin(1)));
+        manage.changePrice(new ChangePriceCommand(created.id(), 8_000, admin(2)));
+        manage.changePrice(new ChangePriceCommand(created.id(), 8_000, admin(2)));
+        manage.changeSaleStatus(new ChangeSaleStatusCommand(created.id(), false, admin(3)));
 
         var page = query.auditLog(created.id(), 0, 3);
         assertThat(page.hasNext()).isTrue();
         assertThat(page.items()).extracting(ProductAuditResult::action, ProductAuditResult::changedBy)
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("SALE_STATUS_CHANGED", 1003L),
-                        org.assertj.core.groups.Tuple.tuple("PRICE_CHANGED", 1002L),
-                        org.assertj.core.groups.Tuple.tuple("DESCRIBED", 1001L));
+                        org.assertj.core.groups.Tuple.tuple("SALE_STATUS_CHANGED", admin(3)),
+                        org.assertj.core.groups.Tuple.tuple("PRICE_CHANGED", admin(2)),
+                        org.assertj.core.groups.Tuple.tuple("DESCRIBED", admin(1)));
         ProductAuditResult price = page.items().get(1);
         assertThat(price.before()).isEqualTo(new ProductAuditResult.Snapshot("이력 상품 2", "설명", 7_000L, true));
         assertThat(price.after().price()).isEqualTo(8_000L);
@@ -117,8 +124,8 @@ class ProductPersistenceIntegrationTest {
 
     @Test
     void list_hidesStoppedProducts_adminListShowsThem() {
-        ProductResult created = manage.register(new RegisterProductCommand("중지 상품", "", 5_000, 1000));
-        manage.changeSaleStatus(new ChangeSaleStatusCommand(created.id(), false, 1000));
+        ProductResult created = manage.register(new RegisterProductCommand("중지 상품", "", 5_000, ADMIN));
+        manage.changeSaleStatus(new ChangeSaleStatusCommand(created.id(), false, ADMIN));
 
         assertThat(query.list(new ListProductsQuery(0, 100, false)).items())
                 .extracting(ProductResult::id).doesNotContain(created.id());

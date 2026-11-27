@@ -1,5 +1,6 @@
 package com.klmin.commerce.authservice.auth.adapter.in.web;
 
+import com.klmin.commerce.authservice.auth.adapter.in.oauth.UserPrincipal;
 import com.klmin.commerce.authservice.auth.application.port.in.DeviceResult;
 import com.klmin.commerce.authservice.auth.application.port.in.ManageDevicesUseCase;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 로그인 기기 API (후속 5-6). 인증 화면 SPA({@code /devices})가 SSO 세션 쿠키({@code AUTH_SESSION})로 부른다(토큰을 쓰지 않는다).
@@ -65,12 +67,9 @@ class DevicesController {
     }
 
     /** SSO 세션의 사용자는 우리 로그인 폼이 넣은 userId 다. 아니면 기기가 없는 사용자라 401 */
-    private static long userId(Authentication authentication) {
-        try {
-            return Long.parseLong(authentication.getName());
-        } catch (NumberFormatException e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "userId 로 로그인하지 않았습니다");
-        }
+    private static UUID userId(Authentication authentication) {
+        return UserPrincipal.userId(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "userId 로 로그인하지 않았습니다"));
     }
 
     record DeviceResponse(String id, boolean current, String userAgent, Instant loginAt, Instant lastSeenAt) {
