@@ -157,13 +157,14 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
 - [0017 인증 재구성: auth-service 를 Spring Authorization Server(OIDC IdP)로, Gateway 를 BFF 로, 화면을 SPA 3개로](docs/adr/0017-auth-sas-gateway-bff-spa.md)
 - [0018 사용자·상품·알림 id 를 UUIDv7 로 (출시 전 일괄 변경)](docs/adr/0018-uuidv7-ids.md)
+- [0019 관리자 재고 조정: inventory 관리자 API 로 입고·차감 (증감 + 이력 + 요청 키)](docs/adr/0019-admin-stock-adjustment.md)
 
 ## 구성
 
 ```
 services/      order(오케스트레이터), inventory, point, payment(가짜 PG), notification, auth(회원·로그인·JWT 발급), gateway(Spring Cloud Gateway)
 libs/          messaging-contract(메시지 스키마), outbox(저장 + relay)
-frontend/      화면 SPA (Vite + React, ADR 0017): apps/web 사용자(상품·장바구니·주문·Saga 타임라인·포인트·결제·알림), apps/admin 관리자(상품 관리·결제 장애 주입), nginx 이미지
+frontend/      화면 SPA (Vite + React, ADR 0017): apps/web 사용자(상품·장바구니·주문·Saga 타임라인·포인트·결제·알림), apps/admin 관리자(상품·재고 관리·결제 장애 주입), nginx 이미지
 tools/         dlt-replay(DLT 조회·재처리 CLI, scripts/dlt.sh)
 build-logic/   공통 빌드 설정
 infra/         로컬 인프라 (docker-compose)
