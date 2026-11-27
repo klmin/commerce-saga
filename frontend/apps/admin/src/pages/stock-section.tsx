@@ -29,7 +29,9 @@ import { ActionForm, type SubmitResult } from "./product-forms";
 /** 보냈지만 결과를 모르는 조정 (요청 키와 그때 보낸 내용) */
 type Unsettled = { key: string; input: StockAdjustInput };
 
-/** 서버가 받아들이지 않았다고 확정할 수 있는 응답 (아무것도 반영되지 않았다). 408·429 는 다시 보내 볼 수 있어 뺀다 */
+/**
+ * 새 조정이 거절됨(4xx): 이 요청은 반영되지 않았다(Gateway 가 막았거나 서비스가 롤백). 408·429 는 다시 보내 볼 수 있어 뺀다
+ */
 function rejected(e: unknown): boolean {
   return (
     e instanceof ApiError &&
@@ -41,10 +43,19 @@ function rejected(e: unknown): boolean {
 }
 
 /**
+ * 결과를 모르는 조정을 다시 보냈을 때, 처음 요청이 반영되지 않았다고 확정할 수 있는 응답.
+ * 409 는 inventory 가 행 락 뒤 그 키의 기록이 없음을 보고 새로 반영하려다 거절한 것이라 처음 요청은 없던 것이다.
+ * 그 밖의 거절(403 CSRF 등 Gateway 가 서비스 앞에서 막은 것)은 처음 요청에 대해 아무것도 알려 주지 않으므로 키를 계속 쥔다
+ */
+function provesNotApplied(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 409;
+}
+
+/**
  * 재고 (inventory-service, ADR 0019). 상품 등록과 별개로 입고해야 주문할 수 있다.
  * 조정 한 번마다 요청 키를 하나 쓴다. 응답을 받지 못하면(시간 초과·연결 끊김·5xx) 반영됐는지 모르므로, 그 키와 내용을
  * 기억해 두고 다음 제출은 폼 값 대신 같은 키·같은 내용으로 다시 보내 확정한다(서버가 처음 결과를 돌려주거나 지금 반영한다).
- * 확정되거나 서버가 거절하면(4xx) 잊고 새 조정을 받는다
+ * 확정되면(성공, 또는 다시 보낸 요청이 409 = 처음 요청이 없던 것) 잊고 새 조정을 받는다. 새 조정이 4xx 로 거절되면 바로 잊는다
  */
 export function StockSection({ productId }: { productId: ProductId }) {
   const queryClient = useQueryClient();
@@ -75,13 +86,15 @@ export function StockSection({ productId }: { productId: ProductId }) {
       const message = adjustedMessage(result.adjustment.delta, result.available);
       return { saved: unsettled ? `이전 조정을 확인했습니다. ${message}` : message };
     } catch (e) {
-      if (rejected(e)) {
+      const retrying = unsettled !== null;
+      if (retrying ? provesNotApplied(e) : rejected(e)) {
         setUnsettled(null);
         throw e;
       }
       setUnsettled(request);
+      const reason = e instanceof ApiError ? `(${e.message}) ` : "";
       return {
-        error: `응답을 받지 못해 반영됐는지 모릅니다. 다시 누르면 같은 내용(${signedDelta(request.input.delta)}개)으로 확인합니다.`,
+        error: `${retrying ? "이전 조정을 확인하지 못했습니다" : "응답을 받지 못해 반영됐는지 모릅니다"}. ${reason}다시 누르면 같은 내용(${signedDelta(request.input.delta)}개)으로 확인합니다.`,
       };
     }
   }
