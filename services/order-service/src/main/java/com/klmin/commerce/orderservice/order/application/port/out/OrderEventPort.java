@@ -7,5 +7,6 @@ public interface OrderEventPort {
 
     void orderCompleted(Order order);
 
-    void orderCancelled(Order order);
+    /** @param afterCompletion 완료됐던 주문을 사용자가 취소했다 (ADR 0020) */
+    void orderCancelled(Order order, boolean afterCompletion);
 }

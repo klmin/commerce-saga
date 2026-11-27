@@ -4,6 +4,7 @@ import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.inventory.StockReleased;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
+import com.klmin.commerce.contract.inventory.StockReturned;
 import com.klmin.commerce.orderservice.common.error.NonRetryableMessageException;
 import com.klmin.commerce.orderservice.order.application.port.in.HandleSagaReplyUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.SagaReplyCommand;
@@ -43,6 +44,8 @@ class InventoryReplyListener {
             }
             case StockReleased.TYPE -> SagaReplyCommand.of(Messages.requireOrderId(
                     Messages.read(json, record, StockReleased.class).orderId(), record), SagaEventType.STOCK_RELEASED);
+            case StockReturned.TYPE -> SagaReplyCommand.of(Messages.requireOrderId(
+                    Messages.read(json, record, StockReturned.class).orderId(), record), SagaEventType.STOCK_RETURNED);
             case null -> throw new NonRetryableMessageException("type header missing: " + Messages.describe(record));
             default -> throw new NonRetryableMessageException(
                     "unknown type " + type + ": " + Messages.describe(record));

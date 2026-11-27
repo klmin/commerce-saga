@@ -103,6 +103,10 @@ jobs:
       - name: 주문 Idempotency-Key·내 주문·결제 목록 (시나리오 10)
         run: bash scripts/smoke-idempotency.sh
 
+      # 완료된 주문 취소(결제 환불 → 포인트 환불 → 재고 반환), 결제 중 취소(응답을 기다렸다 보상), 남의 주문 404 (ADR 0020)
+      - name: 주문 취소 (시나리오 20)
+        run: bash scripts/smoke-order-cancel.sh
+
       # 관리자가 가격 변경 → 옛 가격 주문 409 + 지금 가격 → 같은 키로 새 가격 주문(스냅샷) → 판매 중지 422 (ADR 0016)
       - name: 주문 가격 확인·가격 변경 이력 (시나리오 14)
         run: bash scripts/smoke-price-change.sh

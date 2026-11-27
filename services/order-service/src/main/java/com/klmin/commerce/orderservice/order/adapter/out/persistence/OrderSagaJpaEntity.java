@@ -48,6 +48,12 @@ class OrderSagaJpaEntity {
     @Column(name = "step_resends", nullable = false)
     private int stepResends;
 
+    @Column(name = "cancel_requested", nullable = false)
+    private boolean cancelRequested;
+
+    @Column(name = "after_completion", nullable = false)
+    private boolean afterCompletion;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -83,8 +89,10 @@ class OrderSagaJpaEntity {
     }
 
     /** 진행 기록은 뒤에 붙기만 하므로 저장된 것 이후의 항목만 추가한다 */
-    void change(SagaState state, boolean pointUsed, String failureReason, int stepResends, Instant updatedAt,
-                List<SagaHistoryEmbeddable> fullHistory) {
+    void change(SagaState state, boolean pointUsed, String failureReason, int stepResends, boolean cancelRequested,
+                boolean afterCompletion, Instant updatedAt, List<SagaHistoryEmbeddable> fullHistory) {
+        this.cancelRequested = cancelRequested;
+        this.afterCompletion = afterCompletion;
         this.state = state;
         this.pointUsed = pointUsed;
         this.failureReason = failureReason;
@@ -125,6 +133,14 @@ class OrderSagaJpaEntity {
 
     int getStepResends() {
         return stepResends;
+    }
+
+    boolean isCancelRequested() {
+        return cancelRequested;
+    }
+
+    boolean isAfterCompletion() {
+        return afterCompletion;
     }
 
     Instant getCreatedAt() {

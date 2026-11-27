@@ -43,6 +43,7 @@ final class SagaActionExecutor {
             case SagaAction.Pay pay -> commandPort.pay(orderId, saga.userId(), pay.amount());
             case SagaAction.RefundPoint _ -> commandPort.refundPoint(orderId);
             case SagaAction.ReleaseStock _ -> commandPort.releaseStock(orderId);
+            case SagaAction.ReturnStock _ -> commandPort.returnStock(orderId);
             case SagaAction.CancelPayment cancel -> commandPort.cancelPayment(orderId, saga.userId(), cancel.amount());
             case SagaAction.Complete _ -> {
                 Order order = loadOrder(orderId);
@@ -54,9 +55,12 @@ final class SagaActionExecutor {
             }
             case SagaAction.Cancel cancel -> {
                 Order order = loadOrder(orderId);
-                if (order.cancel(cancel.reason(), now)) {
+                boolean changed = cancel.afterCompletion()
+                        ? order.cancelAfterCompletion(cancel.reason(), now)
+                        : order.cancel(cancel.reason(), now);
+                if (changed) {
                     saveOrderPort.update(order);
-                    eventPort.orderCancelled(order);
+                    eventPort.orderCancelled(order, cancel.afterCompletion());
                 }
                 recordFinished(saga, now);
             }

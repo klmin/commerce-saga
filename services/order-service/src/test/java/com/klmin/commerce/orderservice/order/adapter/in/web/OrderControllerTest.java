@@ -4,6 +4,9 @@ import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedExc
 import com.klmin.commerce.orderservice.order.application.OrderPriceChangedException;
 import com.klmin.commerce.orderservice.order.application.ProductCatalogUnavailableException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderCommand;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderResult;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.ListMyOrdersQuery;
@@ -60,6 +63,9 @@ class OrderControllerTest {
 
     @MockitoBean
     ListMyOrdersUseCase listMyOrdersUseCase;
+
+    @MockitoBean
+    CancelOrderUseCase cancelOrderUseCase;
 
     private static Order order(UUID userId) {
         return Order.place(UUID.randomUUID(), UserId.of(userId), List.of(OrderLine.of(pid(10), 2, 1_000L)), Points.ZERO,
@@ -185,6 +191,26 @@ class OrderControllerTest {
 
         mvc.perform(get("/orders/{id}", id).with(jwt().jwt(j -> j.subject(uid(8).toString()))))
                 .andExpect(status().isNotFound());
+    }
+
+    // 주문 취소 (ADR 0020): 접수되면 202, 이미 취소된 주문이면 200, 남의 주문은 404
+    @Test
+    void cancelOrder_acceptedReturns202_cancelledReturns200_notOwnedReturns404() throws Exception {
+        Order order = order(uid(7));
+        UUID notMine = UUID.randomUUID();
+        given(cancelOrderUseCase.cancelOrder(new CancelOrderCommand(order.id(), uid(7))))
+                .willReturn(new CancelOrderResult(order, true), new CancelOrderResult(order, false));
+        given(cancelOrderUseCase.cancelOrder(new CancelOrderCommand(notMine, uid(7))))
+                .willThrow(new OrderNotFoundException(notMine));
+
+        mvc.perform(post("/orders/{id}/cancel", order.id()).with(jwt().jwt(j -> j.subject(uid(7).toString()))))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.orderId").value(order.id().toString()));
+        mvc.perform(post("/orders/{id}/cancel", order.id()).with(jwt().jwt(j -> j.subject(uid(7).toString()))))
+                .andExpect(status().isOk());
+        mvc.perform(post("/orders/{id}/cancel", notMine).with(jwt().jwt(j -> j.subject(uid(7).toString()))))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/orders/{id}/cancel", order.id())).andExpect(status().isUnauthorized());
     }
 
     @Test

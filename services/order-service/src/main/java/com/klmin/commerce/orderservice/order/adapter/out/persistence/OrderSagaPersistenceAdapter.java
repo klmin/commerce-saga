@@ -50,7 +50,8 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
     public void update(OrderSaga saga) {
         OrderSagaJpaEntity entity = repository.findById(saga.orderId())
                 .orElseThrow(() -> new IllegalStateException("saga not found: " + saga.orderId()));
-        entity.change(saga.state(), saga.pointUsed(), saga.failureReason(), saga.stepResends(), saga.updatedAt(),
+        entity.change(saga.state(), saga.pointUsed(), saga.failureReason(), saga.stepResends(),
+                saga.cancelRequested(), saga.afterCompletion(), saga.updatedAt(),
                 toEmbeddables(saga.history()));
     }
 
@@ -63,7 +64,8 @@ class OrderSagaPersistenceAdapter implements OrderSagaPort {
     private static OrderSaga toDomain(OrderSagaJpaEntity e) {
         return OrderSaga.restore(e.getOrderId(), UserId.of(e.getUserId()), Points.of(e.getPointAmount()),
                 Money.of(e.getPaidAmount()),
-                e.getState(), e.isPointUsed(), e.getFailureReason(), e.getStepResends(),
+                e.getState(), e.isPointUsed(), e.getFailureReason(), e.getStepResends(), e.isCancelRequested(),
+                e.isAfterCompletion(),
                 e.getHistory().stream()
                         .map(h -> new SagaHistoryEntry(h.getEvent(), h.getState(), h.getReason(), h.getOccurredAt()))
                         .toList(),
