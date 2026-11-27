@@ -37,7 +37,7 @@ services:
 
   # auth-service 의 refresh token family·로그인 실패 횟수 (ADR 0008). 잃어도 다시 로그인하면 되므로 영속화하지 않는다
   redis:
-    image: redis:8.4-alpine
+    image: redis:8.10-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "${REDIS_PORT:-6380}:6379"
