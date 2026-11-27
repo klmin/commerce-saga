@@ -1,5 +1,6 @@
 package com.klmin.commerce.inventoryservice.stock.domain;
 
+import com.klmin.commerce.inventoryservice.common.error.ConflictException;
 import com.klmin.commerce.inventoryservice.common.error.InvariantViolationException;
 
 import java.time.Instant;
@@ -58,6 +59,27 @@ public final class Stock {
     public void confirm(Quantity quantity, Instant now) {
         requireReserved(quantity);
         reserved -= quantity.value();
+        updatedAt = now;
+    }
+
+    /**
+     * 관리자 조정 (ADR 0019): 입고(+)·차감(-)을 가용 재고에 더한다. 예약 중인 수량(reserved)은 건드리지 않는다.
+     * 수량을 덮어쓰지 않고 더하므로, 같은 행을 잠근 예약과 순서대로 반영돼 서로의 변경을 지우지 않는다.
+     *
+     * @throws ConflictException 가용 재고보다 많이 차감하려 할 때
+     */
+    public void adjust(int delta, Instant now) {
+        if (delta == 0) {
+            throw new IllegalArgumentException("delta must not be zero");
+        }
+        long after = (long) available + delta;
+        if (after < 0) {
+            throw new ConflictException("가용 재고(" + available + "개)보다 많이 차감할 수 없습니다.");
+        }
+        if (after > Integer.MAX_VALUE) {
+            throw new ConflictException("재고가 너무 많습니다.");
+        }
+        available = (int) after;
         updatedAt = now;
     }
 

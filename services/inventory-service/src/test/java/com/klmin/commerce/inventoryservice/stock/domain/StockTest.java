@@ -1,5 +1,6 @@
 package com.klmin.commerce.inventoryservice.stock.domain;
 
+import com.klmin.commerce.inventoryservice.common.error.ConflictException;
 import com.klmin.commerce.inventoryservice.common.error.InvariantViolationException;
 import org.junit.jupiter.api.Test;
 
@@ -62,6 +63,40 @@ class StockTest {
         assertThatThrownBy(() -> stock.reserve(Quantity.of(3), T0)).isInstanceOf(IllegalStateException.class);
         assertThat(stock.available()).isEqualTo(2);
         assertThat(stock.reserved()).isZero();
+    }
+
+    @Test
+    void adjust_addsToAvailable_andKeepsReserved() {
+        Stock stock = Stock.restore(P1, 5, 2, T0);
+
+        stock.adjust(10, T0.plusSeconds(1));
+        assertThat(stock.available()).isEqualTo(15);
+        assertThat(stock.reserved()).isEqualTo(2);
+        assertThat(stock.updatedAt()).isEqualTo(T0.plusSeconds(1));
+
+        stock.adjust(-15, T0.plusSeconds(2));
+        assertThat(stock.available()).isZero();
+        assertThat(stock.reserved()).isEqualTo(2);
+    }
+
+    @Test
+    void adjust_belowZero_isConflict_andKeepsStock() {
+        Stock stock = Stock.restore(P1, 3, 4, T0);
+
+        // 예약 중인 수량(reserved)은 뺄 수 없다: 가용 3 만 차감할 수 있다
+        assertThatThrownBy(() -> stock.adjust(-4, T0)).isInstanceOf(ConflictException.class)
+                .hasMessageContaining("3");
+        assertThat(stock.available()).isEqualTo(3);
+        assertThat(stock.updatedAt()).isEqualTo(T0);
+    }
+
+    @Test
+    void adjust_zeroOrOverflow_isRejected() {
+        Stock stock = Stock.restore(P1, Integer.MAX_VALUE - 1, 0, T0);
+
+        assertThatThrownBy(() -> stock.adjust(0, T0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> stock.adjust(2, T0)).isInstanceOf(ConflictException.class);
+        assertThat(stock.available()).isEqualTo(Integer.MAX_VALUE - 1);
     }
 
     @Test
