@@ -9,6 +9,8 @@ metadata:
 spec:
   replicas: {{ .Values.kafka.replicas }}
   roles: [controller, broker]
+  resources: {{- toYaml .Values.kafka.resources | nindent 4 }}
+  jvmOptions: {{- toYaml .Values.kafka.jvmOptions | nindent 4 }}
   storage:
     type: jbod
     volumes:
@@ -43,7 +45,9 @@ spec:
       auto.create.topics.enable: false
       group.initial.rebalance.delay.ms: 0
   entityOperator:
-    topicOperator: {}
+    topicOperator:
+      resources: {{- toYaml .Values.kafka.topicOperator.resources | nindent 8 }}
+      jvmOptions: {{- toYaml .Values.kafka.topicOperator.jvmOptions | nindent 8 }}
 {{- range $topic := .Values.kafka.topics }}
 {{- range $name := list $topic (printf "%s.DLT" $topic) }}
 ---
