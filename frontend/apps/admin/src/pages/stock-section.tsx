@@ -6,6 +6,7 @@ import { LoadError } from "@commerce/ui/page";
 import { FormSkeleton } from "@commerce/ui/skeletons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@commerce/bff/api";
+import { useMe } from "@commerce/bff/session";
 import { useId, useState } from "react";
 
 import {
@@ -33,11 +34,13 @@ type Unsettled = { key: string; input: StockAdjustInput };
  * 결과가 확정되지 않은 조정은 보내기 전에 이 탭의 sessionStorage 에 상품별로 둔다. 확인 중 세션이 끝나 로그인으로 이동하거나
  * 화면을 나갔다 와도 같은 키로 확인을 이어 가게 한다(새 키로 같은 조정을 다시 보내 두 번 반영되지 않게). 확정되면 지운다
  */
-const pendingStorageKey = (productId: ProductId) => `admin:stock-adjust-pending:${productId}`;
+// 요청 키는 관리자별로 유일하다(서버가 (관리자, 키)로 찾는다). 다른 관리자가 같은 탭에 로그인하면 남의 조정을 새로 반영하지 않게 관리자 id 도 넣는다
+const pendingStorageKey = (adminId: string, productId: ProductId) =>
+  `admin:stock-adjust-pending:${adminId}:${productId}`;
 
-function loadPending(productId: ProductId): Unsettled | null {
+function loadPending(adminId: string, productId: ProductId): Unsettled | null {
   try {
-    const raw = sessionStorage.getItem(pendingStorageKey(productId));
+    const raw = sessionStorage.getItem(pendingStorageKey(adminId, productId));
     if (!raw) {
       return null;
     }
@@ -63,12 +66,12 @@ function loadPending(productId: ProductId): Unsettled | null {
   return null;
 }
 
-function savePending(productId: ProductId, pending: Unsettled | null): void {
+function savePending(adminId: string, productId: ProductId, pending: Unsettled | null): void {
   try {
     if (pending) {
-      sessionStorage.setItem(pendingStorageKey(productId), JSON.stringify(pending));
+      sessionStorage.setItem(pendingStorageKey(adminId, productId), JSON.stringify(pending));
     } else {
-      sessionStorage.removeItem(pendingStorageKey(productId));
+      sessionStorage.removeItem(pendingStorageKey(adminId, productId));
     }
   } catch {
     // 위와 같다
@@ -104,12 +107,23 @@ function provesNotApplied(e: unknown): boolean {
  * 확정되면(성공, 또는 다시 보낸 요청이 409 = 처음 요청이 없던 것) 잊고 새 조정을 받는다. 새 조정이 4xx 로 거절되면 바로 잊는다
  */
 export function StockSection({ productId }: { productId: ProductId }) {
+  // SessionGate 가 /api/me 를 읽은 뒤에 그리므로 보통 바로 있다. 관리자가 바뀌면 key 로 새로 그려 그 관리자의 기록만 읽는다
+  const me = useMe();
+  if (!me.data) {
+    return <FormSkeleton fields={2} />;
+  }
+  return <StockCard key={me.data.userId} adminId={me.data.userId} productId={productId} />;
+}
+
+function StockCard({ adminId, productId }: { adminId: string; productId: ProductId }) {
   const queryClient = useQueryClient();
   const id = useId();
   // 재로그인·재진입 뒤에도 확인 중이던 조정을 이어 간다 (상품마다 key 로 다시 그리므로 처음 한 번 읽으면 된다)
-  const [unsettled, setUnsettledState] = useState<Unsettled | null>(() => loadPending(productId));
+  const [unsettled, setUnsettledState] = useState<Unsettled | null>(() =>
+    loadPending(adminId, productId),
+  );
   function setUnsettled(pending: Unsettled | null) {
-    savePending(productId, pending);
+    savePending(adminId, productId, pending);
     setUnsettledState(pending);
   }
   const stock = useQuery({
@@ -130,7 +144,7 @@ export function StockSection({ productId }: { productId: ProductId }) {
       }
       request = { key: crypto.randomUUID(), input: input.value };
       // 보내기 전에 남긴다: 응답 전에 로그인으로 이동(401)하거나 탭이 닫혀도 이 키로 확인할 수 있게
-      savePending(productId, request);
+      savePending(adminId, productId, request);
     }
     try {
       const result = await adjustStock(productId, request.input, request.key);
