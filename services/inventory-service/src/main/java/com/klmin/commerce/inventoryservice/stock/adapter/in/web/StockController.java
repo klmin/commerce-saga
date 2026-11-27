@@ -26,6 +26,6 @@ class StockController {
         return new StockResponse(stock.productId().value(), stock.available(), stock.reserved());
     }
 
-    record StockResponse(UUID productId, int available, int reserved) {
+    record StockResponse(UUID productId, long available, long reserved) {
     }
 }

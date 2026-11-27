@@ -14,7 +14,7 @@ import java.util.UUID;
  * @param adjustedBy     조정한 관리자 userId (토큰의 sub)
  * @param idempotencyKey 관리자가 보낸 요청 키. 같은 관리자·같은 키면 한 번만 반영한다
  */
-public record StockAdjustment(Long id, ProductId productId, int delta, int availableAfter, String reason,
+public record StockAdjustment(Long id, ProductId productId, int delta, long availableAfter, String reason,
                               UUID adjustedBy, String idempotencyKey, Instant adjustedAt) {
 
     public StockAdjustment {

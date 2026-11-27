@@ -123,6 +123,16 @@ class StockTest {
         assertThat(stock.updatedAt()).isEqualTo(T0.plusSeconds(1));
     }
 
+    // 반환은 판매 확정분(입고 상한에 세지 않음)이 쌓여 들어온다. 옛 int 범위를 넘어도 보상이 실패하지 않는다 (V7 bigint)
+    @Test
+    void restock_beyondIntRange_doesNotOverflow() {
+        Stock stock = Stock.restore(P1, Integer.MAX_VALUE - 1L, 0, T0);
+
+        stock.restock(Quantity.of(1_000), T0);
+
+        assertThat(stock.available()).isEqualTo(Integer.MAX_VALUE - 1L + 1_000);
+    }
+
     @Test
     void quantityMustBePositive_andProductIdNotNull() {
         assertThatThrownBy(() -> Quantity.of(0)).isInstanceOf(IllegalArgumentException.class);

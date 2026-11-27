@@ -72,7 +72,7 @@ class AdminStockController {
             @Size(max = AdjustStockCommand.MAX_REASON_LENGTH, message = "사유는 200자까지입니다.") String reason) {
     }
 
-    record AdjustmentResponse(long id, int delta, int availableAfter, String reason, UUID adjustedBy,
+    record AdjustmentResponse(long id, int delta, long availableAfter, String reason, UUID adjustedBy,
                               Instant adjustedAt) {
 
         static AdjustmentResponse from(AdjustStockResult.Adjustment a) {
@@ -81,7 +81,7 @@ class AdminStockController {
         }
     }
 
-    record AdjustResponse(UUID productId, int available, int reserved, AdjustmentResponse adjustment) {
+    record AdjustResponse(UUID productId, long available, long reserved, AdjustmentResponse adjustment) {
 
         static AdjustResponse from(AdjustStockResult r) {
             return new AdjustResponse(r.productId(), r.available(), r.reserved(),

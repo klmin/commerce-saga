@@ -17,10 +17,10 @@ class StockJpaEntity {
     private UUID productId;
 
     @Column(nullable = false)
-    private int available;
+    private long available;
 
     @Column(nullable = false)
-    private int reserved;
+    private long reserved;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -28,7 +28,7 @@ class StockJpaEntity {
     protected StockJpaEntity() {
     }
 
-    void change(int available, int reserved, Instant updatedAt) {
+    void change(long available, long reserved, Instant updatedAt) {
         this.available = available;
         this.reserved = reserved;
         this.updatedAt = updatedAt;
@@ -38,11 +38,11 @@ class StockJpaEntity {
         return productId;
     }
 
-    int getAvailable() {
+    long getAvailable() {
         return available;
     }
 
-    int getReserved() {
+    long getReserved() {
         return reserved;
     }
 
