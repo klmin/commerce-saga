@@ -28,6 +28,8 @@ test("관리자가 결제 거절을 주입하면 사용자 주문이 결제 단�
     await user.goto("/");
     await expect(user).toHaveURL(/\/signin/);
     await user.getByRole("link", { name: "회원가입" }).click();
+    // 로그인·가입 화면 모두 "아이디" 칸이 있어, 가입 화면으로 바뀌기 전에 입력하면 로그인 화면 칸에 들어간다
+    await expect(user.getByRole("heading", { name: "회원가입" })).toBeVisible();
     await user
       .getByLabel("아이디")
       .fill(`e2e_${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`);

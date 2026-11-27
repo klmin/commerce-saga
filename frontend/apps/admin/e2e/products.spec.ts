@@ -23,7 +23,7 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
   await expect(register.getByLabel("상품 이름")).toHaveValue(name);
   await register.getByLabel("가격 (원)").fill("50,000");
   await register.getByRole("button", { name: "등록" }).click();
-  await expect(page).toHaveURL(/\/products\/\d+$/);
+  await expect(page).toHaveURL(/\/products\/[0-9a-f-]{36}$/);
   await expect(history(page)).toHaveCount(1);
   await expect(history(page).first()).toContainText("등록");
   await expect(history(page).first()).toContainText("50,000원");
