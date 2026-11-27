@@ -30,6 +30,52 @@ import { ActionForm, type SubmitResult } from "./product-forms";
 type Unsettled = { key: string; input: StockAdjustInput };
 
 /**
+ * 결과가 확정되지 않은 조정은 보내기 전에 이 탭의 sessionStorage 에 상품별로 둔다. 확인 중 세션이 끝나 로그인으로 이동하거나
+ * 화면을 나갔다 와도 같은 키로 확인을 이어 가게 한다(새 키로 같은 조정을 다시 보내 두 번 반영되지 않게). 확정되면 지운다
+ */
+const pendingStorageKey = (productId: ProductId) => `admin:stock-adjust-pending:${productId}`;
+
+function loadPending(productId: ProductId): Unsettled | null {
+  try {
+    const raw = sessionStorage.getItem(pendingStorageKey(productId));
+    if (!raw) {
+      return null;
+    }
+    const value: unknown = JSON.parse(raw);
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "key" in value &&
+      typeof value.key === "string" &&
+      "input" in value &&
+      typeof value.input === "object" &&
+      value.input !== null &&
+      "delta" in value.input &&
+      Number.isInteger(value.input.delta) &&
+      "reason" in value.input &&
+      (value.input.reason === null || typeof value.input.reason === "string")
+    ) {
+      return { key: value.key, input: value.input as StockAdjustInput };
+    }
+  } catch {
+    // 저장소를 쓸 수 없으면(사생활 보호 모드 등) 이 화면 안에서만 기억한다
+  }
+  return null;
+}
+
+function savePending(productId: ProductId, pending: Unsettled | null): void {
+  try {
+    if (pending) {
+      sessionStorage.setItem(pendingStorageKey(productId), JSON.stringify(pending));
+    } else {
+      sessionStorage.removeItem(pendingStorageKey(productId));
+    }
+  } catch {
+    // 위와 같다
+  }
+}
+
+/**
  * 새 조정이 거절됨(4xx): 이 요청은 반영되지 않았다(Gateway 가 막았거나 서비스가 롤백). 408·429 는 다시 보내 볼 수 있어 뺀다
  */
 function rejected(e: unknown): boolean {
@@ -60,7 +106,12 @@ function provesNotApplied(e: unknown): boolean {
 export function StockSection({ productId }: { productId: ProductId }) {
   const queryClient = useQueryClient();
   const id = useId();
-  const [unsettled, setUnsettled] = useState<Unsettled | null>(null);
+  // 재로그인·재진입 뒤에도 확인 중이던 조정을 이어 간다 (상품마다 key 로 다시 그리므로 처음 한 번 읽으면 된다)
+  const [unsettled, setUnsettledState] = useState<Unsettled | null>(() => loadPending(productId));
+  function setUnsettled(pending: Unsettled | null) {
+    savePending(productId, pending);
+    setUnsettledState(pending);
+  }
   const stock = useQuery({
     queryKey: ["admin-stock", productId],
     queryFn: () => getStock(productId),
@@ -78,6 +129,8 @@ export function StockSection({ productId }: { productId: ProductId }) {
         return { error: input.error };
       }
       request = { key: crypto.randomUUID(), input: input.value };
+      // 보내기 전에 남긴다: 응답 전에 로그인으로 이동(401)하거나 탭이 닫혀도 이 키로 확인할 수 있게
+      savePending(productId, request);
     }
     try {
       const result = await adjustStock(productId, request.input, request.key);
