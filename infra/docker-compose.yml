@@ -37,7 +37,7 @@ services:
 
   # auth-service 의 refresh token family·로그인 실패 횟수 (ADR 0008). 잃어도 다시 로그인하면 되므로 영속화하지 않는다
   redis:
-    image: redis:8.4-alpine
+    image: redis:8.10-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "${REDIS_PORT:-6380}:6379"
@@ -252,7 +252,7 @@ services:
   # 웹훅 URL 은 비밀값이라 저장소에 넣지 않는다: DISCORD_WEBHOOK_URL 을 셸에서 export 하거나 infra/.env(gitignore)에 둔다.
   # 없으면 null receiver 로 뜬다(경보는 http://localhost:9095 UI·API 에서만). 호스트 포트는 표준 9093 에서 비킴
   alertmanager:
-    image: prom/alertmanager:v0.29.0
+    image: prom/alertmanager:v0.35.0
     entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
     environment:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
@@ -276,7 +276,7 @@ services:
 
   # trace(Explore → Tempo)·로그(Explore → Loki, trace 와 서로 링크), 메트릭·경보(대시보드 "commerce-saga", Alerting). 로컬 개발용 익명 관리자
   grafana:
-    image: grafana/grafana:13.2.6
+    image: grafana/grafana:13.3.1
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin

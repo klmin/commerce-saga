@@ -125,7 +125,7 @@ PR → CI(backend·e2e·k8s 등) → main 머지
 3. 클러스터 준비 확인
    - 노드는 amd64(x86)·arm64(Graviton) 둘 다 된다. 이미지가 멀티 아키텍처라 노드가 자기 CPU 에 맞는 쪽을 받는다
    - **EBS CSI 드라이버** add-on 과 기본 StorageClass (`kubectl get sc` 에 `(default)`). 기본이 없으면 `values-eks.yaml` 의 `storageClass` 를 채운다
-   - 노드 여유: 요청 합계 CPU 약 1.6 코어, 메모리 약 5.5Gi (서비스 8개 JVM + Kafka + Connect + Postgres)
+   - 노드 여유: Pod 약 26개(Argo CD 포함 약 31개). 요청 합계 CPU 약 2.3 코어, 메모리 약 8.5Gi, 실제 사용은 약 10Gi (서비스 9개 JVM + Kafka + Connect + Elasticsearch + 관측성). t3.large(8GiB, Pod 35개) 2대면 여유가 있다. t3.medium 은 Pod 수(17개)·메모리가 모자란다
 4. `aws eks update-kubeconfig --name <클러스터> --region <리전>` 후 `scripts/eks-argocd.sh`
    - sync 결과를 Discord 로 받으려면: `read -rs ARGOCD_DISCORD_WEBHOOK && export ARGOCD_DISCORD_WEBHOOK && scripts/eks-argocd.sh` (이미 설치된 클러스터에 다시 돌려도 된다)
 5. **공개 주소 넣기** (후속 5-3b): 로그인(SAS·BFF)은 브라우저가 보는 주소를 정확히 알아야 한다(issuer·redirect URI). 처음 sync 는 `edge.path.url` 이 비어 있어 화면은 뜨지만 로그인이 안 된다. Envoy 의 LB 주소를 확인해 `values-eks.yaml` 의 `edge.path.url` 에 넣고(예: `http://xxx.elb.amazonaws.com`) main 에 머지한다
