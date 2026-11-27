@@ -3,11 +3,13 @@ package com.klmin.commerce.orderservice.order.adapter.out.persistence;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
+import java.util.UUID;
+
 @Embeddable
 class OrderLineEmbeddable {
 
     @Column(name = "product_id", nullable = false)
-    private long productId;
+    private UUID productId;
 
     @Column(nullable = false)
     private int quantity;
@@ -18,13 +20,13 @@ class OrderLineEmbeddable {
     protected OrderLineEmbeddable() {
     }
 
-    OrderLineEmbeddable(long productId, int quantity, long unitPrice) {
+    OrderLineEmbeddable(UUID productId, int quantity, long unitPrice) {
         this.productId = productId;
         this.quantity = quantity;
         this.unitPrice = unitPrice;
     }
 
-    long getProductId() {
+    UUID getProductId() {
         return productId;
     }
 

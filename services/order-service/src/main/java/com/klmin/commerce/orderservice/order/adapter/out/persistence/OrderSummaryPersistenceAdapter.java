@@ -58,7 +58,7 @@ class OrderSummaryPersistenceAdapter implements LoadOrderSummariesPort {
                 .param("orderIds", rows.stream().map(Row::id).toArray(UUID[]::new))
                 .query(rs -> {
                     lines.computeIfAbsent(rs.getObject("order_id", UUID.class), k -> new ArrayList<>())
-                            .add(new OrderSummaryResult.Line(rs.getLong("product_id"), rs.getInt("quantity"),
+                            .add(new OrderSummaryResult.Line(rs.getObject("product_id", UUID.class), rs.getInt("quantity"),
                                     rs.getLong("unit_price")));
                 });
         return rows.stream()

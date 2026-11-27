@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -37,8 +38,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest({ProductController.class, AdminProductController.class})
 class ProductControllerTest {
 
+    private static final UUID ID = UUID.fromString("01900000-0000-7000-8000-000000000001");
+    private static final UUID ID2 = UUID.fromString("01900000-0000-7000-8000-000000000002");
+
     private static final ProductResult KEYBOARD =
-            new ProductResult(1, "무선 키보드", "", 39_000, true, Instant.parse("2026-11-25T00:00:00Z"));
+            new ProductResult(ID, "무선 키보드", "", 39_000, true, Instant.parse("2026-11-25T00:00:00Z"));
 
     @Autowired
     MockMvc mvc;
@@ -56,31 +60,39 @@ class ProductControllerTest {
 
         mvc.perform(get("/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(ID.toString()))
                 .andExpect(jsonPath("$.items[0].price").value(39_000))
                 .andExpect(jsonPath("$.hasNext").value(false));
     }
 
     @Test
     void findByIds_isPublic() throws Exception {
-        given(getProductUseCase.findByIds(List.of(1L, 2L))).willReturn(List.of(KEYBOARD));
+        given(getProductUseCase.findByIds(List.of(ID, ID2))).willReturn(List.of(KEYBOARD));
 
-        mvc.perform(get("/products").param("ids", "1,2"))
+        mvc.perform(get("/products").param("ids", ID + "," + ID2))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].onSale").value(true));
     }
 
     @Test
     void findByIds_invalid_400() throws Exception {
-        mvc.perform(get("/products").param("ids", "0")).andExpect(status().isBadRequest());
+        mvc.perform(get("/products").param("ids", "1")).andExpect(status().isBadRequest());
+        mvc.perform(get("/products").param("ids", ID + ",x")).andExpect(status().isBadRequest());
         mvc.perform(get("/products").param("ids", "a")).andExpect(status().isBadRequest());
     }
 
     @Test
     void get_notFound_404() throws Exception {
-        given(getProductUseCase.get(9)).willThrow(new ProductNotFoundException(9));
+        UUID missing = UUID.fromString("01900000-0000-7000-8000-000000000009");
+        given(getProductUseCase.get(missing)).willThrow(new ProductNotFoundException(missing));
 
-        mvc.perform(get("/products/9")).andExpect(status().isNotFound());
+        mvc.perform(get("/products/" + missing)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void get_malformedId_400() throws Exception {
+        mvc.perform(get("/products/1")).andExpect(status().isBadRequest());
+        verifyNoInteractions(getProductUseCase);
     }
 
     @Test
@@ -95,31 +107,31 @@ class ProductControllerTest {
     void changePrice_recordsAdminFromToken() throws Exception {
         given(manageProductUseCase.changePrice(any())).willReturn(KEYBOARD);
 
-        mvc.perform(put("/admin/products/1/price")
+        mvc.perform(put("/admin/products/" + ID + "/price")
                         .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"price\":35000}"))
                 .andExpect(status().isOk());
 
-        verify(manageProductUseCase).changePrice(new ChangePriceCommand(1, 35_000, 1000));
+        verify(manageProductUseCase).changePrice(new ChangePriceCommand(ID, 35_000, 1000));
     }
 
     @Test
     void changeSaleStatus_recordsAdminFromToken() throws Exception {
         given(manageProductUseCase.changeSaleStatus(any())).willReturn(KEYBOARD);
 
-        mvc.perform(put("/admin/products/1/sale")
+        mvc.perform(put("/admin/products/" + ID + "/sale")
                         .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"onSale\":false}"))
                 .andExpect(status().isOk());
 
-        verify(manageProductUseCase).changeSaleStatus(new ChangeSaleStatusCommand(1, false, 1000));
+        verify(manageProductUseCase).changeSaleStatus(new ChangeSaleStatusCommand(ID, false, 1000));
     }
 
     @Test
     void auditLog_adminOnly() throws Exception {
-        given(getProductUseCase.auditLog(1, 0, 20)).willReturn(new ProductAuditPageResult(List.of(
+        given(getProductUseCase.auditLog(ID, 0, 20)).willReturn(new ProductAuditPageResult(List.of(
                 new ProductAuditResult("PRICE_CHANGED",
                         new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
                         new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true),
@@ -128,9 +140,9 @@ class ProductControllerTest {
                         new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
                         1000, Instant.parse("2026-11-24T00:00:00Z"))), false));
 
-        mvc.perform(get("/admin/products/1/audit-log").with(jwt().jwt(j -> j.subject("7"))))
+        mvc.perform(get("/admin/products/" + ID + "/audit-log").with(jwt().jwt(j -> j.subject("7"))))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/admin/products/1/audit-log")
+        mvc.perform(get("/admin/products/" + ID + "/audit-log")
                         .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].action").value("PRICE_CHANGED"))
@@ -143,7 +155,7 @@ class ProductControllerTest {
 
     @Test
     void changePrice_invalidBody_400() throws Exception {
-        mvc.perform(put("/admin/products/1/price")
+        mvc.perform(put("/admin/products/" + ID + "/price")
                         .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"price\":0}"))

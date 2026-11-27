@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 내 장바구니 (후속 4-1c, ADR 0016). 사용자는 토큰의 sub 뿐이라 남의 장바구니에 닿을 경로가 없다.
@@ -39,13 +40,13 @@ class CartController {
 
     /** 담기 또는 수량 바꾸기 (수량은 더하지 않고 그 값으로) */
     @PutMapping("/items/{productId}")
-    CartResponse put(@CurrentUserId long userId, @PathVariable @Positive long productId,
+    CartResponse put(@CurrentUserId long userId, @PathVariable UUID productId,
                      @Valid @RequestBody PutItemRequest request) {
         return CartResponse.from(cartUseCase.put(userId, productId, request.quantity()));
     }
 
     @DeleteMapping("/items/{productId}")
-    CartResponse remove(@CurrentUserId long userId, @PathVariable @Positive long productId) {
+    CartResponse remove(@CurrentUserId long userId, @PathVariable UUID productId) {
         return CartResponse.from(cartUseCase.remove(userId, productId));
     }
 
@@ -54,7 +55,7 @@ class CartController {
 
     record CartResponse(List<Item> items, boolean pricesAvailable) {
 
-        record Item(long productId, String name, int quantity, long addedPrice, Long currentPrice, Boolean onSale,
+        record Item(UUID productId, String name, int quantity, long addedPrice, Long currentPrice, Boolean onSale,
                     boolean priceChanged) {
         }
 

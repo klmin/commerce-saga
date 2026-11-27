@@ -4,7 +4,7 @@ import { ListSkeleton } from "@commerce/ui/skeletons";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import { listAllProducts, registerProduct } from "@/api/admin";
+import { listAllProducts, registerProduct, shortProductId } from "@/api/admin";
 import { pageNumber, won } from "@/lib/format";
 import { parseRegisterInput } from "@/lib/product-input";
 
@@ -30,7 +30,10 @@ function ProductTable() {
           <li key={p.id} className="flex items-center justify-between gap-2 py-2">
             <span className="flex flex-col">
               <span className="font-medium">
-                <span className="text-muted-foreground">#{p.id}</span> {p.name}
+                <span className="text-muted-foreground" title={p.id}>
+                  #{shortProductId(p.id)}
+                </span>{" "}
+                {p.name}
               </span>
               <span className="text-muted-foreground">
                 {won(p.price)} · {p.onSale ? "판매 중" : "판매 중지"}

@@ -12,6 +12,8 @@
 #   13d. 포인트 내역(GET /api/points/me/history) = 최신순으로 주문 사용, 가입 축하 지급. 지급 기록(point_grants)은 1개
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
+source "$(dirname "$0")/lib/products.sh"
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
@@ -66,7 +68,7 @@ ok "포인트 계정 생성 $(( $(date +%s%3N) - started ))ms 안에 확인, 잔
 
 echo "== 13b. 그 포인트로 주문"
 res=$(call POST /api/orders "${auth[@]}" -H 'Content-Type: application/json' \
-  -d "{\"lines\":[{\"productId\":1,\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":$USE_POINT}")
+  -d "{\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":$USE_POINT}")
 [ "$(status_of <<< "$res")" = 201 ] || fail "주문 → $(status_of <<< "$res")"
 order_id=$(body_of <<< "$res" | field orderId)
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))

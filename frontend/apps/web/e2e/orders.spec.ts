@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { login, signUpFresh } from "./helpers";
+import { login, SEED_PRODUCT, signUpFresh } from "./helpers";
 
 // 주문 Saga 전체(order·inventory·point·payment + Kafka)가 떠 있어야 한다. 가입한 새 사용자로 돌아 시드 잔액에 기대지 않는다
 
 test("포인트를 써서 주문하면 Saga 가 재고 → 포인트 → 결제 → 완료로 진행된다", async ({ page }) => {
   await signUpFresh(page);
-  await page.goto("/orders/new?productId=2");
+  await page.goto(`/orders/new?productId=${SEED_PRODUCT.mouse}`);
   await page.getByLabel("사용할 포인트").fill("300");
   await expect(page.getByText("24,700원")).toBeVisible();
   await page.getByRole("button", { name: "주문하기" }).click();
@@ -27,7 +27,7 @@ test("포인트를 써서 주문하면 Saga 가 재고 → 포인트 → 결제 
 
 test("품절 상품은 재고 예약에서 실패하고 되돌릴 것 없이 취소된다", async ({ page }) => {
   await signUpFresh(page);
-  await page.goto("/orders/new?productId=5");
+  await page.goto(`/orders/new?productId=${SEED_PRODUCT.monitorArm}`);
   await page.getByRole("button", { name: "주문하기" }).click();
 
   await expect(page.getByTestId("saga-state")).toHaveText("취소", { timeout: 20_000 });
@@ -38,7 +38,7 @@ test("품절 상품은 재고 예약에서 실패하고 되돌릴 것 없이 취
 
 test("포인트가 모자라면 포인트 단계에서 실패하고 재고를 되돌린다 (보상)", async ({ page }) => {
   await signUpFresh(page);
-  await page.goto("/orders/new?productId=1");
+  await page.goto(`/orders/new?productId=${SEED_PRODUCT.keyboard}`);
   await page.getByLabel("사용할 포인트").fill("5000");
   await page.getByRole("button", { name: "주문하기" }).click();
 
@@ -54,7 +54,7 @@ test("주문 버튼을 여러 번 눌러도 주문은 한 건이다 (Idempotency
   page,
 }) => {
   await signUpFresh(page);
-  await page.goto("/orders/new?productId=3");
+  await page.goto(`/orders/new?productId=${SEED_PRODUCT.hub}`);
   const submit = page.getByRole("button", { name: "주문하기" });
   // 주문 폼이 그려질 때까지 기다린다(재고를 읽는 동안은 자리 표시만 있다). 헤더의 로그아웃 폼과 헷갈리지 않게
   // 주문하기 버튼이 든 폼을 고른다. 응답 전에 연달아 제출한다 (버튼이 잠기기 전에 같은 폼을 세 번 보낸다)
@@ -73,7 +73,7 @@ test("주문 버튼을 여러 번 눌러도 주문은 한 건이다 (Idempotency
 
 test("남의 주문은 볼 수 없다 (소유권, 없는 주문과 같은 화면)", async ({ page, browser }) => {
   await signUpFresh(page);
-  await page.goto("/orders/new?productId=1");
+  await page.goto(`/orders/new?productId=${SEED_PRODUCT.keyboard}`);
   await page.getByRole("button", { name: "주문하기" }).click();
   await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}$/);
   const mine = page.url();

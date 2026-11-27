@@ -18,6 +18,8 @@
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
+source "$(dirname "$0")/lib/products.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 INVENTORY_URL=${INVENTORY_URL:-http://localhost:8082}
@@ -80,11 +82,11 @@ trap 'set_pg APPROVE || true' EXIT
 set_pg APPROVE
 
 echo "== 1. 정상 주문 (포인트 500 사용) -> COMPLETED"
-avail_before=$(stock 1 | field available)
-reserved_before=$(stock 1 | field reserved)
+avail_before=$(stock "$PRODUCT_KEYBOARD" | field available)
+reserved_before=$(stock "$PRODUCT_KEYBOARD" | field reserved)
 points_before=$(points 1)
 start=$(now_ms)
-order=$(place_order 1 '{"lines":[{"productId":1,"quantity":2,"unitPrice":39000}],"pointAmount":500}')
+order=$(place_order 1 "{\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":2,\"unitPrice\":39000}],\"pointAmount\":500}")
 order_id=$(echo "$order" | field orderId)
 expect_eq "생성 직후 status" PENDING "$(echo "$order" | field status)"
 wait_until "order COMPLETED" status_is 1 "$order_id" COMPLETED
@@ -94,31 +96,31 @@ expect_eq "결제 금액" 77500 "$(get_order 1 "$order_id" | field paidAmount)"
 expect_eq "포인트 잔액" $(( points_before - 500 )) "$(points 1)"
 expect_eq "결제 상태" APPROVED "$(curl -sf "$PAYMENT_URL/payments/orders/$order_id" -H "$(auth 1)" | field status)"
 # OrderCompleted 이벤트(코레오그래피)로 예약 재고가 판매 확정되어 reserved 가 원래대로
-wait_until "stock confirmed" reserved_is 1 "$reserved_before"
-expect_eq "상품 1 available" $(( avail_before - 2 )) "$(stock 1 | field available)"
+wait_until "stock confirmed" reserved_is "$PRODUCT_KEYBOARD" "$reserved_before"
+expect_eq "상품 1 available" $(( avail_before - 2 )) "$(stock "$PRODUCT_KEYBOARD" | field available)"
 expect_eq "Saga 단계" COMPLETED "$(saga 1 "$order_id" | field state)"
 
 echo "== 2. 품절 상품 포함 주문 -> CANCELLED, 아무 재고도 잡지 않음"
-avail2_before=$(stock 2 | field available)
-order=$(place_order 1 '{"lines":[{"productId":2,"quantity":1,"unitPrice":25000},{"productId":5,"quantity":1,"unitPrice":45000}]}')
+avail2_before=$(stock "$PRODUCT_MOUSE" | field available)
+order=$(place_order 1 "{\"lines\":[{\"productId\":\"$PRODUCT_MOUSE\",\"quantity\":1,\"unitPrice\":25000},{\"productId\":\"$PRODUCT_MONITOR_ARM\",\"quantity\":1,\"unitPrice\":45000}]}")
 oos_id=$(echo "$order" | field orderId)
 wait_until "order CANCELLED" status_is 1 "$oos_id" CANCELLED
-expect_eq "cancelReason" "insufficient stock: productId=5" "$(get_order 1 "$oos_id" | field cancelReason)"
-expect_eq "상품 2 available" "$avail2_before" "$(stock 2 | field available)"
+expect_eq "cancelReason" "insufficient stock: productId=$PRODUCT_MONITOR_ARM" "$(get_order 1 "$oos_id" | field cancelReason)"
+expect_eq "상품 2 available" "$avail2_before" "$(stock "$PRODUCT_MOUSE" | field available)"
 
 echo "== 3. 결제 실패 -> 포인트 환불 -> 재고 해제 -> CANCELLED"
 set_pg DECLINE
-avail3_before=$(stock 3 | field available)
-reserved3_before=$(stock 3 | field reserved)
+avail3_before=$(stock "$PRODUCT_HUB" | field available)
+reserved3_before=$(stock "$PRODUCT_HUB" | field reserved)
 points3_before=$(points 2)
-order=$(place_order 2 '{"lines":[{"productId":3,"quantity":1,"unitPrice":18000}],"pointAmount":300}')
+order=$(place_order 2 "{\"lines\":[{\"productId\":\"$PRODUCT_HUB\",\"quantity\":1,\"unitPrice\":18000}],\"pointAmount\":300}")
 fail_id=$(echo "$order" | field orderId)
 wait_until "order CANCELLED" status_is 2 "$fail_id" CANCELLED
 set_pg APPROVE
 expect_eq "cancelReason" "declined by PG (fault injection)" "$(get_order 2 "$fail_id" | field cancelReason)"
 expect_eq "포인트 잔액(환불)" "$points3_before" "$(points 2)"
-expect_eq "상품 3 available(해제)" "$avail3_before" "$(stock 3 | field available)"
-expect_eq "상품 3 reserved(해제)" "$reserved3_before" "$(stock 3 | field reserved)"
+expect_eq "상품 3 available(해제)" "$avail3_before" "$(stock "$PRODUCT_HUB" | field available)"
+expect_eq "상품 3 reserved(해제)" "$reserved3_before" "$(stock "$PRODUCT_HUB" | field reserved)"
 history=$(saga 2 "$fail_id")
 # 보상 순서: PAYMENT_FAILED -> REFUNDING_POINT, POINT_REFUNDED -> RELEASING_STOCK, STOCK_RELEASED -> CANCELLED
 order_of_steps=$(echo "$history" | sed 's/.*"history"://' | grep -oE '"state":"(PAYING|REFUNDING_POINT|RELEASING_STOCK|CANCELLED)"' | tr -d '"' | sed 's/state://' | tr '\n' ' ')

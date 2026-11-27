@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -53,22 +54,22 @@ class ProductCatalogHttpAdapterTest {
     @Test
     void readsCurrentPrices() throws Exception {
         var adapter = adapter(200, """
-                {"items":[{"id":1,"name":"키보드","description":"","price":39000,"onSale":true},
-                          {"id":2,"name":"마우스","description":"","price":25000,"onSale":false}]}
+                {"items":[{"id":"01900000-0000-7000-8000-000000000001","name":"키보드","description":"","price":39000,"onSale":true},
+                          {"id":"01900000-0000-7000-8000-000000000002","name":"마우스","description":"","price":25000,"onSale":false}]}
                 """, 0);
 
-        List<CatalogProduct> products = adapter.findByIds(List.of(1L, 2L, 3L));
+        List<CatalogProduct> products = adapter.findByIds(List.of(pid(1), pid(2), pid(3)));
 
-        assertThat(query.get()).isEqualTo("ids=1,2,3");
-        assertThat(products).containsExactly(new CatalogProduct(1, "키보드", 39_000, true),
-                new CatalogProduct(2, "마우스", 25_000, false));
+        assertThat(query.get()).isEqualTo("ids=" + pid(1) + "," + pid(2) + "," + pid(3));
+        assertThat(products).containsExactly(new CatalogProduct(pid(1), "키보드", 39_000, true),
+                new CatalogProduct(pid(2), "마우스", 25_000, false));
     }
 
     @Test
     void serverError_isUnavailable() throws Exception {
         var adapter = adapter(500, "{}", 0);
 
-        assertThatThrownBy(() -> adapter.findByIds(List.of(1L)))
+        assertThatThrownBy(() -> adapter.findByIds(List.of(pid(1))))
                 .isInstanceOf(ProductCatalogUnavailableException.class);
     }
 
@@ -77,7 +78,7 @@ class ProductCatalogHttpAdapterTest {
         var adapter = adapter(200, "{\"items\":[]}", 2_000);
 
         long start = System.nanoTime();
-        assertThatThrownBy(() -> adapter.findByIds(List.of(1L)))
+        assertThatThrownBy(() -> adapter.findByIds(List.of(pid(1))))
                 .isInstanceOf(ProductCatalogUnavailableException.class);
         assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(1_500));
     }
@@ -87,7 +88,7 @@ class ProductCatalogHttpAdapterTest {
         var adapter = new ProductCatalogHttpAdapter(RestClient.builder(),
                 new ProductCatalogProperties("http://localhost:1", Duration.ofMillis(300)));
 
-        assertThatThrownBy(() -> adapter.findByIds(List.of(1L)))
+        assertThatThrownBy(() -> adapter.findByIds(List.of(pid(1))))
                 .isInstanceOf(ProductCatalogUnavailableException.class);
     }
 }

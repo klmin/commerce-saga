@@ -48,12 +48,18 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * inventory.command(ReserveStock) 수신 -> 재고 예약 -> outbox -> relay -> inventory.reply 발행.
- * order-service 대신 테스트가 커맨드를 보낸다. 재고는 V2 시드 데이터(상품 1~5)를 쓴다.
+ * order-service 대신 테스트가 커맨드를 보낸다. 재고는 V2 시드 데이터(고정 UUID 상품 ...0001~...0005, product-service 시드와 같음)를 쓴다.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @Testcontainers(disabledWithoutDocker = true)
 class ReserveStockIntegrationTest {
+
+    // V2__seed_stock.sql 의 시드 재고 (product-service 시드와 같은 고정 UUID)
+    private static final UUID P1 = UUID.fromString("01900000-0000-7000-8000-000000000001");   // 재고 100
+    private static final UUID P2 = UUID.fromString("01900000-0000-7000-8000-000000000002");   // 재고 100
+    private static final UUID P3 = UUID.fromString("01900000-0000-7000-8000-000000000003");   // 재고 100
+    private static final UUID P5 = UUID.fromString("01900000-0000-7000-8000-000000000005");   // 재고 0
 
     @Autowired
     GetStockUseCase getStockUseCase;
@@ -101,37 +107,37 @@ class ReserveStockIntegrationTest {
 
     @Test
     void reserveStock_repliesStockReserved_andDuplicateDoesNotReserveTwice() {
-        int before = getStockUseCase.getStock(1L).available();
+        int before = getStockUseCase.getStock(P1).available();
         UUID orderId = UUID.randomUUID();
-        ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(1L, 2)));
+        ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(P1, 2)));
 
         sendCommand(command);
         ConsumerRecord<String, String> reply = awaitReplies(orderId, 1).getFirst();
         assertThat(header(reply, MessageHeaders.TYPE)).isEqualTo(StockReserved.TYPE);
         assertThat(json.readValue(reply.value(), StockReserved.class).orderId()).isEqualTo(orderId);
-        assertThat(getStockUseCase.getStock(1L).available()).isEqualTo(before - 2);
+        assertThat(getStockUseCase.getStock(P1).available()).isEqualTo(before - 2);
 
         // 같은 커맨드 재전송: 같은 응답을 다시 보내지만 재고는 한 번만 줄어 있다
         sendCommand(command);
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 2);
         assertThat(replies).allMatch(r -> StockReserved.TYPE.equals(header(r, MessageHeaders.TYPE)));
-        assertThat(getStockUseCase.getStock(1L).available()).isEqualTo(before - 2);
-        assertThat(getStockUseCase.getStock(1L).reserved()).isEqualTo(2);
+        assertThat(getStockUseCase.getStock(P1).available()).isEqualTo(before - 2);
+        assertThat(getStockUseCase.getStock(P1).reserved()).isEqualTo(2);
     }
 
     @Test
     void insufficientStock_repliesFailed_andReservesNothing() {
-        int before = getStockUseCase.getStock(2L).available();
+        int before = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
 
-        // 상품 5는 재고 0
-        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(2L, 1), new ReserveStock.Line(5L, 1))));
+        // 상품 P5 는 재고 0
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P2, 1), new ReserveStock.Line(P5, 1))));
 
         ConsumerRecord<String, String> reply = awaitReplies(orderId, 1).getFirst();
         assertThat(header(reply, MessageHeaders.TYPE)).isEqualTo(StockReservationFailed.TYPE);
         assertThat(json.readValue(reply.value(), StockReservationFailed.class).reason())
-                .isEqualTo("insufficient stock: productId=5");
-        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before);
+                .isEqualTo("insufficient stock: productId=" + P5);
+        assertThat(getStockUseCase.getStock(P2).available()).isEqualTo(before);
     }
 
     @Test
@@ -148,7 +154,7 @@ class ReserveStockIntegrationTest {
             kafkaTemplate.send(poison).join();
 
             // 같은 키의 다음 정상 커맨드는 처리된다
-            sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(3L, 1))));
+            sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 1))));
             assertThat(header(awaitReplies(orderId, 1).getFirst(), MessageHeaders.TYPE))
                     .isEqualTo(StockReserved.TYPE);
 
@@ -167,23 +173,23 @@ class ReserveStockIntegrationTest {
         UUID orderId = UUID.randomUUID();
         jdbc.update("insert into stock_reservations (order_id, status, reason, created_at, updated_at, version) "
                 + "values (?, 'REJECTED', 'invalid command', now(), now(), 0)", orderId);
-        jdbc.update("insert into stock_reservation_lines (order_id, line_no, product_id, quantity) values (?, 0, 1, 0)",
-                orderId);
-        int before = getStockUseCase.getStock(1L).available();
+        jdbc.update("insert into stock_reservation_lines (order_id, line_no, product_id, quantity) values (?, 0, ?, 0)",
+                orderId, P1);
+        int before = getStockUseCase.getStock(P1).available();
 
         releaseStockUseCase.release(UUID.randomUUID(), orderId);
         reserveStockUseCase.reserve(UUID.randomUUID(),
-                new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(1L, 1))));
+                new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(P1, 1))));
 
-        assertThat(getStockUseCase.getStock(1L).available()).isEqualTo(before);
+        assertThat(getStockUseCase.getStock(P1).available()).isEqualTo(before);
     }
 
     @Test
     void redeliveredMessage_isSkipped_withoutSecondReply() {
-        int before = getStockUseCase.getStock(1L).available();
+        int before = getStockUseCase.getStock(P1).available();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
-        ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(1L, 1)));
+        ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(P1, 1)));
 
         send(Topics.INVENTORY_COMMAND, orderId, ReserveStock.TYPE, command, messageId);
         send(Topics.INVENTORY_COMMAND, orderId, ReserveStock.TYPE, command, messageId);
@@ -193,7 +199,7 @@ class ReserveStockIntegrationTest {
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 2);
         assertThat(replies).extracting(r -> header(r, MessageHeaders.TYPE))
                 .containsExactly(StockReserved.TYPE, StockReleased.TYPE);
-        assertThat(getStockUseCase.getStock(1L).available()).isEqualTo(before);
+        assertThat(getStockUseCase.getStock(P1).available()).isEqualTo(before);
     }
 
     @Test
@@ -215,43 +221,43 @@ class ReserveStockIntegrationTest {
 
     @Test
     void releaseStock_returnsReservedStock_andRepliesStockReleased() {
-        int before = getStockUseCase.getStock(2L).available();
+        int before = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
-        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(2L, 4))));
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P2, 4))));
         awaitReplies(orderId, 1);
-        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before - 4);
+        assertThat(getStockUseCase.getStock(P2).available()).isEqualTo(before - 4);
 
         send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId));
         send(Topics.INVENTORY_COMMAND, orderId, ReleaseStock.TYPE, new ReleaseStock(orderId)); // 중복 보상
 
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
         assertThat(replies.subList(1, 3)).allMatch(r -> StockReleased.TYPE.equals(header(r, MessageHeaders.TYPE)));
-        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(before);
+        assertThat(getStockUseCase.getStock(P2).available()).isEqualTo(before);
     }
 
     @Test
     void orderCompletedEvent_confirmsReservedStock() {
-        int reservedBefore = getStockUseCase.getStock(3L).reserved();
-        int availableBefore = getStockUseCase.getStock(3L).available();
+        int reservedBefore = getStockUseCase.getStock(P3).reserved();
+        int availableBefore = getStockUseCase.getStock(P3).available();
         UUID orderId = UUID.randomUUID();
-        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(3L, 2))));
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 2))));
         awaitReplies(orderId, 1);
 
         send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId, 1L, 2000L, 0L, 2000L));
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
-                assertThat(getStockUseCase.getStock(3L).reserved()).isEqualTo(reservedBefore));
-        assertThat(getStockUseCase.getStock(3L).available()).isEqualTo(availableBefore - 2);
+                assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore));
+        assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2);
     }
 
     // 해제(inventory.command)와 확정(order.events)이 같은 주문에 동시에 와도 하나만 반영되고 둘 다 실패하지 않는다
     @RepeatedTest(5)
     void concurrentReleaseAndConfirm_applyExactlyOne() throws Exception {
         UUID orderId = UUID.randomUUID();
-        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(1L, 1))));
+        sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P1, 1))));
         awaitReplies(orderId, 1);
-        int availableAfterReserve = getStockUseCase.getStock(1L).available();
-        int reservedAfterReserve = getStockUseCase.getStock(1L).reserved();
+        int availableAfterReserve = getStockUseCase.getStock(P1).available();
+        int reservedAfterReserve = getStockUseCase.getStock(P1).reserved();
 
         CountDownLatch start = new CountDownLatch(1);
         CompletableFuture<Void> release = CompletableFuture.runAsync(() -> {
@@ -265,8 +271,8 @@ class ReserveStockIntegrationTest {
         start.countDown();
         CompletableFuture.allOf(release, confirm).get(30, TimeUnit.SECONDS);
 
-        int available = getStockUseCase.getStock(1L).available();
-        assertThat(getStockUseCase.getStock(1L).reserved()).isEqualTo(reservedAfterReserve - 1);
+        int available = getStockUseCase.getStock(P1).available();
+        assertThat(getStockUseCase.getStock(P1).reserved()).isEqualTo(reservedAfterReserve - 1);
         // 해제가 이기면 available 이 1 돌아오고, 확정이 이기면 그대로다
         assertThat(available).isIn(availableAfterReserve, availableAfterReserve + 1);
     }
@@ -275,28 +281,28 @@ class ReserveStockIntegrationTest {
     // 먼저 들어온 A 가 커밋하면 늦은 B 는 processed_message PK 에서 기다렸다가 0건이 되어 건너뛴다
     @Test
     void sameMessageConcurrently_firstCommits_laterWaitsThenSkips() throws Exception {
-        int availableBefore = getStockUseCase.getStock(2L).available();
+        int availableBefore = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
-        ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(2L, 1)));
+        ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(P2, 1)));
 
         raceSameMessage(() -> reserveStockUseCase.reserve(messageId, command), true);
 
-        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(availableBefore - 1);
+        assertThat(getStockUseCase.getStock(P2).available()).isEqualTo(availableBefore - 1);
         assertExactlyOneReply(orderId, StockReserved.TYPE);
     }
 
     // 먼저 들어온 A 가 처리 중 실패해 롤백하면, 기다리던 B 가 기록에 성공해 이어받아 처리한다 (유실 없음)
     @Test
     void sameMessageConcurrently_firstRollsBack_laterTakesOver() throws Exception {
-        int availableBefore = getStockUseCase.getStock(2L).available();
+        int availableBefore = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
-        ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(2L, 1)));
+        ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(P2, 1)));
 
         raceSameMessage(() -> reserveStockUseCase.reserve(messageId, command), false);
 
-        assertThat(getStockUseCase.getStock(2L).available()).isEqualTo(availableBefore - 1);
+        assertThat(getStockUseCase.getStock(P2).available()).isEqualTo(availableBefore - 1);
         assertExactlyOneReply(orderId, StockReserved.TYPE);
     }
 

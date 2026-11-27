@@ -11,11 +11,12 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** cart_items 인메모리 대역 */
 class InMemoryCart implements CartPort {
 
-    final Map<Long, Map<Long, CartItem>> store = new LinkedHashMap<>();
+    final Map<Long, Map<UUID, CartItem>> store = new LinkedHashMap<>();
 
     @Override
     public List<CartItem> findByUserId(UserId userId) {
@@ -24,7 +25,7 @@ class InMemoryCart implements CartPort {
 
     @Override
     public void upsert(UserId userId, CartItem item, Instant now) {
-        Map<Long, CartItem> items = store.computeIfAbsent(userId.value(), k -> new LinkedHashMap<>());
+        Map<UUID, CartItem> items = store.computeIfAbsent(userId.value(), k -> new LinkedHashMap<>());
         CartItem existing = items.get(item.productId().value());
         items.put(item.productId().value(), existing == null ? item
                 : new CartItem(item.productId(), item.quantity(), existing.addedPrice(), existing.addedAt()));

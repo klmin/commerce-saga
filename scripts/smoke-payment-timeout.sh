@@ -15,6 +15,8 @@
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 export MSYS_NO_PATHCONV=1
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
@@ -23,9 +25,10 @@ POINT_URL=${POINT_URL:-http://localhost:8083}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
 USER_ID=${USER_ID:-1}
-PRODUCT_ID=${PRODUCT_ID:-1}
+# 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
+PRODUCT_ID=$(product_id "${PRODUCT_ID:-1}")
 # 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
-UNIT_PRICE=${UNIT_PRICE:-$(case $PRODUCT_ID in 1) echo 39000;; 2) echo 25000;; 3) echo 18000;; 4) echo 12000;; *) echo 45000;; esac)}
+UNIT_PRICE=${UNIT_PRICE:-$(seed_price "$PRODUCT_ID")}
 POINT_AMOUNT=${POINT_AMOUNT:-100}
 SHORT_DELAY_MILLIS=${SHORT_DELAY_MILLIS:-6000}
 LONG_DELAY_MILLIS=${LONG_DELAY_MILLIS:-45000}
@@ -68,7 +71,7 @@ fault() { # mode delayMillis
 trap 'fault APPROVE 0 || true' EXIT
 
 place_order() {
-  local body="{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
+  local body="{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
   curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" \
     | field orderId
 }
@@ -96,11 +99,11 @@ echo "  ok  PG 조회로 승인 확정 → 주문 …${id: -8} COMPLETED"
 expect_eq "결제 상태" APPROVED "$(payment_status "$id")"
 expect_eq "PG 원장 (approved,refunded)" "true,false" "$(ledger "$id")"
 expect_eq "포인트 잔액" $(( points_before - POINT_AMOUNT )) "$(points "$USER_ID")"
-expect_eq "상품 $PRODUCT_ID available" $(( avail_before - 1 )) "$(stock "$PRODUCT_ID" | field available)"
+expect_eq "상품 $(product_label "$PRODUCT_ID") available" $(( avail_before - 1 )) "$(stock "$PRODUCT_ID" | field available)"
 # 판매 확정(OrderCompleted → inventory reserved -1)은 주문 완료 뒤 이벤트로 처리된다. 끝날 때까지 기다려야
 # 2b 가 reserved 기준값을 확정 전 값으로 잡지 않는다
 wait_until "판매 확정 (reserved 원복)" 30 stock_reserved_is "$reserved_before"
-echo "  ok  판매 확정 → 상품 $PRODUCT_ID reserved = $reserved_before"
+echo "  ok  판매 확정 → 상품 $(product_label "$PRODUCT_ID") reserved = $reserved_before"
 
 echo "== 2b. PG 가 Saga 대기 한도보다 늦게 승인 → 결제 취소·보상 → 늦은 승인 자동 환불"
 points_before=$(points "$USER_ID")
@@ -120,7 +123,7 @@ order_json "$id" | field cancelReason | grep -q "^timeout: no reply in PAYING" \
   || { echo "FAIL: cancelReason 이 결제 타임아웃이 아님: $(order_json "$id" | field cancelReason)" >&2; exit 1; }
 saga_json "$id" | grep -q '"event":"PAYMENT_CANCELLED"' || { echo "FAIL: PAYMENT_CANCELLED 기록 없음" >&2; exit 1; }
 expect_eq "포인트 잔액 (환불)" "$points_before" "$(points "$USER_ID")"
-expect_eq "상품 $PRODUCT_ID available (해제)" "$avail_before" "$(stock "$PRODUCT_ID" | field available)"
+expect_eq "상품 $(product_label "$PRODUCT_ID") available (해제)" "$avail_before" "$(stock "$PRODUCT_ID" | field available)"
 wait_until "재고 reserved 원복" 30 stock_reserved_is "$reserved_before"
 expect_eq "취소 직후 결제 상태 (PG 결과 아직 모름)" UNKNOWN "$(payment_status "$id")"
 

@@ -19,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SagaTimeoutServiceTest {
@@ -39,7 +40,7 @@ class SagaTimeoutServiceTest {
 
     private Order place(long pointAmount) {
         return orderService.placeOrder(new PlaceOrderCommand(1L, List.of(
-                new PlaceOrderCommand.Line(10L, 2, 1_000L)), pointAmount)).order();
+                new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), pointAmount)).order();
     }
 
     private void reply(Order order, SagaEventType type) {

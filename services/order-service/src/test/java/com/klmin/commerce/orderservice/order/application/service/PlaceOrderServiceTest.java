@@ -19,7 +19,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -39,14 +41,14 @@ class PlaceOrderServiceTest {
 
     @BeforeEach
     void prices() {
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 1_000L, true));
-        catalog.products.put(11L, new ProductCatalogPort.CatalogProduct(11L, "b", 500L, true));
+        catalog.products.put(pid(10), new ProductCatalogPort.CatalogProduct(pid(10), "a", 1_000L, true));
+        catalog.products.put(pid(11), new ProductCatalogPort.CatalogProduct(pid(11), "b", 500L, true));
     }
 
     private static PlaceOrderCommand command(String key, long price10) {
         return new PlaceOrderCommand(1L, List.of(
-                new PlaceOrderCommand.Line(10L, 2, price10),
-                new PlaceOrderCommand.Line(11L, 1, 500L)), 0L, key);
+                new PlaceOrderCommand.Line(pid(10), 2, price10),
+                new PlaceOrderCommand.Line(pid(11), 1, 500L)), 0L, key);
     }
 
     @Test
@@ -62,7 +64,7 @@ class PlaceOrderServiceTest {
     void fromCart_removesOrderedLinesOnly() {
         java.time.Instant t = Instant.parse("2026-11-25T00:00:00Z");
         var user = com.klmin.commerce.orderservice.order.domain.UserId.of(1L);
-        for (long id : new long[] {10L, 11L, 12L}) {
+        for (UUID id : new UUID[] {pid(10), pid(11), pid(12)}) {
             cart.upsert(user, new com.klmin.commerce.orderservice.order.domain.CartItem(
                     com.klmin.commerce.orderservice.order.domain.ProductId.of(id),
                     com.klmin.commerce.orderservice.order.domain.Quantity.of(1),
@@ -71,7 +73,7 @@ class PlaceOrderServiceTest {
 
         service.placeOrder(new PlaceOrderCommand(1L, command(null, 1_000L).lines(), 0L, null, true));
 
-        assertThat(cart.findByUserId(user)).extracting(i -> i.productId().value()).containsExactly(12L);
+        assertThat(cart.findByUserId(user)).extracting(i -> i.productId().value()).containsExactly(pid(12));
     }
 
     @Test
@@ -79,12 +81,12 @@ class PlaceOrderServiceTest {
         java.time.Instant t = Instant.parse("2026-11-25T00:00:00Z");
         var user = com.klmin.commerce.orderservice.order.domain.UserId.of(1L);
         cart.upsert(user, new com.klmin.commerce.orderservice.order.domain.CartItem(
-                com.klmin.commerce.orderservice.order.domain.ProductId.of(10L),
+                com.klmin.commerce.orderservice.order.domain.ProductId.of(pid(10)),
                 com.klmin.commerce.orderservice.order.domain.Quantity.of(1),
                 com.klmin.commerce.orderservice.order.domain.Money.of(1), t), t);
 
         service.placeOrder(command(null, 1_000L));
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 1_200L, true));
+        catalog.products.put(pid(10), new ProductCatalogPort.CatalogProduct(pid(10), "a", 1_200L, true));
         assertThatThrownBy(() -> service.placeOrder(
                 new PlaceOrderCommand(1L, command(null, 1_000L).lines(), 0L, null, true)))
                 .isInstanceOf(OrderPriceChangedException.class);
@@ -94,12 +96,12 @@ class PlaceOrderServiceTest {
 
     @Test
     void priceChanged_409_withCurrentPrices_andNoOrder() {
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 1_200L, true));
+        catalog.products.put(pid(10), new ProductCatalogPort.CatalogProduct(pid(10), "a", 1_200L, true));
 
         assertThatThrownBy(() -> service.placeOrder(command("k1", 1_000L)))
                 .isInstanceOfSatisfying(OrderPriceChangedException.class, e -> assertThat(e.currentPrices())
-                        .containsExactly(new OrderPriceChangedException.CurrentPrice(10L, 1_200L),
-                                new OrderPriceChangedException.CurrentPrice(11L, 500L)));
+                        .containsExactly(new OrderPriceChangedException.CurrentPrice(pid(10), 1_200L),
+                                new OrderPriceChangedException.CurrentPrice(pid(11), 500L)));
         assertThat(orders.store).isEmpty();
         assertThat(sent.log).isEmpty();
         // 409 는 키를 남기지 않는다 → 같은 키로 새 가격을 보내면 주문된다
@@ -109,7 +111,7 @@ class PlaceOrderServiceTest {
 
     @Test
     void priceDropped_alsoConflicts() {
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 900L, true));
+        catalog.products.put(pid(10), new ProductCatalogPort.CatalogProduct(pid(10), "a", 900L, true));
 
         assertThatThrownBy(() -> service.placeOrder(command(null, 1_000L)))
                 .isInstanceOf(OrderPriceChangedException.class);
@@ -117,11 +119,11 @@ class PlaceOrderServiceTest {
 
     @Test
     void unknownOrStoppedProduct_422() {
-        catalog.products.remove(11L);
+        catalog.products.remove(pid(11));
         assertThatThrownBy(() -> service.placeOrder(command(null, 1_000L)))
-                .isInstanceOf(ProductNotOrderableException.class).hasMessageContaining("11");
+                .isInstanceOf(ProductNotOrderableException.class).hasMessageContaining(pid(11).toString());
 
-        catalog.products.put(11L, new ProductCatalogPort.CatalogProduct(11L, "b", 500L, false));
+        catalog.products.put(pid(11), new ProductCatalogPort.CatalogProduct(pid(11), "b", 500L, false));
         assertThatThrownBy(() -> service.placeOrder(command(null, 1_000L)))
                 .isInstanceOf(ProductNotOrderableException.class);
         assertThat(orders.store).isEmpty();
@@ -142,14 +144,14 @@ class PlaceOrderServiceTest {
         catalog.down = true;
 
         assertThatThrownBy(() -> service.placeOrder(new PlaceOrderCommand(1L,
-                List.of(new PlaceOrderCommand.Line(10L, 0, 1_000L)), 0L, null)))
+                List.of(new PlaceOrderCommand.Line(pid(10), 0, 1_000L)), 0L, null)))
                 .isInstanceOf(DomainValidationException.class);
     }
 
     @Test
     void replay_returnsFirstOrder_evenIfPriceChangedOrCatalogDown() {
         PlaceOrderResult first = service.placeOrder(command("k3", 1_000L));
-        catalog.products.put(10L, new ProductCatalogPort.CatalogProduct(10L, "a", 2_000L, true));
+        catalog.products.put(pid(10), new ProductCatalogPort.CatalogProduct(pid(10), "a", 2_000L, true));
         catalog.down = true;
 
         PlaceOrderResult again = service.placeOrder(command("k3", 1_000L));
@@ -162,11 +164,11 @@ class PlaceOrderServiceTest {
 
     static final class FakeCatalog implements ProductCatalogPort {
 
-        final Map<Long, CatalogProduct> products = new HashMap<>();
+        final Map<UUID, CatalogProduct> products = new HashMap<>();
         boolean down;
 
         @Override
-        public List<CatalogProduct> findByIds(Collection<Long> productIds) {
+        public List<CatalogProduct> findByIds(Collection<UUID> productIds) {
             if (down) {
                 throw new ProductCatalogUnavailableException(new RuntimeException("down"));
             }

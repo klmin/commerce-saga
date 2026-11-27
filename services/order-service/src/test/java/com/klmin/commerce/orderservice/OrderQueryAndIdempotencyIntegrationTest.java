@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -43,7 +44,7 @@ class OrderQueryAndIdempotencyIntegrationTest {
     JdbcClient jdbc;
 
     private static PlaceOrderCommand command(long userId, int quantity, String key) {
-        return new PlaceOrderCommand(userId, List.of(new PlaceOrderCommand.Line(10L, quantity, 1_000L)), 0L, key);
+        return new PlaceOrderCommand(userId, List.of(new PlaceOrderCommand.Line(pid(10), quantity, 1_000L)), 0L, key);
     }
 
     private long count(String table, long userId) {
@@ -105,7 +106,7 @@ class OrderQueryAndIdempotencyIntegrationTest {
 
         assertThat(page1).extracting(OrderSummaryResult::orderId).containsExactly(third, second);
         assertThat(page2).extracting(OrderSummaryResult::orderId).containsExactly(first);
-        assertThat(page1.getFirst().lines()).containsExactly(new OrderSummaryResult.Line(10L, 3, 1_000L));
+        assertThat(page1.getFirst().lines()).containsExactly(new OrderSummaryResult.Line(pid(10), 3, 1_000L));
         assertThat(page1.getFirst().totalAmount()).isEqualTo(3_000L);
         assertThat(page1.getFirst().status()).isNotBlank();
         assertThat(listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(45L, null, 20))).isEmpty();

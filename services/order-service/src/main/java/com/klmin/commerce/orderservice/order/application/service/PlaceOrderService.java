@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -58,13 +59,13 @@ class PlaceOrderService implements PlaceOrderUseCase {
     }
 
     private void verifyPrices(PlaceOrderCommand command) {
-        Set<Long> productIds = command.lines().stream()
+        Set<UUID> productIds = command.lines().stream()
                 .map(PlaceOrderCommand.Line::productId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<Long, CatalogProduct> current = productCatalogPort.findByIds(productIds).stream()
+        Map<UUID, CatalogProduct> current = productCatalogPort.findByIds(productIds).stream()
                 .collect(Collectors.toMap(CatalogProduct::productId, Function.identity(), (a, b) -> a));
 
-        List<Long> notOrderable = productIds.stream()
+        List<UUID> notOrderable = productIds.stream()
                 .filter(id -> !current.containsKey(id) || !current.get(id).onSale())
                 .toList();
         if (!notOrderable.isEmpty()) {

@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 import { api } from "@commerce/bff/api";
+import type { ProductId } from "@/lib/products";
 
 const item = z.object({
-  productId: z.number().int(),
+  productId: z.uuid(),
   name: z.string().nullable(),
   quantity: z.number().int(),
   /** 담을 때 본 가격 */
@@ -30,15 +31,17 @@ export async function getCart(): Promise<Cart> {
 }
 
 /** 담기·수량 바꾸기 (그 수량으로). 판매 중지·없는 상품 ApiError(422), product 장애 503 */
-export async function putCartItem(productId: number, quantity: number): Promise<Cart> {
+export async function putCartItem(productId: ProductId, quantity: number): Promise<Cart> {
   return cart.parse(
-    await api<unknown>(`/api/cart/items/${productId}`, {
+    await api<unknown>(`/api/cart/items/${encodeURIComponent(productId)}`, {
       method: "PUT",
       body: JSON.stringify({ quantity }),
     }),
   );
 }
 
-export async function removeCartItem(productId: number): Promise<Cart> {
-  return cart.parse(await api<unknown>(`/api/cart/items/${productId}`, { method: "DELETE" }));
+export async function removeCartItem(productId: ProductId): Promise<Cart> {
+  return cart.parse(
+    await api<unknown>(`/api/cart/items/${encodeURIComponent(productId)}`, { method: "DELETE" }),
+  );
 }

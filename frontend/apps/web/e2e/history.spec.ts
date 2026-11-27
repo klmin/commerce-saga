@@ -1,10 +1,10 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { signUpFresh } from "./helpers";
+import { SEED_PRODUCT, signUpFresh } from "./helpers";
 
 // 포인트·결제 내역·알림. 주문 Saga 전체 + notification-service 가 떠 있어야 한다
 
-async function order(page: Page, productId: number, points: number) {
+async function order(page: Page, productId: string, points: number) {
   await page.goto(`/orders/new?productId=${productId}`);
   await page.getByLabel("사용할 포인트").fill(String(points));
   await page.getByRole("button", { name: "주문하기" }).click();
@@ -22,7 +22,7 @@ test("가입 축하 지급과 주문 사용이 포인트 내역에, 결제가 �
   await expect(history.first()).toContainText("가입 축하 포인트");
   await expect(history.first()).toContainText("+1,000P");
 
-  await order(page, 2, 300);
+  await order(page, SEED_PRODUCT.mouse, 300);
   await expect(page.getByTestId("saga-state")).toHaveText("완료", { timeout: 20_000 });
 
   await page.goto("/points");
@@ -55,7 +55,7 @@ test("포인트가 모자란 주문은 내역에 '사용 안 됨'으로 남고 �
   page,
 }) => {
   await signUpFresh(page);
-  await order(page, 1, 5000);
+  await order(page, SEED_PRODUCT.keyboard, 5000);
   await expect(page.getByTestId("saga-state")).toHaveText("취소", { timeout: 20_000 });
 
   await page.goto("/points");

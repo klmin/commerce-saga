@@ -1,8 +1,8 @@
-import { productName } from "@/lib/products";
+import { productName, type ProductId } from "@/lib/products";
 
 export function orderTitle(
-  order: { lines: { productId: number }[] },
-  names?: Readonly<Record<number, string>>,
+  order: { lines: { productId: ProductId }[] },
+  names?: Readonly<Record<ProductId, string>>,
 ): string {
   const [first, ...rest] = order.lines;
   if (!first) {

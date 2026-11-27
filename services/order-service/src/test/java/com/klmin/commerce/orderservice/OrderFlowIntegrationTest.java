@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -98,7 +99,7 @@ class OrderFlowIntegrationTest {
     /** 합계 2,000 */
     private Order place(long userId, long pointAmount) {
         return placeOrderUseCase.placeOrder(new PlaceOrderCommand(userId, List.of(
-                new PlaceOrderCommand.Line(10L, 2, 1_000L)), pointAmount)).order();
+                new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), pointAmount)).order();
     }
 
     @Test
@@ -106,7 +107,7 @@ class OrderFlowIntegrationTest {
         Order order = place(1L, 500L);
 
         ReserveStock reserve = expect(order, Topics.INVENTORY_COMMAND, ReserveStock.TYPE, ReserveStock.class);
-        assertThat(reserve.lines()).containsExactly(new ReserveStock.Line(10L, 2));
+        assertThat(reserve.lines()).containsExactly(new ReserveStock.Line(pid(10), 2));
         reply(order, Topics.INVENTORY_REPLY, StockReserved.TYPE, new StockReserved(order.id()));
 
         UsePoint usePoint = expect(order, Topics.POINT_COMMAND, UsePoint.TYPE, UsePoint.class);

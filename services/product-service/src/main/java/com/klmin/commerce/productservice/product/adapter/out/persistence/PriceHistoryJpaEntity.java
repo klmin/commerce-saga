@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /** 가격 변경 이력. INSERT 만 한다 */
 @Entity
@@ -19,7 +20,7 @@ class PriceHistoryJpaEntity {
     private Long id;
 
     @Column(name = "product_id", nullable = false, updatable = false)
-    private long productId;
+    private UUID productId;
 
     @Column(name = "old_price", nullable = false, updatable = false)
     private long oldPrice;
@@ -36,7 +37,7 @@ class PriceHistoryJpaEntity {
     protected PriceHistoryJpaEntity() {
     }
 
-    PriceHistoryJpaEntity(long productId, long oldPrice, long newPrice, long changedBy, Instant changedAt) {
+    PriceHistoryJpaEntity(UUID productId, long oldPrice, long newPrice, long changedBy, Instant changedAt) {
         this.productId = productId;
         this.oldPrice = oldPrice;
         this.newPrice = newPrice;

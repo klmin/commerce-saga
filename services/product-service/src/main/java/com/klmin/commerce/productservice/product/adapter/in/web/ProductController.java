@@ -4,7 +4,7 @@ import com.klmin.commerce.productservice.product.application.port.in.GetProductU
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 공개 상품 조회 (로그인 없이). 화면 목록·상세와 order-service 의 가격 확인(ids)이 쓴다 (ADR 0016).
@@ -36,15 +37,15 @@ class ProductController {
         return ProductPageResponse.from(getProductUseCase.list(new ListProductsQuery(page, size, false)));
     }
 
-    /** 여러 상품 한 번에 (?ids=1,2,3). 판매 중지 상품도 onSale=false 로 돌려준다. 없는 id 는 빠진다 */
+    /** 여러 상품 한 번에 (?ids=uuid1,uuid2). 판매 중지 상품도 onSale=false 로 돌려준다. 없는 id 는 빠진다 */
     @GetMapping(params = "ids")
     ProductListResponse findByIds(
-            @RequestParam @Size(min = 1, max = GetProductUseCase.MAX_IDS) List<@Positive Long> ids) {
+            @RequestParam @Size(min = 1, max = GetProductUseCase.MAX_IDS) List<@NotNull UUID> ids) {
         return new ProductListResponse(getProductUseCase.findByIds(ids).stream().map(ProductResponse::from).toList());
     }
 
     @GetMapping("/{productId}")
-    ProductResponse get(@PathVariable @Positive long productId) {
+    ProductResponse get(@PathVariable UUID productId) {
         return ProductResponse.from(getProductUseCase.get(productId));
     }
 }

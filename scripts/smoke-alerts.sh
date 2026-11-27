@@ -17,6 +17,8 @@
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
+source "$(dirname "$0")/lib/products.sh"
 export MSYS_NO_PATHCONV=1
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
@@ -97,7 +99,7 @@ give_up_query='sum(commerce_saga_timeout_give_ups_total)'
 give_ups_before=$(metric "$give_up_query")
 fault DELAY 45000
 id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
-  -d '{"lines":[{"productId":1,"quantity":1,"unitPrice":39000}],"pointAmount":100}' \
+  -d "{\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":100}" \
   | sed -nE 's/.*"orderId":"([^"]+)".*/\1/p')
 echo "  주문 …${id: -8}"
 payment_status() { curl -s "$PAYMENT_URL/payments/orders/$id" -H "$(auth $USER_ID)" | sed -nE 's/.*"status":"([A-Z]+)".*/\1/p'; }

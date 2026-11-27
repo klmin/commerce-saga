@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -39,7 +40,7 @@ class OrderSagaControllerTest {
     @Test
     void getSaga_returnsStateAndTimeline() throws Exception {
         Instant t0 = Instant.parse("2026-11-22T00:00:00Z");
-        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(1L, 1, 1_000L)), Points.ZERO, t0);
+        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(pid(1), 1, 1_000L)), Points.ZERO, t0);
         OrderSaga saga = OrderSaga.start(order, t0);
         saga.handle(SagaEventType.STOCK_RESERVED, null, t0.plusSeconds(1));
         saga.handle(SagaEventType.PAYMENT_FAILED, "declined", t0.plusSeconds(2));

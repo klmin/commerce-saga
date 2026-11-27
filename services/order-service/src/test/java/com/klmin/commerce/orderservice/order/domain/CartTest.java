@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -18,8 +19,8 @@ class CartTest {
     void put_newItem_keepsSeenPrice_andChangingQuantityKeepsIt() {
         Cart cart = Cart.of(UserId.of(1), List.of());
 
-        cart.put(ProductId.of(1), Quantity.of(1), Money.of(39_000), T0);
-        CartItem changed = cart.put(ProductId.of(1), Quantity.of(3), Money.of(42_000), T0.plusSeconds(60));
+        cart.put(ProductId.of(pid(1)), Quantity.of(1), Money.of(39_000), T0);
+        CartItem changed = cart.put(ProductId.of(pid(1)), Quantity.of(3), Money.of(42_000), T0.plusSeconds(60));
 
         assertThat(changed.quantity()).isEqualTo(Quantity.of(3));
         assertThat(changed.addedPrice()).isEqualTo(Money.of(39_000));
@@ -31,19 +32,19 @@ class CartTest {
     void put_rejectsOverMaxItems_butAllowsChangingExisting() {
         List<CartItem> full = new ArrayList<>();
         for (int i = 1; i <= Cart.MAX_ITEMS; i++) {
-            full.add(new CartItem(ProductId.of(i), Quantity.of(1), Money.of(1), T0));
+            full.add(new CartItem(ProductId.of(pid(i)), Quantity.of(1), Money.of(1), T0));
         }
         Cart cart = Cart.of(UserId.of(1), full);
 
-        assertThatThrownBy(() -> cart.put(ProductId.of(999), Quantity.of(1), Money.of(1), T0))
+        assertThatThrownBy(() -> cart.put(ProductId.of(pid(999)), Quantity.of(1), Money.of(1), T0))
                 .isInstanceOf(DomainValidationException.class);
-        assertThat(cart.put(ProductId.of(1), Quantity.of(2), Money.of(1), T0).quantity().value()).isEqualTo(2);
+        assertThat(cart.put(ProductId.of(pid(1)), Quantity.of(2), Money.of(1), T0).quantity().value()).isEqualTo(2);
     }
 
     @Test
     void put_rejectsTooManyQuantity() {
         assertThatThrownBy(() -> Cart.of(UserId.of(1), List.of())
-                .put(ProductId.of(1), Quantity.of(OrderLine.MAX_QUANTITY + 1), Money.of(1), T0))
+                .put(ProductId.of(pid(1)), Quantity.of(OrderLine.MAX_QUANTITY + 1), Money.of(1), T0))
                 .isInstanceOf(DomainValidationException.class);
     }
 }

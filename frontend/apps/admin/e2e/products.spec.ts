@@ -1,8 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { login } from "./helpers";
+import { login, SEED_PRODUCT } from "./helpers";
 
-// 관리자 상품 관리·관리 이력 (후속 4-3). 시드 상품(1~5)은 다른 시나리오가 쓰므로 새 상품을 등록해 바꾼다.
+// 관리자 상품 관리·관리 이력 (후속 4-3). 시드 상품 5개(SEED_PRODUCT)는 다른 시나리오가 쓰므로 새 상품을 등록해 바꾼다.
 // 가격은 검색 시나리오의 가격 범위(15,000~30,000) 밖으로 둔다
 const history = (page: Page) => page.getByRole("list", { name: "관리 이력" }).locator("> li");
 
@@ -68,6 +68,6 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
 });
 
 test("관리자가 아니면 상품 관리 화면을 볼 수 없다", async ({ page }) => {
-  await login(page, "user1", "/products/1");
+  await login(page, "user1", `/products/${SEED_PRODUCT.keyboard}`);
   await expect(page.getByRole("heading", { name: "관리자만 볼 수 있는 화면입니다" })).toBeVisible();
 });

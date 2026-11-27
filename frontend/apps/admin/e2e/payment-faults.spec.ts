@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { login, WEB_URL } from "./helpers";
+import { login, SEED_PRODUCT, WEB_URL } from "./helpers";
 
 // 결제 장애 주입은 모든 주문에 걸리므로 끝에 반드시 정상 승인으로 되돌린다
 
@@ -38,7 +38,7 @@ test("관리자가 결제 거절을 주입하면 사용자 주문이 결제 단�
       await expect(user.getByText("1,000P", { exact: true })).toBeVisible({ timeout: 1_000 });
     }).toPass({ timeout: 20_000 });
 
-    await user.goto("/orders/new?productId=2");
+    await user.goto(`/orders/new?productId=${SEED_PRODUCT.mouse}`);
     await user.getByLabel("사용할 포인트").fill("300");
     await user.getByRole("button", { name: "주문하기" }).click();
     await expect(user.getByTestId("saga-state")).toHaveText("취소", { timeout: 20_000 });

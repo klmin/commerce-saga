@@ -14,15 +14,18 @@
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 TEMPO_URL=${TEMPO_URL:-http://localhost:3210}
 LOKI_URL=${LOKI_URL:-http://localhost:3110}
 USER_ID=${USER_ID:-1}
-PRODUCT_ID=${PRODUCT_ID:-1}
+# 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
+PRODUCT_ID=$(product_id "${PRODUCT_ID:-1}")
 # 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
-UNIT_PRICE=${UNIT_PRICE:-$(case $PRODUCT_ID in 1) echo 39000;; 2) echo 25000;; 3) echo 18000;; 4) echo 12000;; *) echo 45000;; esac)}
+UNIT_PRICE=${UNIT_PRICE:-$(seed_price "$PRODUCT_ID")}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
@@ -49,7 +52,7 @@ trap 'fault APPROVE || true' EXIT
 place_order() { # trace-id
   curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
     -H "traceparent: 00-$1-$(hex 8)-01" \
-    -d "{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":100}" \
+    -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":100}" \
     | field orderId
 }
 

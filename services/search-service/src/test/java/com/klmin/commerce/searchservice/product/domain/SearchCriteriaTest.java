@@ -3,10 +3,14 @@ package com.klmin.commerce.searchservice.product.domain;
 import com.klmin.commerce.searchservice.common.error.DomainValidationException;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SearchCriteriaTest {
+
+    private static final UUID ID = UUID.fromString("01900000-0000-7000-8000-000000000001");
 
     @Test
     void blankKeywordMeansAll_andDefaultsToRelevance() {
@@ -55,10 +59,10 @@ class SearchCriteriaTest {
 
     @Test
     void searchableProductRules() {
-        assertThatThrownBy(() -> new SearchableProduct(0, "a", "", 1, true, java.time.Instant.EPOCH))
+        assertThatThrownBy(() -> new SearchableProduct(null, "a", "", 1, true, java.time.Instant.EPOCH))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> new SearchableProduct(1, " ", "", 1, true, java.time.Instant.EPOCH))
+        assertThatThrownBy(() -> new SearchableProduct(ID, " ", "", 1, true, java.time.Instant.EPOCH))
                 .isInstanceOf(DomainValidationException.class);
-        assertThat(new SearchableProduct(1, "a", null, 1, true, java.time.Instant.EPOCH).description()).isEmpty();
+        assertThat(new SearchableProduct(ID, "a", null, 1, true, java.time.Instant.EPOCH).description()).isEmpty();
     }
 }

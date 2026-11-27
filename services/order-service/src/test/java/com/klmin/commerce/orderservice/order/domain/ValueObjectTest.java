@@ -36,10 +36,10 @@ class ValueObjectTest {
     }
 
     @Test
-    void quantityAndIds_mustBePositive() {
+    void quantityAndUserId_mustBePositive_productIdNotNull() {
         assertThatThrownBy(() -> Quantity.of(0)).isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> UserId.of(0L)).isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> ProductId.of(-1L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> ProductId.of(null)).isInstanceOf(DomainValidationException.class);
         assertThat(UserId.of(7L)).isEqualTo(UserId.of(7L));
     }
 }

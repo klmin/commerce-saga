@@ -12,12 +12,15 @@
 # 회로를 여는 동안 만든 UNKNOWN 결제는 보정(ADR 0007)이 PG 조회로 확정한다(이 스크립트는 기다리지 않음)
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 USER_ID=${USER_ID:-4}
-PRODUCT_ID=${PRODUCT_ID:-2}
-UNIT_PRICE=${UNIT_PRICE:-25000}
+# 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
+PRODUCT_ID=$(product_id "${PRODUCT_ID:-2}")
+UNIT_PRICE=${UNIT_PRICE:-$(seed_price "$PRODUCT_ID")}
 MIN_CALLS=${MIN_CALLS:-10}
 OPEN_WAIT_SECONDS=${OPEN_WAIT_SECONDS:-5}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
@@ -34,7 +37,7 @@ circuit() { # 0 닫힘, 1 열림, 2 반열림
 }
 place_order() {
   curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
-    -d "{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":0}" | field orderId
+    -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":0}" | field orderId
 }
 order_status() { curl -sf "$ORDER_URL/orders/$1" -H "$(auth $USER_ID)" | field status; }
 wait_until() { # description seconds command...

@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_APPROVED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_FAILED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.POINT_REFUNDED;
@@ -24,7 +25,7 @@ class OrderSagaTest {
 
     /** 합계 10,000 */
     private static OrderSaga start(long pointAmount) {
-        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(10L, 2, 5_000L)),
+        Order order = Order.place(UUID.randomUUID(), UserId.of(1L), List.of(OrderLine.of(pid(10), 2, 5_000L)),
                 Points.of(pointAmount), T0);
         return OrderSaga.start(order, T0);
     }

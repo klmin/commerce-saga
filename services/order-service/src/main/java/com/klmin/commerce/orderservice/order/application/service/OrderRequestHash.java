@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 /**
  * 같은 Idempotency-Key 로 온 요청이 "같은 주문"인지 비교하는 해시 (SHA-256 hex).
- * 사용자·키는 이미 같으므로 주문 내용(줄, 사용 포인트)만 넣는다. 줄 순서는 상품 id 로 정렬해 무시한다.
+ * 사용자·키는 이미 같으므로 주문 내용(줄, 사용 포인트)만 넣는다. 줄 순서는 상품 id(UUID 소문자 문자열) 로 정렬해 무시한다.
  */
 final class OrderRequestHash {
 
@@ -20,7 +20,7 @@ final class OrderRequestHash {
 
     static String of(PlaceOrderCommand command) {
         String canonical = command.lines().stream()
-                .sorted(Comparator.comparingLong(PlaceOrderCommand.Line::productId))
+                .sorted(Comparator.comparing((PlaceOrderCommand.Line l) -> l.productId().toString()))
                 .map(l -> l.productId() + ":" + l.quantity() + ":" + l.unitPrice())
                 .collect(Collectors.joining(";")) + "|point=" + command.pointAmount();
         try {

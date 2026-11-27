@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,6 +50,7 @@ class ProductServiceTest {
     void register_recordsAuditWithoutBefore() {
         ProductResult created = service.register(new RegisterProductCommand("키보드", "무선", 39_000, ADMIN));
 
+        assertThat(created.id().version()).as("UUIDv7").isEqualTo(7);
         assertThat(products.audit).singleElement().satisfies(a -> {
             assertThat(a.productId().value()).isEqualTo(created.id());
             assertThat(a.action()).isEqualTo(ProductAction.REGISTERED);
@@ -120,10 +122,11 @@ class ProductServiceTest {
 
     @Test
     void changePrice_unknownProduct_404() {
-        assertThatThrownBy(() -> service.changePrice(new ChangePriceCommand(99, 1, ADMIN)))
+        assertThatThrownBy(() -> service.changePrice(new ChangePriceCommand(
+                UUID.fromString("01900000-0000-7000-8000-000000000099"), 1, ADMIN)))
                 .isInstanceOf(ProductNotFoundException.class);
-        assertThatThrownBy(() -> service.changePrice(new ChangePriceCommand(0, 1, ADMIN)))
-                .isInstanceOf(ProductNotFoundException.class);
+        assertThatThrownBy(() -> service.changePrice(new ChangePriceCommand(null, 1, ADMIN)))
+                .isInstanceOf(DomainValidationException.class);
     }
 
     @Test
@@ -142,18 +145,19 @@ class ProductServiceTest {
 
     static final class InMemoryProducts implements ProductPort, PriceHistoryPort, ProductAuditPort {
 
-        final Map<Long, Product> store = new HashMap<>();
+        final Map<UUID, Product> store = new HashMap<>();
         final List<PriceChange> history = new ArrayList<>();
         final List<ProductChange> audit = new ArrayList<>();
-        long seq = 1000;
+        @Override
+        public Product insert(Product product) {
+            store.put(product.id().value(), product);
+            return product;
+        }
 
         @Override
         public Product save(Product product) {
-            Product saved = product.id() != null ? product : Product.restore(ProductId.of(seq++), product.name(),
-                    product.description(), product.price(), product.onSale(), product.createdAt(),
-                    product.updatedAt());
-            store.put(saved.id().value(), saved);
-            return saved;
+            store.put(product.id().value(), product);
+            return product;
         }
 
         @Override
