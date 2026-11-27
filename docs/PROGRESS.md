@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-27 (후속 6 id UUIDv7 전환 시작: ADR 0018)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)): 5-0 ADR 0017(PR #106) → 5-1 SAS(PR #107) → 5-2 Gateway BFF(PR #108) → 5-3a 사용자 화면 SPA(PR #110) → 5-5 관리자 화면 SPA(PR #114) → 5-3b Helm·Next 제거(PR #115) → 5-3d compose 전체 실행(PR #117) → 5-3c 기존 `/auth` API 제거(PR #118) → 5-4 인증 화면 SPA(PR #119) → 5-6 로그인 기기·시나리오 19(PR #120)로 **후속 5 완료, 태그 `v0.7-sso-bff`**. 다음은 **후속 6 id UUIDv7 전환**([ADR 0018](adr/0018-uuidv7-ids.md), 2026-11-27 사용자 결정, 출시 전 일괄 변경): 6-0 ADR → 6-1 productId → 6-2 userId·알림 id → 6-3 AGENTS 예외 제거·태그. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-27 (후속 6 완료·태그 `v0.8-uuidv7`: 3절 PR 표)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)): 5-0 ADR 0017(PR #106) → 5-1 SAS(PR #107) → 5-2 Gateway BFF(PR #108) → 5-3a 사용자 화면 SPA(PR #110) → 5-5 관리자 화면 SPA(PR #114) → 5-3b Helm·Next 제거(PR #115) → 5-3d compose 전체 실행(PR #117) → 5-3c 기존 `/auth` API 제거(PR #118) → 5-4 인증 화면 SPA(PR #119) → 5-6 로그인 기기·시나리오 19(PR #120)로 **후속 5 완료, 태그 `v0.7-sso-bff`**. **후속 6 id UUIDv7 전환**([ADR 0018](adr/0018-uuidv7-ids.md), 2026-11-27 사용자 결정, 출시 전 일괄 변경): 6-0 ADR(PR #123) → 6-1 productId(PR #124) → 6-2 userId·알림 id(PR #125) → 6-3 AGENTS 예외 제거·정리로 **후속 6 완료, 태그 `v0.8-uuidv7`**. 기존 환경은 DB·Kafka·Redis·Elasticsearch 를 지우고 새로 만든다. 다음 작업은 미정(사용자와 정한다). 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -90,6 +90,11 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| #125 | 후속 6-2 사용자·알림 id UUIDv7: auth 가 가입 때 UUIDv7, 토큰 `sub` = userId UUID(소문자 표준 표기), 메시지 계약 6종의 `userId`, order·point·payment·notification `user_id`, product `changed_by`, 기기 기록 `auth:device:<uuid>`, 알림 id·커서 `before` UUID. 서비스는 `sub` 가 UUID 가 아니면 401(`OAuth2TokenValidator`, 전에는 500). 시드 사용자 고정 UUID(`…8001-…`), auth V3(id 1000 부터) 삭제. 화면 id 표시는 UUID 끝 8자 |
+| #124 | 후속 6-1 상품 id UUIDv7: product 가 등록 때 UUIDv7, inventory·order·search `product_id`, `ReserveStock.Line`, CDC 색인(ES `id` keyword), 시드 상품 고정 UUID(`…8000-…`, `scripts/lib/products.sh`). e2e 가입 화면 입력 경쟁 수정 |
+| #123 | 후속 6-0 [ADR 0018](adr/0018-uuidv7-ids.md): 밖으로 나가는 id 는 UUIDv7(앱이 저장 전 생성), 내부 추가 전용 로그는 bigint. 출시 전 일괄 변경(마이그레이션·계약 제자리 수정, AGENTS 일시 예외) |
+| #122 | 문서: 후속 5 완료 정리(PROGRESS PR 표, 태그 `v0.7-sso-bff`) |
+| #121 | 대시보드 오류 응답 비율이 데이터 없을 때 0 으로 보이게 |
 | #120 | 후속 5-6 로그인 기기: 기기 = SSO 세션(브라우저). 로그인 때 기기 기록(Redis `auth:device:<userId>`, 세션 속성에 기기 id), SAS 인가 기록에 `device_id` 를 붙여 기기별로 refresh token 회수. 인증 화면 `/devices`(목록·기기 하나·다른 기기 모두 로그아웃, `GET/DELETE /sessions`, CSRF), 남의 기기 404·지금 기기 400·미로그인 401. OIDC 로그아웃은 이 기기만. 삭제 순서 인가 기록 → SSO 세션 → 기기 기록(실패해도 다시 지울 수 있게). `/api/me` 에 `devicesUrl`, 사용자 화면 "로그인 기기" 링크. 시나리오 19 |
 | #98 | 대시보드에 Saga 완료·HTTP·JVM·컨테이너·디스크 패널 추가, 음수 consumer lag 수정 |
 | #119 | 후속 5-4 인증 화면 SPA(`frontend/apps/auth`, 로그인·가입, 로컬 5175 가 SAS 경로를 프록시): auth-service 임시 화면 제거, 로컬 `AUTH_ISSUER` 기본값 5175, Helm·Caddy·compose 에 인증 화면, 스크립트는 `<base>/csrf` JSON 으로 CSRF 토큰 |
@@ -287,7 +292,7 @@ PR 두 개로 나눴다. 3-D-1(멈춘 Saga 정리, 시나리오 4, ADR 0007, PR 
 - rate limit: `/api/**`는 사용자(sub)별 초당 20·버스트 40, `/auth/**`는 IP별 초당 5·버스트 20(`GATEWAY_*` 환경 변수). IP는 TCP 주소(XFF 안 믿음)
 - 서비스 다섯 개 모두 resource server(같은 JWKS·issuer, `roles` → `ROLE_*`). `@CurrentUserId long userId` = `@AuthenticationPrincipal`의 `sub`. `UserIdHeader` 삭제. 서비스마다 `SecurityConfig`(actuator만 열고, inventory는 `GET /stocks/**`도 열고, `/admin/**` = ADMIN). 공유 모듈로 빼지 않음(서비스 간 모듈 공유 금지)
 - CSRF: 끄지 않고 "쿠키가 실린 상태 변경 요청"에만 검사(Gateway는 `/auth/**` 제외, auth-service가 직접 막음). CodeQL의 CSRF 경고를 피하려는 것이 아니라 Bearer 전용 API의 실제 위협 모델
-- 개발용 시드 사용자: auth-service `db/dev-seed/R__dev_seed_users.sql`(repeatable). `user1`~`user4` = id 1~4(포인트 시드와 같은 id), `admin` = 100, 비밀번호 `local-dev-pass`. 가입 id는 1000부터. 운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`. 로컬 `auth_db`에 A-1 때 가입한 사용자가 있으면 id가 겹쳐 시드가 건너뛰어지므로 `drop database auth_db` 후 다시 띄운다
+- 개발용 시드 사용자: auth-service `db/dev-seed/R__dev_seed_users.sql`(repeatable). `user1`~`user4` = id 1~4(포인트 시드와 같은 id), `admin` = 100, 비밀번호 `local-dev-pass`. 가입 id는 1000부터. 운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration`. 로컬 `auth_db`에 A-1 때 가입한 사용자가 있으면 id가 겹쳐 시드가 건너뛰어지므로 `drop database auth_db` 후 다시 띄운다 (ADR 0018 이후: id 는 고정 UUID `01900000-0000-7000-8001-…`, 가입 id 는 UUIDv7. V3 는 지웠다)
 - 스크립트: `scripts/lib/auth.sh`(`-H "$(auth 1)"`, 관리자 `auth 100`, 토큰 10분 파일 캐시 `TOKEN_CACHE_DIR`). 기존 시나리오 스크립트 9개를 모두 토큰으로 바꿨다(서비스 URL 직접 호출은 그대로). auth-service를 다시 띄우면(임시 키) 캐시를 지운다
 - 시나리오 9f~9i `scripts/smoke-gateway.sh`(CI 두 모드, smoke-saga 다음, `GATEWAY_USER_RATE=5 GATEWAY_USER_BURST=10`). 로컬 Debezium 모드에서 smoke-gateway·smoke-saga·smoke-auth·smoke-tracing PASS
 - 테스트: `GatewayRoutingTest` 6개(JDK HttpServer가 서비스·JWKS 흉내, Redis Testcontainers), 서비스 `@WebMvcTest`는 `@Import(SecurityConfig)` + `jwt()`로 바꾸고 토큰 없으면 401, 결제 장애 주입 ADMIN 확인 추가
@@ -677,7 +682,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - product-service 가 멈추면 새 주문이 503 (진행 중인 Saga 는 영향 없음, ADR 0016)
 - PG 장애 동안 회로가 열리기 전(최소 10건)의 결제는 지금처럼 타임아웃 → UNKNOWN → 보정. 회로 상태는 인스턴스마다 따로(③, 시나리오 15)
 - 주문 취소 API 없음 (Saga 가 끝나야 결과가 난다) → 4-4절 "정하고 미룬 것"
-- 관리자가 새로 등록한 상품(id 1000~)은 inventory 에 재고 행이 없어 주문하면 재고 예약 실패 → 주문 취소. 재고 등록 API 는 아직 없다(재고는 inventory 소유, 상품 등록 이벤트로 만들지·관리자 API 로 넣을지는 ④ 에서 정한다)
+- 관리자가 새로 등록한 상품(UUIDv7 id)은 inventory 에 재고 행이 없어 주문하면 재고 예약 실패 → 주문 취소. 재고 등록 API 는 아직 없다(재고는 inventory 소유, 상품 등록 이벤트로 만들지·관리자 API 로 넣을지는 ④ 에서 정한다)
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 `ReplicationSlotLag`. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)
 - 결제 장애 주입 API 는 ADMIN 역할만 (Gateway `/api/admin/payment-faults` + payment-service `/admin/**`, A-2)
