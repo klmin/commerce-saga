@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** 보존 기간(30일·키 7일)이 지난 멱등 기록만 지운다 (PROGRESS 4-4절 ②) */
@@ -55,9 +56,9 @@ class IdempotencyCleanupIntegrationTest {
         String oldKey = "cleanup-old-" + UUID.randomUUID();
         String newKey = "cleanup-new-" + UUID.randomUUID();
         UUID oldOrder = placeOrder.placeOrder(new PlaceOrderCommand(80_001L,
-                List.of(new PlaceOrderCommand.Line(10L, 1, StubProductCatalogConfiguration.PRICE)), 0L, oldKey)).order().id();
+                List.of(new PlaceOrderCommand.Line(pid(10), 1, StubProductCatalogConfiguration.PRICE)), 0L, oldKey)).order().id();
         placeOrder.placeOrder(new PlaceOrderCommand(80_001L,
-                List.of(new PlaceOrderCommand.Line(10L, 1, StubProductCatalogConfiguration.PRICE)), 0L, newKey));
+                List.of(new PlaceOrderCommand.Line(pid(10), 1, StubProductCatalogConfiguration.PRICE)), 0L, newKey));
         jdbc.update("update order_idempotency_keys set created_at = ? where idempotency_key = ?",
                 Timestamp.from(now.minus(Duration.ofDays(8))), oldKey);
 

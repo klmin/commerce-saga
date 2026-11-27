@@ -11,16 +11,17 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, Long> {
+interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, UUID> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from ProductJpaEntity p where p.id = :id")
-    Optional<ProductJpaEntity> findByIdForUpdate(@Param("id") long id);
+    Optional<ProductJpaEntity> findByIdForUpdate(@Param("id") UUID id);
 
     Slice<ProductJpaEntity> findByOnSaleTrueOrderByIdAsc(Pageable pageable);
 
     Slice<ProductJpaEntity> findAllByOrderByIdAsc(Pageable pageable);
 
-    List<ProductJpaEntity> findByIdInOrderByIdAsc(Collection<Long> ids);
+    List<ProductJpaEntity> findByIdInOrderByIdAsc(Collection<UUID> ids);
 }

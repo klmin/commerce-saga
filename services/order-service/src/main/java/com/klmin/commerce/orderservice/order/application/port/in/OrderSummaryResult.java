@@ -23,6 +23,6 @@ public record OrderSummaryResult(
         return totalAmount - pointAmount;
     }
 
-    public record Line(long productId, int quantity, long unitPrice) {
+    public record Line(UUID productId, int quantity, long unitPrice) {
     }
 }

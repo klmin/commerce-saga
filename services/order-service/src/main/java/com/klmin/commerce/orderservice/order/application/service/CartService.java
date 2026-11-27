@@ -21,6 +21,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -49,12 +50,12 @@ class CartService implements CartUseCase {
     }
 
     @Override
-    public CartResult put(long userId, long productId, int quantity) {
+    public CartResult put(long userId, UUID productId, int quantity) {
         UserId user = UserId.of(userId);
         ProductId product = ProductId.of(productId);
         Quantity qty = Quantity.of(quantity);
         CatalogProduct current = productCatalogPort.findByIds(List.of(productId)).stream()
-                .filter(p -> p.productId() == productId && p.onSale())
+                .filter(p -> p.productId().equals(productId) && p.onSale())
                 .findFirst()
                 .orElseThrow(() -> new ProductNotOrderableException(List.of(productId)));
         Cart cart = Cart.of(user, cartPort.findByUserId(user));
@@ -65,7 +66,7 @@ class CartService implements CartUseCase {
     }
 
     @Override
-    public CartResult remove(long userId, long productId) {
+    public CartResult remove(long userId, UUID productId) {
         UserId user = UserId.of(userId);
         cartPort.delete(user, ProductId.of(productId));
         return get(userId);
@@ -75,7 +76,7 @@ class CartService implements CartUseCase {
         if (items.isEmpty()) {
             return new CartResult(List.of(), true);
         }
-        Map<Long, CatalogProduct> current;
+        Map<UUID, CatalogProduct> current;
         try {
             current = productCatalogPort.findByIds(items.stream().map(i -> i.productId().value()).toList()).stream()
                     .collect(Collectors.toMap(CatalogProduct::productId, Function.identity(), (a, b) -> a));

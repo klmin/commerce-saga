@@ -2,16 +2,18 @@ package com.klmin.commerce.productservice.product.domain;
 
 import com.klmin.commerce.productservice.common.error.DomainValidationException;
 
-/** 상품 id. DB 가 매긴다(1~5 는 시드, inventory 재고 시드와 같은 id) */
-public record ProductId(long value) {
+import java.util.UUID;
+
+/** 상품 id (UUIDv7). 등록할 때 앱이 만든다(시드 5개는 inventory 재고 시드와 같은 고정 UUID, ADR 0018) */
+public record ProductId(UUID value) {
 
     public ProductId {
-        if (value <= 0) {
-            throw new DomainValidationException("productId must be positive: " + value);
+        if (value == null) {
+            throw new DomainValidationException("productId must not be null");
         }
     }
 
-    public static ProductId of(long value) {
+    public static ProductId of(UUID value) {
         return new ProductId(value);
     }
 }

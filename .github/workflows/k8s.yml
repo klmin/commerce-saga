@@ -294,7 +294,7 @@ jobs:
           for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost/ && break; sleep 1; done
           # 사용자 화면 /, 관리자 화면 /admin/ (앞 경로를 떼고 넘김, <base href> 는 /admin/), /admin → /admin/
           curl -sf http://localhost/orders/1 | grep -q '<base href="/" />'
-          curl -sf http://localhost/admin/products/1 | grep -q '<base href="/admin/" />'
+          curl -sf http://localhost/admin/products/01900000-0000-7000-8000-000000000001 | grep -q '<base href="/admin/" />'
           [ "$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost/admin)" = http://localhost/admin/ ]
           # 인증 화면 /auth/ (로그인·가입 화면, <base href> 는 /auth/), /auth → /auth/
           curl -sf http://localhost/auth/signin | grep -q '<base href="/auth/" />'

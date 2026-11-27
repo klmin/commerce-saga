@@ -17,6 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,9 +32,14 @@ class ElasticsearchProductAdapterTest {
 
     private ElasticsearchProductAdapter adapter;
 
-    private static SearchableProduct product(long id, String name, String description, long price, boolean onSale,
+    // 상품 n 의 고정 UUID (1~5 는 시드 상품과 같은 값)
+    private static UUID id(long n) {
+        return UUID.fromString(String.format("01900000-0000-7000-8000-%012d", n));
+    }
+
+    private static SearchableProduct product(long n, String name, String description, long price, boolean onSale,
                                              String updatedAt) {
-        return new SearchableProduct(id, name, description, price, onSale, Instant.parse(updatedAt));
+        return new SearchableProduct(id(n), name, description, price, onSale, Instant.parse(updatedAt));
     }
 
     private ElasticsearchProductAdapter adapter(String uri, String index) {
@@ -75,8 +81,8 @@ class ElasticsearchProductAdapterTest {
         assertThat(adapter.search(new SearchCriteria("버전 시험", null, null, true, null, 0, 20)).items())
                 .singleElement().satisfies(p -> assertThat(p.price()).isEqualTo(2_000));
 
-        assertThat(adapter.delete(9, 50L)).isFalse(); // 옛 삭제는 무시
-        assertThat(adapter.delete(9, 102L)).isTrue();
+        assertThat(adapter.delete(id(9), 50L)).isFalse(); // 옛 삭제는 무시
+        assertThat(adapter.delete(id(9), 102L)).isTrue();
         // 삭제 뒤에 재처리된 옛 행(DLT 재처리 등)은 삭제 표시 문서의 버전에 막혀 되살아나지 않는다
         assertThat(adapter.save(product(9, "버전 시험", "", 2_000, true, "2026-11-25T00:00:01Z"), 101)).isFalse();
         refresh("versions");
@@ -84,34 +90,34 @@ class ElasticsearchProductAdapterTest {
 
         // 버전 없는 tombstone 은 영구히 막는다
         assertThat(adapter.save(product(10, "영구 삭제", "", 1_000, true, "2026-11-25T00:00:00Z"), 5)).isTrue();
-        assertThat(adapter.delete(10, null)).isTrue();
+        assertThat(adapter.delete(id(10), null)).isTrue();
         assertThat(adapter.save(product(10, "영구 삭제", "", 1_000, true, "2026-11-25T00:00:00Z"), 999_999_999L)).isFalse();
     }
 
     @Test
     void koreanPartialMatch_onNameAndDescription() {
-        assertThat(search("키보", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(1L);
+        assertThat(search("키보", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(id(1));
         assertThat(search("무선", null, null, true, null).items()).extracting(SearchableProduct::id)
-                .containsExactlyInAnyOrder(1L, 2L);
-        assertThat(search("usb", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(3L);
+                .containsExactlyInAnyOrder(id(1), id(2));
+        assertThat(search("usb", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(id(3));
         // 설명에서도 찾는다
-        assertThat(search("재고", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(4L);
+        assertThat(search("재고", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(id(4));
         // 모든 글자 조각이 있어야 한다 (키 + 캡 → 키캡만, 키보드는 아님)
-        assertThat(search("키캡", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(4L);
+        assertThat(search("키캡", null, null, true, null).items()).extracting(SearchableProduct::id).containsExactly(id(4));
     }
 
     @Test
     void onSaleFilter_priceRange_andSorts() {
         assertThat(search(null, null, null, true, null).total()).isEqualTo(4);
         assertThat(search("모니터", null, null, true, null).items()).isEmpty();
-        assertThat(search("모니터", null, null, false, null).items()).extracting(SearchableProduct::id).containsExactly(5L);
+        assertThat(search("모니터", null, null, false, null).items()).extracting(SearchableProduct::id).containsExactly(id(5));
 
         assertThat(search(null, 15_000L, 30_000L, true, SearchSort.PRICE_ASC).items())
-                .extracting(SearchableProduct::id).containsExactly(3L, 2L);
+                .extracting(SearchableProduct::id).containsExactly(id(3), id(2));
         assertThat(search(null, null, null, true, SearchSort.PRICE_DESC).items())
-                .extracting(SearchableProduct::id).startsWith(1L, 2L);
+                .extracting(SearchableProduct::id).startsWith(id(1), id(2));
         assertThat(search(null, null, null, true, SearchSort.NEWEST).items())
-                .extracting(SearchableProduct::id).startsWith(4L, 3L);
+                .extracting(SearchableProduct::id).startsWith(id(4), id(3));
     }
 
     @Test

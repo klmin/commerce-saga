@@ -12,7 +12,7 @@ import { LoadError, Page, Section } from "@commerce/ui/page";
 import { ListSkeleton } from "@commerce/ui/skeletons";
 import { CART_ERRORS, cartErrorCode } from "@/lib/cart-errors";
 import { MAX_QUANTITY } from "@/lib/orders/order-input";
-import { type Product, productName, won } from "@/lib/products";
+import { type Product, type ProductId, productName, won } from "@/lib/products";
 
 function CartContent({ cart }: { cart: Cart }) {
   const [params] = useSearchParams();
@@ -51,7 +51,7 @@ function CartContent({ cart }: { cart: Cart }) {
     }
   }
 
-  function onQuantity(productId: number, event: FormEvent<HTMLFormElement>) {
+  function onQuantity(productId: ProductId, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const quantity = Number(new FormData(event.currentTarget).get("quantity"));
     if (!Number.isInteger(quantity) || quantity < 0 || quantity > MAX_QUANTITY) {

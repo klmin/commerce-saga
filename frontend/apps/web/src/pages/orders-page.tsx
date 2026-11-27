@@ -16,7 +16,7 @@ function OrderList() {
   const [params] = useSearchParams();
   const before = uuidCursor(params.get("before") ?? undefined);
   const orders = useQuery({ queryKey: ["orders", before], queryFn: () => myOrders(before) });
-  const firstProducts = (orders.data ?? []).map((o) => o.lines[0]?.productId ?? 0);
+  const firstProducts = (orders.data ?? []).map((o) => o.lines[0]?.productId);
   const names = useQuery({
     queryKey: ["product-names", firstProducts],
     queryFn: () => productNames(firstProducts),

@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -20,7 +21,7 @@ class OrderTest {
 
     private static Order pending(long pointAmount) {
         return Order.place(UUID.randomUUID(), USER,
-                List.of(OrderLine.of(10L, 2, 1_000L), OrderLine.of(11L, 1, 500L)), Points.of(pointAmount), T0);
+                List.of(OrderLine.of(pid(10), 2, 1_000L), OrderLine.of(pid(11), 1, 500L)), Points.of(pointAmount), T0);
     }
 
     @Test
@@ -46,35 +47,35 @@ class OrderTest {
         assertThatThrownBy(() -> Order.place(id, USER, List.of(), Points.ZERO, T0))
                 .isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> Order.place(id, USER,
-                List.of(OrderLine.of(10L, 1, 100L), OrderLine.of(10L, 2, 100L)), Points.ZERO, T0))
+                List.of(OrderLine.of(pid(10), 1, 100L), OrderLine.of(pid(10), 2, 100L)), Points.ZERO, T0))
                 .isInstanceOf(DomainValidationException.class)
                 .hasMessageContaining("duplicate");
         assertThatThrownBy(() -> Order.place(id, USER,
-                Collections.nCopies(Order.MAX_LINES + 1, OrderLine.of(10L, 1, 100L)), Points.ZERO, T0))
+                Collections.nCopies(Order.MAX_LINES + 1, OrderLine.of(pid(10), 1, 100L)), Points.ZERO, T0))
                 .isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> UserId.of(0L)).isInstanceOf(DomainValidationException.class);
     }
 
     @Test
     void orderLine_rejectsInvalidValues() {
-        assertThatThrownBy(() -> OrderLine.of(0L, 1, 100L)).isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> OrderLine.of(1L, 0, 100L)).isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> OrderLine.of(1L, OrderLine.MAX_QUANTITY + 1, 100L))
+        assertThatThrownBy(() -> OrderLine.of(null, 1, 100L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> OrderLine.of(pid(1), 0, 100L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> OrderLine.of(pid(1), OrderLine.MAX_QUANTITY + 1, 100L))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> OrderLine.of(1L, 1, -1L)).isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> OrderLine.of(1L, 2, Long.MAX_VALUE)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> OrderLine.of(pid(1), 1, -1L)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> OrderLine.of(pid(1), 2, Long.MAX_VALUE)).isInstanceOf(DomainValidationException.class);
     }
 
     @Test
     void orderLine_amountIsUnitPriceTimesQuantity() {
-        assertThat(OrderLine.of(1L, 3, 1_500L).amount()).isEqualTo(Money.of(4_500L));
+        assertThat(OrderLine.of(pid(1), 3, 1_500L).amount()).isEqualTo(Money.of(4_500L));
     }
 
     @Test
     void maximumOrder_totalFitsInLong() {
         List<OrderLine> lines = new ArrayList<>();
         for (int i = 1; i <= Order.MAX_LINES; i++) {
-            lines.add(OrderLine.of(i, OrderLine.MAX_QUANTITY, OrderLine.MAX_UNIT_PRICE));
+            lines.add(OrderLine.of(pid(i), OrderLine.MAX_QUANTITY, OrderLine.MAX_UNIT_PRICE));
         }
 
         Order order = Order.place(UUID.randomUUID(), USER, lines, Points.ZERO, T0);

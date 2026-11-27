@@ -27,12 +27,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Elasticsearch 색인·검색 (ADR 0010). 공식 Java 클라이언트 대신 REST 를 직접 부른다: 쓰는 API 가 문서 쓰기·삭제·검색·
  * 색인 만들기뿐이고, OpenSearch 로 바꿀 때 클라이언트를 바꾸지 않아도 된다.
  * <ul>
- *   <li>문서 id = 상품 id, {@code version_type=external} 로 원본 LSN 을 버전으로 쓴다. 저장된 버전 이하면 409 → 건너뜀
+ *   <li>문서 id = 상품 id(UUID 문자열), {@code version_type=external} 로 원본 LSN 을 버전으로 쓴다.
+ *       저장된 버전 이하면 409 → 건너뜀
  *       (재전달·순서 뒤바뀜이 색인을 되돌리지 못한다)</li>
  *   <li>별칭 {@code products} 가 없으면 {@code products-v1} 을 만들고 별칭을 건다(처음 한 번, 여러 인스턴스가 겹쳐도 됨)</li>
  *   <li>연결 실패·5xx 는 예외 그대로(색인은 리스너가 제자리 재시도) 또는 {@link SearchStoreUnavailableException}(검색 503).
@@ -62,7 +64,7 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
               "mappings": {
                 "dynamic": "strict",
                 "properties": {
-                  "id": { "type": "long" },
+                  "id": { "type": "keyword" },
                   "name": { "type": "text", "analyzer": "ngram", "fields": { "keyword": { "type": "keyword" } } },
                   "description": { "type": "text", "analyzer": "ngram" },
                   "price": { "type": "long" },
@@ -95,7 +97,7 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
     public boolean save(SearchableProduct product, long version) {
         ensureIndex();
         Map<String, Object> doc = new LinkedHashMap<>();
-        doc.put("id", product.id());
+        doc.put("id", product.id().toString());
         doc.put("name", product.name());
         doc.put("description", product.description());
         doc.put("price", product.price());
@@ -119,12 +121,12 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
      * (상품 id 는 다시 쓰이지 않는다)
      */
     @Override
-    public boolean delete(long productId, Long version) {
+    public boolean delete(UUID productId, Long version) {
         ensureIndex();
         long markerVersion = version == null ? DELETED_FOREVER_VERSION : version;
         Response response = call(HttpMethod.PUT,
                 "/" + alias + "/_doc/" + productId + "?version=" + markerVersion + "&version_type=external",
-                Map.of("id", productId, "deleted", true));
+                Map.of("id", productId.toString(), "deleted", true));
         if (response.status == 200 || response.status == 201) {
             return true;
         }
@@ -146,8 +148,9 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
             List<SearchableProduct> items = new ArrayList<>();
             for (JsonNode hit : hits.path("hits")) {
                 JsonNode s = hit.path("_source");
-                items.add(new SearchableProduct(s.path("id").longValue(), s.path("name").asString(),
-                        s.path("description").asString(), s.path("price").longValue(), s.path("onSale").booleanValue(),
+                items.add(new SearchableProduct(UUID.fromString(s.path("id").asString()),
+                        s.path("name").asString(), s.path("description").asString(), s.path("price").longValue(),
+                        s.path("onSale").booleanValue(),
                         Instant.parse(s.path("updatedAt").asString())));
             }
             return new SearchPage(items, hits.path("total").path("value").longValue());
@@ -231,7 +234,7 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
                 new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8)));
     }
 
-    private RuntimeException unexpected(String what, Response response, long productId) {
+    private RuntimeException unexpected(String what, Response response, UUID productId) {
         if (response.status == 400) {
             return new ProductDocumentRejectedException(
                     "검색 저장소가 " + what + "을 거절함 (productId=" + productId + "): " + response.body);

@@ -14,7 +14,7 @@ create index idx_orders_user_id on orders (user_id);
 create table order_lines (
     order_id   uuid    not null references orders (id),
     line_no    int     not null,
-    product_id bigint  not null,
+    product_id uuid    not null,
     quantity   int     not null,
     unit_price bigint  not null,
     primary key (order_id, line_no)

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { api } from "@commerce/bff/api";
 
 const line = z.object({
-  productId: z.number().int(),
+  productId: z.uuid(),
   quantity: z.number().int(),
   unitPrice: z.number().int(),
 });

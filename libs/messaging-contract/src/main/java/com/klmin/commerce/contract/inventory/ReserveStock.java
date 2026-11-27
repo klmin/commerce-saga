@@ -12,6 +12,6 @@ public record ReserveStock(UUID orderId, List<Line> lines) {
         lines = List.copyOf(lines);
     }
 
-    public record Line(long productId, int quantity) {
+    public record Line(UUID productId, int quantity) {
     }
 }

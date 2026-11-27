@@ -14,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -27,7 +29,7 @@ class ProductQueryService implements GetProductUseCase {
     }
 
     @Override
-    public ProductResult get(long productId) {
+    public ProductResult get(UUID productId) {
         return loadProductPort.findById(productId).orElseThrow(() -> new ProductNotFoundException(productId));
     }
 
@@ -40,11 +42,11 @@ class ProductQueryService implements GetProductUseCase {
     }
 
     @Override
-    public List<ProductResult> findByIds(List<Long> productIds) {
-        if (productIds == null || productIds.stream().anyMatch(id -> id == null || id <= 0)) {
-            throw new DomainValidationException("ids must be positive");
+    public List<ProductResult> findByIds(List<UUID> productIds) {
+        if (productIds == null || productIds.stream().anyMatch(Objects::isNull)) {
+            throw new DomainValidationException("ids must not be null");
         }
-        Set<Long> ids = new LinkedHashSet<>(productIds);
+        Set<UUID> ids = new LinkedHashSet<>(productIds);
         if (ids.isEmpty() || ids.size() > MAX_IDS) {
             throw new DomainValidationException("ids must have 1 to " + MAX_IDS + " distinct values");
         }
@@ -52,7 +54,7 @@ class ProductQueryService implements GetProductUseCase {
     }
 
     @Override
-    public List<PriceChangeResult> priceHistory(long productId) {
+    public List<PriceChangeResult> priceHistory(UUID productId) {
         if (!loadProductPort.exists(productId)) {
             throw new ProductNotFoundException(productId);
         }
@@ -60,7 +62,7 @@ class ProductQueryService implements GetProductUseCase {
     }
 
     @Override
-    public ProductAuditPageResult auditLog(long productId, int page, int size) {
+    public ProductAuditPageResult auditLog(UUID productId, int page, int size) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new DomainValidationException("page must be >= 0 and size between 1 and " + MAX_PAGE_SIZE);
         }

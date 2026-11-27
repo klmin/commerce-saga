@@ -13,9 +13,12 @@
 # 끝나면 가격·판매 상태를 원래대로 돌려놓는다
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
-PRODUCT_ID=${PRODUCT_ID:-3}
+# 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
+PRODUCT_ID=$(product_id "${PRODUCT_ID:-3}")
 ADMIN=100
 USER_ID=1
 
@@ -30,7 +33,7 @@ order() { # key unitPrice → "status body"
   local out
   out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth $USER_ID)" \
     -H 'Content-Type: application/json' -H "Idempotency-Key: $1" \
-    -d "{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$2}],\"pointAmount\":0}")
+    -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$2}],\"pointAmount\":0}")
   echo "$(tail -n1 <<< "$out") $(head -n -1 <<< "$out")"
 }
 
@@ -69,14 +72,14 @@ ok "같은 키 재요청은 같은 주문 (200)"
 
 echo "== 14e. 장바구니: 가격 변경 표시, 장바구니 주문은 주문한 줄을 뺀다"
 cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth $USER_ID)")
-grep -q "\"productId\":$PRODUCT_ID,[^}]*\"addedPrice\":$original,\"currentPrice\":$changed,[^}]*\"priceChanged\":true" <<< "$cart" \
+grep -q "\"productId\":\"$PRODUCT_ID\",[^}]*\"addedPrice\":$original,\"currentPrice\":$changed,[^}]*\"priceChanged\":true" <<< "$cart" \
   || fail "장바구니에 가격 변경이 보이지 않음: $cart"
 ok "장바구니 담을 때 $original → 지금 $changed"
 out=$(curl -s -w '\n%{http_code}' -X POST "$GATEWAY_URL/api/orders" -H "$(auth $USER_ID)" -H 'Content-Type: application/json' \
-  -d "{\"lines\":[{\"productId\":$PRODUCT_ID,\"quantity\":1,\"unitPrice\":$changed}],\"pointAmount\":0,\"fromCart\":true}")
+  -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$changed}],\"pointAmount\":0,\"fromCart\":true}")
 [ "$(tail -n1 <<< "$out")" = 201 ] || fail "장바구니 주문 → $(tail -n1 <<< "$out")"
 cart=$(curl -sf "$GATEWAY_URL/api/cart" -H "$(auth $USER_ID)")
-grep -q "\"productId\":$PRODUCT_ID," <<< "$cart" && fail "주문한 상품이 장바구니에 남음: $cart"
+grep -q "\"productId\":\"$PRODUCT_ID\"," <<< "$cart" && fail "주문한 상품이 장바구니에 남음: $cart"
 ok "장바구니 주문 201, 주문한 줄이 빠짐"
 
 echo "== 14d. 판매 중지 상품 → 422"

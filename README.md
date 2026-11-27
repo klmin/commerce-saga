@@ -155,6 +155,8 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0014 k8s 배포: Helm 차트 하나, Kafka 는 Strimzi, relay 는 Strimzi KafkaConnect 의 Debezium, GitOps 는 ArgoCD, edge 는 Gateway API, 검증은 CI 의 kind](docs/adr/0014-k8s-deployment.md)
 - [0015 컨텍스트 맵과 용어집, 쓰지 않기로 한 DDD 전술 패턴(도메인 이벤트 객체·이벤트 소싱·JPA Auditing)](docs/adr/0015-context-map-and-glossary.md)
 - [0016 주문 가격: product-service 를 동기 조회하고 화면 가격과 다르면 409, 장바구니는 order-service](docs/adr/0016-order-price-sync-query.md)
+- [0017 인증 재구성: auth-service 를 Spring Authorization Server(OIDC IdP)로, Gateway 를 BFF 로, 화면을 SPA 3개로](docs/adr/0017-auth-sas-gateway-bff-spa.md)
+- [0018 사용자·상품·알림 id 를 UUIDv7 로 (출시 전 일괄 변경)](docs/adr/0018-uuidv7-ids.md)
 
 ## 구성
 

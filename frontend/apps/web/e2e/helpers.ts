@@ -3,6 +3,20 @@ import { expect, type Page } from "@playwright/test";
 // 개발용 시드 사용자 (auth-service db/dev-seed, README). 로컬 개발용 값이다
 export const DEV_PASSWORD = process.env.E2E_DEV_PASSWORD ?? "local-dev-pass";
 
+/** product-service 시드 상품의 고정 id (UUID, ADR 0018). 서비스 사이 시드와 같다 */
+export const SEED_PRODUCT = {
+  /** 무선 키보드 */
+  keyboard: "01900000-0000-7000-8000-000000000001",
+  /** 무선 마우스 */
+  mouse: "01900000-0000-7000-8000-000000000002",
+  /** USB-C 허브 */
+  hub: "01900000-0000-7000-8000-000000000003",
+  /** 한정판 키캡 (재고 1) */
+  keycap: "01900000-0000-7000-8000-000000000004",
+  /** 단종 모니터암 (재고 0) */
+  monitorArm: "01900000-0000-7000-8000-000000000005",
+} as const;
+
 /**
  * 화면을 열면 세션이 없어 Gateway 로그인 → SAS 로그인 화면(/signin, 인증 화면 SPA)으로 간다 (ADR 0017).
  * 로그인하면 돌아가려던 화면으로 돌아온다
@@ -25,6 +39,8 @@ export async function signUpFresh(page: Page): Promise<string> {
   await page.goto("/");
   await expect(page).toHaveURL(/\/signin/);
   await page.getByRole("link", { name: "회원가입" }).click();
+  // 로그인·가입 화면 모두 "아이디" 칸이 있어, 가입 화면으로 바뀌기 전에 입력하면 로그인 화면 칸에 들어간다
+  await expect(page.getByRole("heading", { name: "회원가입" })).toBeVisible();
   await page.getByLabel("아이디").fill(loginId);
   await page.getByLabel("비밀번호").fill("e2e-password");
   await page.getByRole("button", { name: "가입하고 로그인" }).click();

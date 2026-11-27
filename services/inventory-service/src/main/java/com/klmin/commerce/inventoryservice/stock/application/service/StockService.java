@@ -185,7 +185,7 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
 
     @Override
     @Transactional(readOnly = true)
-    public Stock getStock(long productId) {
+    public Stock getStock(UUID productId) {
         return stockPort.findById(ProductId.of(productId)).orElseThrow(() -> new StockNotFoundException(productId));
     }
 
@@ -211,10 +211,10 @@ class StockService implements ReserveStockUseCase, ReleaseStockUseCase, ConfirmS
         if (lines.isEmpty()) {
             return "invalid command: no lines";
         }
-        Set<Long> productIds = new HashSet<>();
+        Set<UUID> productIds = new HashSet<>();
         for (ReserveStockCommand.Line line : lines) {
-            if (line.productId() <= 0) {
-                return "invalid command: productId must be positive (productId=" + line.productId() + ")";
+            if (line.productId() == null) {
+                return "invalid command: productId missing";
             }
             if (line.quantity() <= 0) {
                 return "invalid command: quantity must be positive (productId=" + line.productId() + ")";

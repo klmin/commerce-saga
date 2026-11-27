@@ -1,5 +1,5 @@
 create table stocks (
-    product_id bigint primary key,
+    product_id uuid primary key,
     available  int         not null check (available >= 0),
     reserved   int         not null check (reserved >= 0),
     updated_at timestamptz not null
@@ -17,7 +17,7 @@ create table stock_reservations (
 create table stock_reservation_lines (
     order_id   uuid   not null references stock_reservations (order_id),
     line_no    int    not null,
-    product_id bigint not null,
+    product_id uuid   not null,
     quantity   int    not null,
     primary key (order_id, line_no)
 );

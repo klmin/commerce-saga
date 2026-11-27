@@ -37,11 +37,13 @@ describe("api", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(api("/api/cart/items/1", { method: "PUT", body: "{}" })).resolves.toEqual({
+    await expect(
+      api("/api/cart/items/01900000-0000-7000-8000-000000000001", { method: "PUT", body: "{}" }),
+    ).resolves.toEqual({
       ok: true,
     });
     const [path, init] = fetchMock.mock.calls[0];
-    expect(path).toBe("/api/cart/items/1");
+    expect(path).toBe("/api/cart/items/01900000-0000-7000-8000-000000000001");
     expect(init.credentials).toBe("same-origin");
     expect(new Headers(init.headers).get("X-XSRF-TOKEN")).toBe("tok");
     expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");

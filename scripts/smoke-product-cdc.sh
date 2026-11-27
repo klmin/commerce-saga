@@ -8,13 +8,15 @@
 #       k8s: KAFKA_EXEC="kubectl -n commerce exec -i commerce-dual-role-0 --" KAFKA_BOOTSTRAP=localhost:9092 scripts/smoke-product-cdc.sh
 #
 # 확인하는 것
-#   16a. 처음 적재(스냅샷): 시드 상품 1 의 행이 키 "1" 로 있다
+#   16a. 처음 적재(스냅샷): 시드 상품 1(무선 키보드)의 행이 키 = 그 상품 id(UUID 문자열)로 있다
 #   16b. 관리자가 상품 가격을 바꾸면 그 변경이 키 = 상품 id, 변경 후 행(평평한 JSON)으로 나간다
 #        검색에 필요한 열만(id, name, description, price, on_sale, updated_at), 헤더에 원본 __lsn·__source_ts_ms
 #   16c. 같은 상품의 다음 변경은 __lsn 이 더 크다 (검색 쪽 외부 버전으로 쓴다)
 # 끝나면 가격을 원래대로 돌려놓는다
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID·가격 (product_id, seed_price)
+source "$(dirname "$0")/lib/products.sh"
 # Windows Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 윈도 경로로 바꾸지 않게 한다 (리눅스에서는 영향 없음)
 export MSYS_NO_PATHCONV=1
 
@@ -24,7 +26,8 @@ KAFKA_EXEC=${KAFKA_EXEC:-docker compose -f $COMPOSE_FILE exec -T kafka}
 KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:29092}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-30}
 TOPIC=product.cdc.products
-PRODUCT_ID=${PRODUCT_ID:-4}
+# 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
+PRODUCT_ID=$(product_id "${PRODUCT_ID:-4}")
 ADMIN=100
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -61,8 +64,8 @@ original=$(curl -sf "$GATEWAY_URL/api/products/$PRODUCT_ID" | field price)
 [ -n "$original" ] || fail "상품 $PRODUCT_ID 조회 실패 (product-service·Gateway 확인)"
 trap 'set_price "$original" || true' EXIT
 
-echo "== 16a. 처음 적재: 시드 상품 1 이 키 \"1\" 로 있다"
-records | awk -F'\t' '$2 == "1"' | grep -q '"id":1[,}]' || fail "$TOPIC 에 상품 1 이 없음 (커넥터 스냅샷 확인)"
+echo "== 16a. 처음 적재: 시드 상품 1 이 키 $PRODUCT_KEYBOARD 로 있다"
+records | awk -F'\t' -v k="$PRODUCT_KEYBOARD" '$2 == k' | grep -q "\"id\":\"$PRODUCT_KEYBOARD\"" || fail "$TOPIC 에 상품 1 이 없음 (커넥터 스냅샷 확인)"
 ok "상품 1 스냅샷 있음"
 
 echo "== 16b. 가격 변경 → 변경 후 행이 키 = 상품 id 로"

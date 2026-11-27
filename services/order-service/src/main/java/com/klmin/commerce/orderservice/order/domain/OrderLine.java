@@ -3,6 +3,7 @@ package com.klmin.commerce.orderservice.order.domain;
 import com.klmin.commerce.orderservice.common.error.DomainValidationException;
 
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 주문 항목 (Order 애그리거트 내부의 값 객체).
@@ -28,7 +29,7 @@ public record OrderLine(ProductId productId, Quantity quantity, Money unitPrice)
     }
 
     /** 원시 값에서 만든다 (요청·저장소 매핑용). 각 값의 규칙 위반은 DomainValidationException */
-    public static OrderLine of(long productId, int quantity, long unitPrice) {
+    public static OrderLine of(UUID productId, int quantity, long unitPrice) {
         return new OrderLine(ProductId.of(productId), Quantity.of(quantity), Money.of(unitPrice));
     }
 

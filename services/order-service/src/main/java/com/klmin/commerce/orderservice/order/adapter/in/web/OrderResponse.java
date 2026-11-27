@@ -18,7 +18,7 @@ record OrderResponse(
         Instant createdAt,
         Instant updatedAt) {
 
-    record Line(long productId, int quantity, long unitPrice) {
+    record Line(UUID productId, int quantity, long unitPrice) {
     }
 
     static OrderResponse from(Order order) {

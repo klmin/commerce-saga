@@ -8,20 +8,20 @@ import { useNavigate } from "react-router";
 import { placeOrder } from "@/api/orders";
 import { ApiError } from "@commerce/bff/api";
 import { MAX_QUANTITY, orderTotal, toOrderInput } from "@/lib/orders/order-input";
-import { type Product, won } from "@/lib/products";
+import { type Product, type ProductId, won } from "@/lib/products";
 import { uuid } from "@commerce/bff/uuid";
 
 type Props = {
   /** 판매 중인 상품. 가격은 화면을 연 시점 값 */
   products: Product[];
   /** 상품 id → 지금 주문 가능한 재고 (모르면 없음) */
-  stocks: Record<number, number | undefined>;
+  stocks: Record<ProductId, number | undefined>;
   /** 내 포인트 잔액 (계정이 아직 없으면 null) */
   pointBalance: number | null | undefined;
   /** 상품 목록에서 고르고 온 상품 */
-  initialProductId?: number;
+  initialProductId?: ProductId;
   /** 처음 수량 (장바구니 주문) */
-  initialQuantities?: Record<number, number>;
+  initialQuantities?: Record<ProductId, number>;
   /** 장바구니 주문이면 주문한 상품이 장바구니에서 빠진다 */
   fromCart?: boolean;
 };
@@ -30,7 +30,7 @@ function toNumber(text: string): number {
   return /^\d+$/.test(text) ? Number(text) : 0;
 }
 
-function pricesOf(error: ApiError): Record<number, number> {
+function pricesOf(error: ApiError): Record<ProductId, number> {
   const prices = error.problem?.currentPrices;
   if (!Array.isArray(prices)) {
     return {};
@@ -55,10 +55,10 @@ export function OrderForm({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [idempotencyKey, setIdempotencyKey] = useState(uuid);
-  const [currentPrices, setCurrentPrices] = useState<Record<number, number>>({});
+  const [currentPrices, setCurrentPrices] = useState<Record<ProductId, number>>({});
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
-  const [quantities, setQuantities] = useState<Record<number, string>>(() =>
+  const [quantities, setQuantities] = useState<Record<ProductId, string>>(() =>
     Object.fromEntries(
       products.map((p) => [
         p.id,

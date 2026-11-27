@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -44,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderControllerTest {
 
     private static final String VALID_BODY = """
-            {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}]}
+            {"lines":[{"productId":"01900000-0000-7000-8000-000000000010","quantity":2,"unitPrice":1000}]}
             """;
 
     @Autowired
@@ -60,20 +61,20 @@ class OrderControllerTest {
     ListMyOrdersUseCase listMyOrdersUseCase;
 
     private static Order order(long userId) {
-        return Order.place(UUID.randomUUID(), UserId.of(userId), List.of(OrderLine.of(10L, 2, 1_000L)), Points.ZERO,
+        return Order.place(UUID.randomUUID(), UserId.of(userId), List.of(OrderLine.of(pid(10), 2, 1_000L)), Points.ZERO,
                 Instant.parse("2026-11-22T00:00:00Z"));
     }
 
     @Test
     void placeOrder_priceChanged_409_withCurrentPrices() throws Exception {
         given(placeOrderUseCase.placeOrder(any())).willThrow(new OrderPriceChangedException(
-                List.of(new OrderPriceChangedException.CurrentPrice(10L, 1_200L))));
+                List.of(new OrderPriceChangedException.CurrentPrice(pid(10), 1_200L))));
 
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.currentPrices[0].productId").value(10))
+                .andExpect(jsonPath("$.currentPrices[0].productId").value(pid(10).toString()))
                 .andExpect(jsonPath("$.currentPrices[0].price").value(1200));
     }
 
@@ -93,7 +94,7 @@ class OrderControllerTest {
     void placeOrder_returns201WithLocation() throws Exception {
         Order order = order(7L);
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
-                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L))).willReturn(new PlaceOrderResult(order, true));
+                List.of(new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), 0L))).willReturn(new PlaceOrderResult(order, true));
 
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
@@ -109,19 +110,19 @@ class OrderControllerTest {
     void placeOrder_withPoints_passesPointAmount() throws Exception {
         Order order = order(7L);
         given(placeOrderUseCase.placeOrder(new PlaceOrderCommand(7L,
-                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 500L))).willReturn(new PlaceOrderResult(order, true));
+                List.of(new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), 500L))).willReturn(new PlaceOrderResult(order, true));
 
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}],"pointAmount":500}
+                                {"lines":[{"productId":"01900000-0000-7000-8000-000000000010","quantity":2,"unitPrice":1000}],"pointAmount":500}
                                 """))
                 .andExpect(status().isCreated());
 
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}],"pointAmount":-1}
+                                {"lines":[{"productId":"01900000-0000-7000-8000-000000000010","quantity":2,"unitPrice":1000}],"pointAmount":-1}
                                 """))
                 .andExpect(status().isBadRequest());
     }
@@ -139,7 +140,7 @@ class OrderControllerTest {
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"lines":[{"productId":10,"quantity":0,"unitPrice":1000}]}
+                                {"lines":[{"productId":"01900000-0000-7000-8000-000000000010","quantity":0,"unitPrice":1000}]}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors").isArray());
@@ -152,7 +153,15 @@ class OrderControllerTest {
         mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"lines":[{"productId":10,"quantity":2,"unitPrice":9223372036854775807}]}
+                                {"lines":[{"productId":"01900000-0000-7000-8000-000000000010","quantity":2,"unitPrice":9223372036854775807}]}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        // 상품 id 가 UUID 형식이 아니면 400
+        mvc.perform(post("/orders").with(jwt().jwt(j -> j.subject("7")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"lines":[{"productId":10,"quantity":2,"unitPrice":1000}]}
                                 """))
                 .andExpect(status().isBadRequest());
     }
@@ -181,7 +190,7 @@ class OrderControllerTest {
     void placeOrder_withIdempotencyKey_passesKey_andReplayReturns200() throws Exception {
         Order order = order(7L);
         PlaceOrderCommand command = new PlaceOrderCommand(7L,
-                List.of(new PlaceOrderCommand.Line(10L, 2, 1_000L)), 0L, "key-1");
+                List.of(new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), 0L, "key-1");
         given(placeOrderUseCase.placeOrder(command))
                 .willReturn(new PlaceOrderResult(order, true), new PlaceOrderResult(order, false));
 
@@ -221,7 +230,7 @@ class OrderControllerTest {
     void myOrders_usesTokenSubject_andCursor() throws Exception {
         UUID before = UUID.randomUUID();
         OrderSummaryResult summary = new OrderSummaryResult(UUID.randomUUID(), "COMPLETED", 2_000L, 500L, null,
-                List.of(new OrderSummaryResult.Line(10L, 2, 1_000L)),
+                List.of(new OrderSummaryResult.Line(pid(10), 2, 1_000L)),
                 Instant.parse("2026-11-22T00:00:00Z"), Instant.parse("2026-11-22T00:00:01Z"));
         given(listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(7L, before, 10))).willReturn(List.of(summary));
 
@@ -230,7 +239,7 @@ class OrderControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].orderId").value(summary.orderId().toString()))
                 .andExpect(jsonPath("$[0].paidAmount").value(1500))
-                .andExpect(jsonPath("$[0].lines[0].productId").value(10));
+                .andExpect(jsonPath("$[0].lines[0].productId").value(pid(10).toString()));
     }
 
     @Test

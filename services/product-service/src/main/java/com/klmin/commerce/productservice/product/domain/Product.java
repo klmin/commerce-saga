@@ -34,10 +34,11 @@ public final class Product {
         this.updatedAt = updatedAt;
     }
 
-    /** 새 상품. id 는 저장할 때 DB 가 매긴다 */
-    public static Product register(String name, String description, Money price, Instant now) {
+    /** 새 상품. id 는 앱이 저장 전에 만든 UUIDv7 (ADR 0018) */
+    public static Product register(ProductId id, String name, String description, Money price, Instant now) {
+        Objects.requireNonNull(id, "id");
         requirePositive(price);
-        return new Product(null, validName(name), validDescription(description), price, true, now, now);
+        return new Product(id,validName(name), validDescription(description), price, true, now, now);
     }
 
     public static Product restore(ProductId id, String name, String description, Money price, boolean onSale,

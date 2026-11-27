@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static com.klmin.commerce.orderservice.TestProductIds.pid;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -33,10 +34,11 @@ class CartControllerTest {
     @Test
     void get_usesTokenSubject_andShowsPriceChange() throws Exception {
         given(cartUseCase.get(7L)).willReturn(new CartResult(
-                List.of(new CartResult.Item(1L, "키보드", 2, 39_000L, 42_000L, true)), true));
+                List.of(new CartResult.Item(pid(1), "키보드", 2, 39_000L, 42_000L, true)), true));
 
         mvc.perform(get("/cart").with(jwt().jwt(j -> j.subject("7"))))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].productId").value(pid(1).toString()))
                 .andExpect(jsonPath("$.items[0].priceChanged").value(true))
                 .andExpect(jsonPath("$.items[0].currentPrice").value(42_000))
                 .andExpect(jsonPath("$.pricesAvailable").value(true));
@@ -50,11 +52,19 @@ class CartControllerTest {
 
     @Test
     void put_invalidQuantity_400() throws Exception {
-        mvc.perform(put("/cart/items/1").with(jwt().jwt(j -> j.subject("7")))
+        mvc.perform(put("/cart/items/" + pid(1)).with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":0}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(put("/cart/items/1").with(jwt().jwt(j -> j.subject("7")))
+        mvc.perform(put("/cart/items/" + pid(1)).with(jwt().jwt(j -> j.subject("7")))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1001}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(cartUseCase);
+    }
+
+    @Test
+    void put_malformedProductId_400() throws Exception {
+        mvc.perform(put("/cart/items/1").with(jwt().jwt(j -> j.subject("7")))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(cartUseCase);
     }

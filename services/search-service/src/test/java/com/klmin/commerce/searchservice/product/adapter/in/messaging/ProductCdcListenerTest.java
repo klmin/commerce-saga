@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,8 +25,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProductCdcListenerTest {
 
     private static final Instant NOW = Instant.parse("2026-11-25T05:00:10Z");
+    private static final String K4 = "01900000-0000-7000-8000-000000000004";
+    private static final String K5 = "01900000-0000-7000-8000-000000000005";
     private static final String ROW = """
-            {"id":4,"name":"한정판 키캡","description":"재고 1개","price":12100,"on_sale":true,"updated_at":"2026-11-25T05:00:00.123456Z"}""";
+            {"id":"01900000-0000-7000-8000-000000000004","name":"한정판 키캡","description":"재고 1개","price":12100,"on_sale":true,"updated_at":"2026-11-25T05:00:00.123456Z"}""";
 
     private final RecordingUseCase useCase = new RecordingUseCase();
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
@@ -45,10 +48,10 @@ class ProductCdcListenerTest {
 
     @Test
     void row_becomesIndexCommand_withLsnAsVersion_andRecordsLag() {
-        listener.onMessage(record("4", ROW, "57798856", String.valueOf(NOW.minusSeconds(2).toEpochMilli())));
+        listener.onMessage(record(K4, ROW, "57798856", String.valueOf(NOW.minusSeconds(2).toEpochMilli())));
 
-        assertThat(useCase.indexed).singleElement().isEqualTo(new IndexProductCommand(4, "한정판 키캡", "재고 1개",
-                12_100, true, Instant.parse("2026-11-25T05:00:00.123456Z"), 57_798_856L));
+        assertThat(useCase.indexed).singleElement().isEqualTo(new IndexProductCommand(UUID.fromString(K4),
+                "한정판 키캡", "재고 1개", 12_100, true, Instant.parse("2026-11-25T05:00:00.123456Z"), 57_798_856L));
         assertThat(meters.get("search_indexing_lag_seconds").gauge().value()).isEqualTo(2.0);
         assertThat(meters.get("search_indexed_total").tag("result", "applied").counter().count()).isEqualTo(1);
     }
@@ -57,31 +60,39 @@ class ProductCdcListenerTest {
     void staleVersion_countsAsSkipped() {
         useCase.result = false;
 
-        listener.onMessage(record("4", ROW, "1", null));
+        listener.onMessage(record(K4, ROW, "1", null));
 
         assertThat(meters.get("search_indexed_total").tag("result", "skipped").counter().count()).isEqualTo(1);
     }
 
     @Test
     void tombstone_removes_withVersionIfPresent() {
-        listener.onMessage(record("4", null, null, null));
-        listener.onMessage(record("5", null, "99", null));
+        listener.onMessage(record(K4, null, null, null));
+        listener.onMessage(record(K5, null, "99", null));
 
-        assertThat(useCase.removed).containsExactly(new RemoveProductCommand(4, null), new RemoveProductCommand(5, 99L));
+        assertThat(useCase.removed).containsExactly(
+                new RemoveProductCommand(UUID.fromString(K4), null), new RemoveProductCommand(UUID.fromString(K5), 99L));
     }
 
     @Test
     void contractViolations_areNotRetried() {
-        assertThatThrownBy(() -> listener.onMessage(record("4", ROW, null, null)))
+        assertThatThrownBy(() -> listener.onMessage(record(K4, ROW, null, null)))
                 .isInstanceOf(NonRetryableMessageException.class).hasMessageContaining("__lsn");
         assertThatThrownBy(() -> listener.onMessage(record("x", ROW, "1", null)))
                 .isInstanceOf(NonRetryableMessageException.class);
-        assertThatThrownBy(() -> listener.onMessage(record("5", ROW, "1", null)))
-                .isInstanceOf(NonRetryableMessageException.class).hasMessageContaining("key 5 != id 4");
-        assertThatThrownBy(() -> listener.onMessage(record("4", "{\"id\":4,\"name\":\"a\"}", "1", null)))
+        assertThatThrownBy(() -> listener.onMessage(record(K5, ROW, "1", null)))
+                .isInstanceOf(NonRetryableMessageException.class).hasMessageContaining("key " + K5 + " != id " + K4);
+        assertThatThrownBy(() -> listener.onMessage(record(K4, "{\"id\":\"" + K4 + "\",\"name\":\"a\"}", "1", null)))
                 .isInstanceOf(NonRetryableMessageException.class);
-        assertThatThrownBy(() -> listener.onMessage(record("4", ROW, "abc", null)))
+        assertThatThrownBy(() -> listener.onMessage(record(K4, ROW, "abc", null)))
                 .isInstanceOf(NonRetryableMessageException.class);
+        // 숫자 키(옛 bigint id)·표준 표기가 아닌 UUID·본문 id 가 UUID 가 아님
+        assertThatThrownBy(() -> listener.onMessage(record("4", ROW, "1", null)))
+                .isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(record("1-1-1-1-1", ROW, "1", null)))
+                .isInstanceOf(NonRetryableMessageException.class);
+        assertThatThrownBy(() -> listener.onMessage(record(K4, ROW.replace("\"" + K4 + "\"", "4"), "1", null)))
+                .isInstanceOf(NonRetryableMessageException.class).hasMessageContaining("id");
         assertThat(useCase.indexed).isEmpty();
     }
 

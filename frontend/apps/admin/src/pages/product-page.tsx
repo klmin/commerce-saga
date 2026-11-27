@@ -11,7 +11,10 @@ import {
   changeProductSaleStatus,
   describeProduct,
   getProduct,
+  isProductId,
   productAuditLog,
+  type ProductId,
+  shortProductId,
 } from "@/api/admin";
 import { formatTime, pageNumber } from "@/lib/format";
 import {
@@ -25,7 +28,7 @@ import {
 import { NotFoundPage } from "./not-found-page";
 import { ProductEditForms, type SubmitResult } from "./product-forms";
 
-function ProductManagement({ productId }: { productId: number }) {
+function ProductManagement({ productId }: { productId: ProductId }) {
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const page = pageNumber(params.get("page"));
@@ -88,7 +91,10 @@ function ProductManagement({ productId }: { productId: number }) {
       <Card>
         <CardHeader>
           <CardTitle>
-            <span className="text-muted-foreground">#{product.data.id}</span> {product.data.name}
+            <span className="text-muted-foreground" title={product.data.id}>
+              #{shortProductId(product.data.id)}
+            </span>{" "}
+            {product.data.name}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -160,8 +166,9 @@ function ProductManagement({ productId }: { productId: number }) {
 
 export function ProductPage() {
   const { productId: raw = "" } = useParams();
-  const productId = Number(raw);
-  const valid = /^\d{1,18}$/.test(raw) && Number.isSafeInteger(productId) && productId > 0;
+  // UUID 형식이 아니면(옛 숫자 id 등) 요청하지 않고 없는 화면
+  const valid = isProductId(raw);
+  const productId = raw.toLowerCase();
   return (
     <Page>
       <Button variant="ghost" size="sm" asChild className="self-start">

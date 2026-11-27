@@ -14,6 +14,8 @@
 #   9i. 같은 사용자가 몰아서 요청하면 429 (사용자별 rate limit), 다른 사용자는 그대로 200
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
+source "$(dirname "$0")/lib/products.sh"
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
@@ -38,7 +40,7 @@ expect_status 401 "Gateway (위조 토큰)" "$GATEWAY_URL/api/points/me" -H 'Aut
 
 echo "== 9g. 사용자 1 의 주문을 사용자 2 가 볼 수 없다"
 order_id=$(curl -sf -X POST "$GATEWAY_URL/api/orders" -H "$(auth 1)" -H 'Content-Type: application/json' \
-  -d '{"lines":[{"productId":1,"quantity":1,"unitPrice":39000}],"pointAmount":0}' | field orderId)
+  -d "{\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":0}" | field orderId)
 [ -n "$order_id" ] || fail "Gateway 로 주문 생성 실패"
 ok "사용자 1 주문 …${order_id: -8} (Gateway 경유)"
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))

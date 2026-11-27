@@ -12,6 +12,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * @param pointAmount 사용할 포인트 (생략하면 0). 합계보다 크면 400
@@ -23,7 +24,7 @@ record PlaceOrderRequest(
         Boolean fromCart) {
 
     record LineRequest(
-            @NotNull @Positive Long productId,
+            @NotNull UUID productId,
             @NotNull @Positive @Max(OrderLine.MAX_QUANTITY) Integer quantity,
             @NotNull @PositiveOrZero @Max(OrderLine.MAX_UNIT_PRICE) Long unitPrice) {
     }

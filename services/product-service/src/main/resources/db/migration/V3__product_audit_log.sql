@@ -3,7 +3,7 @@
 -- changed_by = 관리자 사용자 id (JWT sub). 등록은 before_* 가 null
 create table product_audit_log (
     id                 bigint generated always as identity primary key,
-    product_id         bigint       not null references products (id),
+    product_id         uuid         not null references products (id),
     action             varchar(30)  not null
         check (action in ('REGISTERED', 'DESCRIBED', 'PRICE_CHANGED', 'SALE_STATUS_CHANGED')),
     before_name        varchar(100),

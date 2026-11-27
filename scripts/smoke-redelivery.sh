@@ -16,6 +16,8 @@
 set -euo pipefail
 # access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
 source "$(dirname "$0")/lib/auth.sh"
+# 시드 상품 고정 UUID (product_id)
+source "$(dirname "$0")/lib/products.sh"
 # Windows Git Bash 가 컨테이너 안 경로(/opt/kafka/...)를 윈도 경로로 바꾸지 않게 한다 (리눅스에서는 영향 없음)
 export MSYS_NO_PATHCONV=1
 
@@ -47,8 +49,8 @@ field() {
 }
 
 state() {
-  for p in 1 2 3 4 5; do
-    s=$(curl -sf "$INVENTORY_URL/stocks/$p")
+  for p in 1 2 3 4 5; do   # 시드 상품 1~5 (스냅숏 키는 번호, 조회는 UUID)
+    s=$(curl -sf "$INVENTORY_URL/stocks/$(product_id "$p")")
     echo "stock.$p.available=$(echo "$s" | field available)"
     echo "stock.$p.reserved=$(echo "$s" | field reserved)"
   done

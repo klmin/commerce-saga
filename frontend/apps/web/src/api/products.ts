@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 import { api, ApiError } from "@commerce/bff/api";
-import type { Product } from "@/lib/products";
+import { isProductId, type Product, type ProductId } from "@/lib/products";
 import { type SearchCriteria, searchQuery } from "@/lib/search";
 
 const product = z.object({
-  id: z.number().int(),
+  id: z.uuid(),
   name: z.string(),
   description: z.string(),
   price: z.number().int(),
@@ -27,11 +27,13 @@ export async function listProducts(): Promise<Product[]> {
 }
 
 /**
- * 주문 목록·상세에 쓸 상품 이름. 이름을 못 읽어도 화면은 그린다("상품 #id").
+ * 주문 목록·상세에 쓸 상품 이름. 이름을 못 읽어도 화면은 그린다("상품 #id 앞 8자").
  * 주문에는 주문 시점 가격만 남고 이름은 지금 상품에서 읽는다
  */
-export async function productNames(ids: readonly number[]): Promise<Record<number, string>> {
-  const unique = [...new Set(ids)].filter((id) => id > 0).slice(0, MAX_IDS);
+export async function productNames(
+  ids: readonly (ProductId | undefined)[],
+): Promise<Record<ProductId, string>> {
+  const unique = [...new Set(ids)].filter(isProductId).slice(0, MAX_IDS);
   if (unique.length === 0) {
     return {};
   }
@@ -63,7 +65,7 @@ export async function searchProducts(
 }
 
 const stock = z.object({
-  productId: z.number().int(),
+  productId: z.uuid(),
   available: z.number().int(),
   reserved: z.number().int(),
 });
@@ -71,9 +73,11 @@ const stock = z.object({
 /** 상품 id → 주문 가능한 재고. 한 상품을 못 읽어도 나머지는 보여 준다 (그 상품은 "확인 불가") */
 export async function stocksByProduct(
   products: readonly Pick<Product, "id">[],
-): Promise<Record<number, number | undefined>> {
+): Promise<Record<ProductId, number | undefined>> {
   const results = await Promise.allSettled(
-    products.map(async (p) => stock.parse(await api<unknown>(`/api/stocks/${p.id}`))),
+    products.map(async (p) =>
+      stock.parse(await api<unknown>(`/api/stocks/${encodeURIComponent(p.id)}`)),
+    ),
   );
   return Object.fromEntries(
     products.map((p, i) => {

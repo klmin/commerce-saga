@@ -23,7 +23,7 @@ public record ProductChange(ProductId productId, ProductAction action, ProductSn
         }
     }
 
-    /** 새 상품 (저장해 id 를 받은 뒤) */
+    /** 새 상품 */
     public static ProductChange registered(Product saved, UserId changedBy, Instant now) {
         return new ProductChange(saved.id(), ProductAction.REGISTERED, null, saved.snapshot(), changedBy, now);
     }
