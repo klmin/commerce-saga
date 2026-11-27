@@ -20,6 +20,8 @@ const order = z.object({
   lines: z.array(line),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // 사용자가 취소를 요청한 시각 (ADR 0020). 진행 중이면 "취소 요청됨". 옛 응답에는 없다
+  cancelRequestedAt: z.string().nullish(),
 });
 
 const sagaStep = z.object({
@@ -78,6 +80,16 @@ export async function myOrders(before?: string): Promise<Order[]> {
 /** 남의 주문이거나 없으면 ApiError(404) */
 export async function getOrder(orderId: string): Promise<Order> {
   return order.parse(await api<unknown>(`/api/orders/${encodeURIComponent(orderId)}`));
+}
+
+/**
+ * 주문 취소 (ADR 0020). 진행 중이면 다음 단계 응답에서, 완료됐으면 결제 취소(환불)부터 되돌린다. 결과는 주문·Saga 를 다시 읽어 본다.
+ * 여러 번 보내도 한 번만 반영된다. 남의 주문이거나 없으면 ApiError(404)
+ */
+export async function cancelOrder(orderId: string): Promise<Order> {
+  return order.parse(
+    await api<unknown>(`/api/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST" }),
+  );
 }
 
 export async function getOrderSaga(orderId: string): Promise<OrderSaga> {

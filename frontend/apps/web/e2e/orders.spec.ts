@@ -25,6 +25,33 @@ test("포인트를 써서 주문하면 Saga 가 재고 → 포인트 → 결제 
   await expect(page.getByText("700P")).toBeVisible();
 });
 
+// 주문 취소 (ADR 0020): 완료된 주문도 취소하면 결제 취소 → 포인트 환불 → 재고 반환으로 되돌아간다
+test("완료된 주문을 취소하면 결제·포인트가 환불되고 재고가 반환된다", async ({ page }) => {
+  await signUpFresh(page);
+  await page.goto(`/orders/new?productId=${SEED_PRODUCT.mouse}`);
+  await page.getByLabel("사용할 포인트").fill("300");
+  await page.getByRole("button", { name: "주문하기" }).click();
+  await expect(page.getByTestId("saga-state")).toHaveText("완료", { timeout: 20_000 });
+
+  await page.getByRole("button", { name: "주문 취소" }).click();
+  await expect(page.getByText("결제 금액과 포인트를 환불하고 주문을 취소할까요?")).toBeVisible();
+  await page.getByRole("button", { name: "취소하기" }).click();
+
+  await expect(page.getByTestId("saga-state")).toHaveText("취소", { timeout: 30_000 });
+  await expect(page.getByText("취소 사유: 사용자 취소")).toBeVisible();
+  await expect(page.getByRole("button", { name: "주문 취소" })).toHaveCount(0);
+  const steps = page.getByRole("list", { name: "Saga 단계" }).getByRole("listitem");
+  await expect(steps.nth(0)).toHaveAttribute("data-status", "undone");
+  await expect(steps.nth(0)).toContainText("재고 반환");
+  await expect(steps.nth(1)).toContainText("포인트 환불");
+  await expect(steps.nth(2)).toContainText("결제 취소");
+  await expect(page.getByText("STOCK_RETURNED")).toBeVisible();
+
+  // 포인트가 가입 축하 1,000P 그대로
+  await page.goto("/");
+  await expect(page.getByText("1,000P")).toBeVisible();
+});
+
 test("품절 상품은 재고 예약에서 실패하고 되돌릴 것 없이 취소된다", async ({ page }) => {
   await signUpFresh(page);
   await page.goto(`/orders/new?productId=${SEED_PRODUCT.monitorArm}`);
