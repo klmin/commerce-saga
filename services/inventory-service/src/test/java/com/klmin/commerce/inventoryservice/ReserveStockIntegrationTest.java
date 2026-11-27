@@ -256,13 +256,20 @@ class ReserveStockIntegrationTest {
     @Test
     void returnStock_afterOrderCompleted_restocksOnce_andRepliesStockReturned() {
         int availableBefore = getStockUseCase.getStock(P3).available();
+        int reservedBefore = getStockUseCase.getStock(P3).reserved();
         UUID orderId = UUID.randomUUID();
         sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 2))));
         awaitReplies(orderId, 1);
         send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId,
                 UUID.fromString("01900000-0000-7000-8001-000000000001"), 2000L, 0L, 2000L));
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
-                assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2));
+        // 판매 확정(OrderCompleted)이 처리될 때까지 기다린다: 예약분이 reserved 에서 빠지고 예약 기록이 CONFIRMED.
+        // 그래야 아래 반환이 확정분을 다시 들이는 경로(RESTOCK)를 탄다 (확정 전이면 예약 해제 경로)
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore);
+            assertThat(jdbc.queryForObject("select status from stock_reservations where order_id = ?",
+                    String.class, orderId)).isEqualTo("CONFIRMED");
+        });
+        assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2);
 
         send(Topics.INVENTORY_COMMAND, orderId, ReturnStock.TYPE, new ReturnStock(orderId));
         send(Topics.INVENTORY_COMMAND, orderId, ReturnStock.TYPE, new ReturnStock(orderId)); // 중복 반환
@@ -270,6 +277,9 @@ class ReserveStockIntegrationTest {
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
         assertThat(replies.subList(1, 3)).allMatch(r -> StockReturned.TYPE.equals(header(r, MessageHeaders.TYPE)));
         assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore);
+        assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore);
+        assertThat(jdbc.queryForObject("select status from stock_reservations where order_id = ?",
+                String.class, orderId)).isEqualTo("RETURNED");
     }
 
     // 해제(inventory.command)와 확정(order.events)이 같은 주문에 동시에 와도 하나만 반영되고 둘 다 실패하지 않는다
