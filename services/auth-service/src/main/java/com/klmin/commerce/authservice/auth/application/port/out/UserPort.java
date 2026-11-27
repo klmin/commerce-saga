@@ -1,6 +1,7 @@
 package com.klmin.commerce.authservice.auth.application.port.out;
 
 import com.klmin.commerce.authservice.auth.domain.User;
+import com.klmin.commerce.authservice.auth.domain.UserId;
 
 import java.util.Optional;
 
@@ -11,5 +12,5 @@ public interface UserPort {
 
     Optional<User> findByLoginId(String loginId);
 
-    Optional<User> findById(long id);
+    Optional<User> findById(UserId id);
 }

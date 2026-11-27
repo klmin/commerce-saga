@@ -1,6 +1,6 @@
 create table orders (
     id            uuid primary key,
-    user_id       bigint       not null,
+    user_id       uuid         not null,
     status        varchar(20)  not null,
     total_amount  bigint       not null,
     reject_reason varchar(200),

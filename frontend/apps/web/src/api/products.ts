@@ -27,7 +27,7 @@ export async function listProducts(): Promise<Product[]> {
 }
 
 /**
- * 주문 목록·상세에 쓸 상품 이름. 이름을 못 읽어도 화면은 그린다("상품 #id 앞 8자").
+ * 주문 목록·상세에 쓸 상품 이름. 이름을 못 읽어도 화면은 그린다("상품 #id 끝 8자").
  * 주문에는 주문 시점 가격만 남고 이름은 지금 상품에서 읽는다
  */
 export async function productNames(

@@ -46,7 +46,7 @@ LOG_DIR=logs scripts/smoke-redelivery.sh verify
 | 항목 | 기대 |
 |---|---|
 | 재고 (상품 1~5 `available`, `reserved`) | 되감기 전과 같음 |
-| 포인트 (사용자 1~4 잔액) | 되감기 전과 같음 |
+| 포인트 (user1~user4 잔액) | 되감기 전과 같음 |
 | 결제 | PG 재호출 없음 (payment 로그에 건너뜀만) |
 | 응답·이벤트 토픽 끝 오프셋 (`*.reply`, `order.events`) | 되감기 전과 같음 = 새로 나간 메시지 0건 |
 | 서비스 로그 | 다시 받은 메시지마다 `이미 처리한 메시지(응답) 건너뜀` |

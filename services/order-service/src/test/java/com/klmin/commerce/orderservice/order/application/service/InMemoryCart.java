@@ -16,7 +16,7 @@ import java.util.UUID;
 /** cart_items 인메모리 대역 */
 class InMemoryCart implements CartPort {
 
-    final Map<Long, Map<UUID, CartItem>> store = new LinkedHashMap<>();
+    final Map<UUID, Map<UUID, CartItem>> store = new LinkedHashMap<>();
 
     @Override
     public List<CartItem> findByUserId(UserId userId) {

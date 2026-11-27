@@ -10,9 +10,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
- * 사용자별 기기 {@code auth:device:<userId>} (hash: 기기 id → "세션 id \n 로그인 시각(ms) \n 브라우저"). 브라우저 문자열은
+ * 사용자별 기기 {@code auth:device:<userId UUID>} (hash: 기기 id → "세션 id \n 로그인 시각(ms) \n 브라우저"). 브라우저 문자열은
  * 서비스가 제어 문자를 빼 두어 줄바꿈이 없다. 키 만료는 refresh token 수명보다 하루 길게, 로그인할 때와 기기에 새 인가 기록이
  * 생길 때(SSO 로 다른 화면 로그인 = 새 refresh token)마다 다시 건다
  * (그 뒤엔 어느 기기도 로그인돼 있을 수 없다). 끝난 기기는 목록을 볼 때 지운다
@@ -30,7 +31,7 @@ class RedisDeviceAdapter implements DevicePort {
     }
 
     @Override
-    public void save(long userId, DeviceRecord device) {
+    public void save(UUID userId, DeviceRecord device) {
         String key = key(userId);
         redis.opsForHash().put(key, device.deviceId(),
                 device.sessionId() + "\n" + device.loginAt().toEpochMilli() + "\n" + device.userAgent());
@@ -38,7 +39,7 @@ class RedisDeviceAdapter implements DevicePort {
     }
 
     @Override
-    public List<DeviceRecord> findAll(long userId) {
+    public List<DeviceRecord> findAll(UUID userId) {
         List<DeviceRecord> result = new ArrayList<>();
         for (Map.Entry<Object, Object> e : redis.opsForHash().entries(key(userId)).entrySet()) {
             String[] parts = e.getValue().toString().split("\n", 3);
@@ -57,16 +58,16 @@ class RedisDeviceAdapter implements DevicePort {
     }
 
     @Override
-    public void extend(long userId) {
+    public void extend(UUID userId) {
         redis.expire(key(userId), ttl); // 키가 없으면 아무것도 하지 않는다
     }
 
     @Override
-    public void remove(long userId, String deviceId) {
+    public void remove(UUID userId, String deviceId) {
         redis.opsForHash().delete(key(userId), deviceId);
     }
 
-    private static String key(long userId) {
+    private static String key(UUID userId) {
         return "auth:device:" + userId;
     }
 }

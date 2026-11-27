@@ -1,4 +1,5 @@
 import { LogoutForm, useMe } from "@commerce/bff/session";
+import { shortId } from "@commerce/bff/short-id";
 import { Button } from "@commerce/ui/button";
 import { Link } from "react-router";
 
@@ -31,7 +32,9 @@ export function SiteHeader() {
                 <a href={me.data.devicesUrl}>로그인 기기</a>
               </Button>
             )}
-            <span className="px-2 text-sm text-muted-foreground">사용자 #{me.data.userId}</span>
+            <span className="px-2 text-sm text-muted-foreground" title={me.data.userId}>
+              사용자 #{shortId(me.data.userId)}
+            </span>
             <LogoutForm />
           </nav>
         )}

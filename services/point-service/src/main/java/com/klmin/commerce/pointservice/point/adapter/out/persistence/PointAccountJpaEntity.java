@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "point_accounts")
@@ -13,7 +14,7 @@ class PointAccountJpaEntity {
 
     @Id
     @Column(name = "user_id")
-    private Long userId;
+    private UUID userId;
 
     @Column(nullable = false)
     private long balance;
@@ -29,7 +30,7 @@ class PointAccountJpaEntity {
         this.updatedAt = updatedAt;
     }
 
-    Long getUserId() {
+    UUID getUserId() {
         return userId;
     }
 

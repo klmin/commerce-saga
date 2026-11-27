@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 화면(SPA)이 지금 로그인한 사용자를 알 때 쓴다 (5-3, ADR 0017). SPA 는 토큰을 모르므로 BFF 세션의 사용자를 여기서 읽는다.
@@ -37,16 +38,16 @@ class MeController {
         return new Me(userId(authentication.getName()), roles, devicesUrl);
     }
 
-    /** 토큰의 sub 는 auth-service 가 정한 long userId 다. 아니면 이 Gateway 가 받을 토큰이 아니므로 401 */
-    private static long userId(String sub) {
+    /** 토큰의 sub 는 auth-service 가 정한 userId(UUID) 다. 아니면 이 Gateway 가 받을 토큰이 아니므로 401 */
+    private static UUID userId(String sub) {
         try {
-            return Long.parseLong(sub);
-        } catch (NumberFormatException e) {
+            return UUID.fromString(sub);
+        } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "sub 가 userId 가 아니다");
         }
     }
 
     /** devicesUrl: 로그인 기기 화면을 여는 주소. 화면은 SAS 주소를 모르므로 Gateway 가 알려 준다 */
-    record Me(long userId, List<String> roles, String devicesUrl) {
+    record Me(UUID userId, List<String> roles, String devicesUrl) {
     }
 }

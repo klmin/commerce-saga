@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class PointCommandListenerTest {
 
     static final UUID MESSAGE_ID = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+    static final UUID USER_ID = UUID.fromString("01900000-0000-7000-8001-000000000001");
 
     private final UsePointUseCase use = mock(UsePointUseCase.class);
     private final RefundPointUseCase refund = mock(RefundPointUseCase.class);
@@ -41,10 +42,10 @@ class PointCommandListenerTest {
     void dispatchesByType() {
         UUID orderId = UUID.randomUUID();
 
-        listener.onMessage(record(UsePoint.TYPE, "{\"orderId\":\"" + orderId + "\",\"userId\":1,\"amount\":300}"));
+        listener.onMessage(record(UsePoint.TYPE, "{\"orderId\":\"" + orderId + "\",\"userId\":\"" + USER_ID + "\",\"amount\":300}"));
         listener.onMessage(record(RefundPoint.TYPE, "{\"orderId\":\"" + orderId + "\"}"));
 
-        verify(use).use(MESSAGE_ID, new UsePointCommand(orderId, 1L, 300L));
+        verify(use).use(MESSAGE_ID, new UsePointCommand(orderId, USER_ID, 300L));
         verify(refund).refund(MESSAGE_ID, orderId);
     }
 

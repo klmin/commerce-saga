@@ -44,9 +44,12 @@ class PaymentCommandListener {
             }
             case CancelPayment.TYPE -> {
                 CancelPayment command = Messages.read(json, record, CancelPayment.class);
-                // 결제 단계까지 온 주문만 취소가 온다(결제 금액 > 0). 아니면 재시도해도 같으므로 DLT
+                // 결제 단계까지 온 주문만 취소가 온다(결제 금액 > 0, 사용자 있음). 아니면 재시도해도 같으므로 DLT
                 if (command.amount() <= 0) {
                     throw new NonRetryableMessageException("invalid CancelPayment amount: " + Messages.describe(record));
+                }
+                if (command.userId() == null) {
+                    throw new NonRetryableMessageException("CancelPayment userId missing: " + Messages.describe(record));
                 }
                 cancelPaymentUseCase.cancel(Messages.messageId(record), new CancelPaymentCommand(
                         Messages.requireOrderId(command.orderId(), record), command.userId(), command.amount()));

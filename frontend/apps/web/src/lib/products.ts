@@ -1,3 +1,5 @@
+import { shortId } from "@commerce/bff/short-id";
+
 // 상품·가격은 product-service 가 정한다 (후속 4-1, ADR 0016). 목록은 lib/api/products.ts 로 읽는다.
 // 화면 가격은 안내용이다: 주문할 때 본 가격을 함께 보내고, 서버 가격과 다르면 409 로 지금 가격을 받아 다시 확인을 받는다
 /** 상품 id: UUID(v7) 문자열 (ADR 0018) */
@@ -20,9 +22,9 @@ export type Product = {
   onSale: boolean;
 };
 
-/** 상품 id → 이름. 이름을 못 읽었으면 "상품 #id 앞 8자" (UUID 전체는 길다) */
+/** 상품 id → 이름. 이름을 못 읽었으면 "상품 #id 끝 8자" (UUID 전체는 길고, UUIDv7 앞부분은 시각이라 겹친다) */
 export function productName(id: ProductId, names?: Readonly<Record<ProductId, string>>): string {
-  return names?.[id] ?? `상품 #${id.slice(0, 8)}`;
+  return names?.[id] ?? `상품 #${shortId(id)}`;
 }
 
 export function won(amount: number): string {

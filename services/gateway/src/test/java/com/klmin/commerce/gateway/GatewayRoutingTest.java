@@ -85,14 +85,14 @@ class GatewayRoutingTest {
         LAST_REQUEST.set(null);
 
         assertThat(get("/api/orders/abc", null).statusCode()).isEqualTo(401);
-        assertThat(get("/api/orders/abc", token(OTHER_KEY, "7", List.of("USER"), 300)).statusCode()).isEqualTo(401);
-        assertThat(get("/api/orders/abc", token(KEY, "7", List.of("USER"), -60)).statusCode()).isEqualTo(401);
+        assertThat(get("/api/orders/abc", token(OTHER_KEY, "01900000-0000-7000-8001-000000000007", List.of("USER"), 300)).statusCode()).isEqualTo(401);
+        assertThat(get("/api/orders/abc", token(KEY, "01900000-0000-7000-8001-000000000007", List.of("USER"), -60)).statusCode()).isEqualTo(401);
         assertThat(LAST_REQUEST.get()).isNull();
     }
 
     @Test
     void 유효한_토큰이면_api_접두사를_떼고_Authorization_은_그대로_X_User_Id_는_지워서_넘긴다() throws Exception {
-        String token = token(KEY, "8", List.of("USER"), 300);
+        String token = token(KEY, "01900000-0000-7000-8001-000000000008", List.of("USER"), 300);
 
         HttpResponse<String> response = send(HttpRequest.newBuilder(uri("/api/orders/abc"))
                 .header("Authorization", "Bearer " + token).header("X-User-Id", "1").GET().build());
@@ -103,7 +103,7 @@ class GatewayRoutingTest {
 
     @Test
     void 목록_API_는_뒤에_경로가_없어도_서비스로_넘긴다() throws Exception {
-        String token = token(KEY, "8", List.of("USER"), 300);
+        String token = token(KEY, "01900000-0000-7000-8001-000000000008", List.of("USER"), 300);
 
         assertThat(get("/api/orders?size=5", token).statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/orders");
@@ -115,16 +115,16 @@ class GatewayRoutingTest {
 
     @Test
     void 관리자_경로는_ADMIN_역할만() throws Exception {
-        assertThat(get("/api/admin/payment-faults", token(KEY, "9", List.of("USER"), 300)).statusCode()).isEqualTo(403);
+        assertThat(get("/api/admin/payment-faults", token(KEY, "01900000-0000-7000-8001-000000000009", List.of("USER"), 300)).statusCode()).isEqualTo(403);
 
-        HttpResponse<String> admin = get("/api/admin/payment-faults", token(KEY, "100", List.of("ADMIN", "USER"), 300));
+        HttpResponse<String> admin = get("/api/admin/payment-faults", token(KEY, "01900000-0000-7000-8001-000000000100", List.of("ADMIN", "USER"), 300));
         assertThat(admin.statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/admin/payment-faults");
 
-        assertThat(get("/api/admin/products", token(KEY, "9", List.of("USER"), 300)).statusCode()).isEqualTo(403);
-        assertThat(get("/api/admin/products/1/price-history", token(KEY, "100", List.of("ADMIN", "USER"), 300))
+        assertThat(get("/api/admin/products", token(KEY, "01900000-0000-7000-8001-000000000009", List.of("USER"), 300)).statusCode()).isEqualTo(403);
+        assertThat(get("/api/admin/products/01900000-0000-7000-8000-000000000001/price-history", token(KEY, "01900000-0000-7000-8001-000000000100", List.of("ADMIN", "USER"), 300))
                 .statusCode()).isEqualTo(200);
-        assertThat(LAST_REQUEST.get()).contains("path=/admin/products/1/price-history");
+        assertThat(LAST_REQUEST.get()).contains("path=/admin/products/01900000-0000-7000-8000-000000000001/price-history");
     }
 
     @Test
@@ -135,10 +135,10 @@ class GatewayRoutingTest {
                 .POST(HttpRequest.BodyPublishers.ofString("{}")).build()).statusCode()).isIn(401, 403, 404);
         assertThat(LAST_REQUEST.get()).isNull();
 
-        assertThat(get("/api/stocks/1", null).statusCode()).isEqualTo(200);
-        assertThat(LAST_REQUEST.get()).contains("path=/stocks/1");
+        assertThat(get("/api/stocks/01900000-0000-7000-8000-000000000001", null).statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/stocks/01900000-0000-7000-8000-000000000001");
 
-        assertThat(get("/api/products?ids=1,2", null).statusCode()).isEqualTo(200);
+        assertThat(get("/api/products?ids=01900000-0000-7000-8000-000000000001,01900000-0000-7000-8000-000000000002", null).statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/products");
 
         assertThat(get("/api/search/products?q=key", null).statusCode()).isEqualTo(200);
@@ -147,13 +147,13 @@ class GatewayRoutingTest {
 
     @Test
     void 정해진_경로가_아니면_거부() throws Exception {
-        assertThat(get("/internal/anything", token(KEY, "7", List.of("USER"), 300)).statusCode()).isIn(403, 404);
+        assertThat(get("/internal/anything", token(KEY, "01900000-0000-7000-8001-000000000007", List.of("USER"), 300)).statusCode()).isIn(403, 404);
         assertThat(get("/orders/abc", null).statusCode()).isEqualTo(401);
     }
 
     @Test
     void 사용자별_rate_limit_을_넘으면_429_이고_다른_사용자는_영향이_없다() throws Exception {
-        String busy = token(KEY, "21", List.of("USER"), 300);
+        String busy = token(KEY, "01900000-0000-7000-8001-000000000021", List.of("USER"), 300);
         int limited = 0;
         for (int i = 0; i < 8; i++) {
             if (get("/api/points/me", busy).statusCode() == 429) {
@@ -162,7 +162,7 @@ class GatewayRoutingTest {
         }
 
         assertThat(limited).isPositive();
-        assertThat(get("/api/points/me", token(KEY, "22", List.of("USER"), 300)).statusCode()).isEqualTo(200);
+        assertThat(get("/api/points/me", token(KEY, "01900000-0000-7000-8001-000000000022", List.of("USER"), 300)).statusCode()).isEqualTo(200);
     }
 
     @Test
@@ -181,7 +181,7 @@ class GatewayRoutingTest {
     }
 
     private HttpResponse<String> stocksFrom(String browserIp) throws Exception {
-        return send(HttpRequest.newBuilder(uri("/api/stocks/1")).header("X-Forwarded-For", browserIp).GET().build());
+        return send(HttpRequest.newBuilder(uri("/api/stocks/01900000-0000-7000-8000-000000000001")).header("X-Forwarded-For", browserIp).GET().build());
     }
 
     private HttpResponse<String> get(String path, String token) throws Exception {

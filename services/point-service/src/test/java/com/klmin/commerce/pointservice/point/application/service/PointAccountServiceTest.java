@@ -27,7 +27,7 @@ class PointAccountServiceTest {
             new PointAccountProperties(1_000L), Clock.fixed(NOW, ZoneOffset.UTC));
 
     private static OpenPointAccountCommand registered(long userId) {
-        return new OpenPointAccountCommand(userId, NOW);
+        return new OpenPointAccountCommand(PointServiceTest.uid(userId), NOW);
     }
 
     @Test
@@ -36,7 +36,7 @@ class PointAccountServiceTest {
 
         assertThat(accounts.balance(1000L)).isEqualTo(1_000L);
         assertThat(grants.grants).singleElement().satisfies(g -> {
-            assertThat(g.userId()).isEqualTo(UserId.of(1000L));
+            assertThat(g.userId()).isEqualTo(UserId.of(PointServiceTest.uid(1000L)));
             assertThat(g.amount()).isEqualTo(Points.of(1_000L));
             assertThat(g.type()).isEqualTo(PointGrantType.SIGNUP_BONUS);
             assertThat(g.createdAt()).isEqualTo(NOW);
@@ -88,13 +88,13 @@ class PointAccountServiceTest {
         assertThat(grants.grants).isEmpty(); // 0P 지급은 내역에 남기지 않는다
         assertThat(new PointAccountProperties(null).signupBonus()).isEqualTo(1_000L);
         assertThatThrownBy(() -> new PointAccountProperties(-1L)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.open(UUID.randomUUID(), registered(0L)))
+        assertThatThrownBy(() -> service.open(UUID.randomUUID(), new OpenPointAccountCommand(null, NOW)))
                 .isInstanceOf(DomainValidationException.class);
     }
 
     @Test
     void grantRecord_mustBePositive() {
-        assertThatThrownBy(() -> PointGrant.signupBonus(UUID.randomUUID(), UserId.of(1L), Points.ZERO, NOW))
+        assertThatThrownBy(() -> PointGrant.signupBonus(UUID.randomUUID(), UserId.of(PointServiceTest.uid(1L)), Points.ZERO, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

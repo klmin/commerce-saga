@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.UUID;
 
 /**
  * SAS 인가 기록 정리 (ADR 0017). 인가 기록은 로그인·갱신마다 쌓이므로 끝난 행을 주기적으로 지우고,
@@ -33,8 +34,8 @@ public class AuthorizationRecordService implements ManageAuthorizationsUseCase {
 
     @Override
     @Transactional
-    public void revokeAll(long userId) {
-        int deleted = records.deleteByPrincipal(Long.toString(userId));
+    public void revokeAll(UUID userId) {
+        int deleted = records.deleteByPrincipal(userId.toString());
         log.info("SSO 로그아웃: 인가 기록 {}건 삭제 (userId={})", deleted, userId);
     }
 

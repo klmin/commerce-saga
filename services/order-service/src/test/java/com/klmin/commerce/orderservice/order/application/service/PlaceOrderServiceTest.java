@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -46,7 +47,7 @@ class PlaceOrderServiceTest {
     }
 
     private static PlaceOrderCommand command(String key, long price10) {
-        return new PlaceOrderCommand(1L, List.of(
+        return new PlaceOrderCommand(uid(1), List.of(
                 new PlaceOrderCommand.Line(pid(10), 2, price10),
                 new PlaceOrderCommand.Line(pid(11), 1, 500L)), 0L, key);
     }
@@ -63,7 +64,7 @@ class PlaceOrderServiceTest {
     @Test
     void fromCart_removesOrderedLinesOnly() {
         java.time.Instant t = Instant.parse("2026-11-25T00:00:00Z");
-        var user = com.klmin.commerce.orderservice.order.domain.UserId.of(1L);
+        var user = com.klmin.commerce.orderservice.order.domain.UserId.of(uid(1));
         for (UUID id : new UUID[] {pid(10), pid(11), pid(12)}) {
             cart.upsert(user, new com.klmin.commerce.orderservice.order.domain.CartItem(
                     com.klmin.commerce.orderservice.order.domain.ProductId.of(id),
@@ -71,7 +72,7 @@ class PlaceOrderServiceTest {
                     com.klmin.commerce.orderservice.order.domain.Money.of(1), t), t);
         }
 
-        service.placeOrder(new PlaceOrderCommand(1L, command(null, 1_000L).lines(), 0L, null, true));
+        service.placeOrder(new PlaceOrderCommand(uid(1), command(null, 1_000L).lines(), 0L, null, true));
 
         assertThat(cart.findByUserId(user)).extracting(i -> i.productId().value()).containsExactly(pid(12));
     }
@@ -79,7 +80,7 @@ class PlaceOrderServiceTest {
     @Test
     void notFromCart_keepsCart_andFailedOrderKeepsCart() {
         java.time.Instant t = Instant.parse("2026-11-25T00:00:00Z");
-        var user = com.klmin.commerce.orderservice.order.domain.UserId.of(1L);
+        var user = com.klmin.commerce.orderservice.order.domain.UserId.of(uid(1));
         cart.upsert(user, new com.klmin.commerce.orderservice.order.domain.CartItem(
                 com.klmin.commerce.orderservice.order.domain.ProductId.of(pid(10)),
                 com.klmin.commerce.orderservice.order.domain.Quantity.of(1),
@@ -88,7 +89,7 @@ class PlaceOrderServiceTest {
         service.placeOrder(command(null, 1_000L));
         catalog.products.put(pid(10), new ProductCatalogPort.CatalogProduct(pid(10), "a", 1_200L, true));
         assertThatThrownBy(() -> service.placeOrder(
-                new PlaceOrderCommand(1L, command(null, 1_000L).lines(), 0L, null, true)))
+                new PlaceOrderCommand(uid(1), command(null, 1_000L).lines(), 0L, null, true)))
                 .isInstanceOf(OrderPriceChangedException.class);
 
         assertThat(cart.findByUserId(user)).hasSize(1);
@@ -143,7 +144,7 @@ class PlaceOrderServiceTest {
     void invalidLine_400_withoutCallingCatalog() {
         catalog.down = true;
 
-        assertThatThrownBy(() -> service.placeOrder(new PlaceOrderCommand(1L,
+        assertThatThrownBy(() -> service.placeOrder(new PlaceOrderCommand(uid(1),
                 List.of(new PlaceOrderCommand.Line(pid(10), 0, 1_000L)), 0L, null)))
                 .isInstanceOf(DomainValidationException.class);
     }

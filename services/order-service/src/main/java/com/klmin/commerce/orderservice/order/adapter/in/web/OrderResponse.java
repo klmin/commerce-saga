@@ -8,7 +8,7 @@ import java.util.UUID;
 
 record OrderResponse(
         UUID orderId,
-        long userId,
+        UUID userId,
         String status,
         long totalAmount,
         long pointAmount,

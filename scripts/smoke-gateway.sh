@@ -9,7 +9,7 @@
 # 확인하는 것
 #   9f. 토큰 없이 Gateway → 401, 서비스에 직접 → 401 (서비스도 다시 검증)
 #   9g. 사용자 1 이 Gateway 로 주문 → 사용자 1 은 조회 200, 사용자 2 는 주문·Saga·결제 모두 404 (IDOR)
-#       사용자 2 가 X-User-Id: 1 을 붙여도 404 (헤더는 Gateway 가 지우고, 서비스는 토큰의 sub 만 본다)
+#       사용자 2 가 X-User-Id: <사용자 1 의 UUID> 를 붙여도 404 (헤더는 Gateway 가 지우고, 서비스는 토큰의 sub 만 본다)
 #   9h. 관리자 경로(/api/admin/payment-faults): 일반 사용자 403, 관리자 200
 #   9i. 같은 사용자가 몰아서 요청하면 429 (사용자별 rate limit), 다른 사용자는 그대로 200
 set -euo pipefail
@@ -39,28 +39,28 @@ expect_status 401 "order-service 직접 (토큰 없음)" "$ORDER_URL/orders/0000
 expect_status 401 "Gateway (위조 토큰)" "$GATEWAY_URL/api/points/me" -H 'Authorization: Bearer abc.def.ghi'
 
 echo "== 9g. 사용자 1 의 주문을 사용자 2 가 볼 수 없다"
-order_id=$(curl -sf -X POST "$GATEWAY_URL/api/orders" -H "$(auth 1)" -H 'Content-Type: application/json' \
+order_id=$(curl -sf -X POST "$GATEWAY_URL/api/orders" -H "$(auth "$USER1")" -H 'Content-Type: application/json' \
   -d "{\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":0}" | field orderId)
 [ -n "$order_id" ] || fail "Gateway 로 주문 생성 실패"
 ok "사용자 1 주문 …${order_id: -8} (Gateway 경유)"
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
-until [ "$(curl -sf "$GATEWAY_URL/api/orders/$order_id" -H "$(auth 1)" | field status)" = "COMPLETED" ]; do
+until [ "$(curl -sf "$GATEWAY_URL/api/orders/$order_id" -H "$(auth "$USER1")" | field status)" = "COMPLETED" ]; do
   [ "$(date +%s)" -le "$deadline" ] || fail "주문이 COMPLETED 가 안 됨"
   sleep 1
 done
 ok "사용자 1 조회 → COMPLETED"
-expect_status 404 "사용자 2 → 사용자 1 주문" "$GATEWAY_URL/api/orders/$order_id" -H "$(auth 2)"
-expect_status 404 "사용자 2 → 사용자 1 Saga" "$GATEWAY_URL/api/orders/$order_id/saga" -H "$(auth 2)"
-expect_status 404 "사용자 2 → 사용자 1 결제" "$GATEWAY_URL/api/payments/orders/$order_id" -H "$(auth 2)"
-expect_status 404 "사용자 2 + X-User-Id: 1 헤더" "$GATEWAY_URL/api/orders/$order_id" -H "$(auth 2)" -H 'X-User-Id: 1'
-expect_status 404 "사용자 2 + X-User-Id: 1 헤더, 서비스 직접" "$ORDER_URL/orders/$order_id" -H "$(auth 2)" -H 'X-User-Id: 1'
+expect_status 404 "사용자 2 → 사용자 1 주문" "$GATEWAY_URL/api/orders/$order_id" -H "$(auth "$USER2")"
+expect_status 404 "사용자 2 → 사용자 1 Saga" "$GATEWAY_URL/api/orders/$order_id/saga" -H "$(auth "$USER2")"
+expect_status 404 "사용자 2 → 사용자 1 결제" "$GATEWAY_URL/api/payments/orders/$order_id" -H "$(auth "$USER2")"
+expect_status 404 "사용자 2 + X-User-Id: 사용자 1 헤더" "$GATEWAY_URL/api/orders/$order_id" -H "$(auth "$USER2")" -H "X-User-Id: $USER1"
+expect_status 404 "사용자 2 + X-User-Id: 사용자 1 헤더, 서비스 직접" "$ORDER_URL/orders/$order_id" -H "$(auth "$USER2")" -H "X-User-Id: $USER1"
 
 echo "== 9h. 관리자 경로는 ADMIN 만"
-expect_status 403 "사용자 1 → /api/admin/payment-faults" "$GATEWAY_URL/api/admin/payment-faults" -H "$(auth 1)"
-expect_status 200 "관리자 → /api/admin/payment-faults" "$GATEWAY_URL/api/admin/payment-faults" -H "$(auth 100)"
+expect_status 403 "사용자 1 → /api/admin/payment-faults" "$GATEWAY_URL/api/admin/payment-faults" -H "$(auth "$USER1")"
+expect_status 200 "관리자 → /api/admin/payment-faults" "$GATEWAY_URL/api/admin/payment-faults" -H "$(auth "$ADMIN")"
 
 echo "== 9i. 사용자별 rate limit"
-token3=$(auth 3)
+token3=$(auth "$USER3")
 codes=""
 for _ in $(seq 1 30); do
   codes="$codes $(status "$GATEWAY_URL/api/points/me" -H "$token3")"
@@ -69,6 +69,6 @@ ok200=$(echo "$codes" | tr ' ' '\n' | grep -c '^200$' || true)
 limited=$(echo "$codes" | tr ' ' '\n' | grep -c '^429$' || true)
 [ "$limited" -gt 0 ] || fail "30번 연속 요청에 429 가 없음 ($codes)"
 ok "사용자 3 연속 30번 → 200 ${ok200}번, 429 ${limited}번"
-expect_status 200 "그동안 사용자 4 는 그대로" "$GATEWAY_URL/api/points/me" -H "$(auth 4)"
+expect_status 200 "그동안 사용자 4 는 그대로" "$GATEWAY_URL/api/points/me" -H "$(auth "$USER4")"
 
 echo "PASS"

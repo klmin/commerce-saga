@@ -15,6 +15,6 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@AuthenticationPrincipal(expression = "T(java.lang.Long).parseLong(subject)")
+@AuthenticationPrincipal(expression = "T(java.util.UUID).fromString(subject)")
 public @interface CurrentUserId {
 }

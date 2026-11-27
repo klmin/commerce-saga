@@ -17,7 +17,7 @@ public interface PaymentGatewayPort {
      * @throws com.klmin.commerce.paymentservice.payment.application.PaymentGatewayTimeoutException
      *         제한 시간 안에 응답이 없음. PG 는 계속 처리해 나중에 승인할 수 있다 → {@link #inquire} 로 확정
      */
-    GatewayResult approve(UUID orderId, long userId, Money amount);
+    GatewayResult approve(UUID orderId, UUID userId, Money amount);
 
     /** 거래 조회. PG 가 아직 처리 중이거나 받은 적 없으면 empty */
     Optional<GatewayResult> inquire(UUID orderId);

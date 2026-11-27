@@ -46,14 +46,14 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    public String register(long userId, String sessionId, String userAgent) {
+    public String register(UUID userId, String sessionId, String userAgent) {
         String deviceId = UUID.randomUUID().toString();
         devices.save(userId, new DeviceRecord(deviceId, sessionId, userAgent(userAgent), clock.instant()));
         return deviceId;
     }
 
     @Override
-    public List<DeviceResult> devices(long userId, String currentDeviceId) {
+    public List<DeviceResult> devices(UUID userId, String currentDeviceId) {
         Map<String, Instant> live = authorizations.liveDevices(principal(userId), clock.instant());
         List<DeviceResult> result = new ArrayList<>();
         for (DeviceRecord device : devices.findAll(userId)) {
@@ -74,7 +74,7 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    public void logout(long userId, String deviceId, String currentDeviceId) {
+    public void logout(UUID userId, String deviceId, String currentDeviceId) {
         if (deviceId.equals(currentDeviceId)) {
             throw new DomainValidationException("지금 기기는 로그아웃 버튼으로 로그아웃합니다");
         }
@@ -86,7 +86,7 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    public int logoutOthers(long userId, String currentDeviceId) {
+    public int logoutOthers(UUID userId, String currentDeviceId) {
         int count = 0;
         for (DeviceRecord device : devices.findAll(userId)) {
             if (!device.deviceId().equals(currentDeviceId)) {
@@ -98,14 +98,14 @@ public class DeviceService implements ManageDevicesUseCase {
     }
 
     @Override
-    public void loggedOut(long userId, String deviceId) {
+    public void loggedOut(UUID userId, String deviceId) {
         int deleted = authorizations.deleteByDevice(principal(userId), deviceId);
         devices.remove(userId, deviceId);
         log.info("기기 로그아웃(OIDC): 인가 기록 {}건 삭제 (userId={})", deleted, userId);
     }
 
     @Override
-    public void authorized(long userId) {
+    public void authorized(UUID userId) {
         devices.extend(userId);
     }
 
@@ -114,7 +114,7 @@ public class DeviceService implements ManageDevicesUseCase {
      * 지우는 순서로 다시 할 수 있게 한다. 인가 기록(바로 커밋) → SSO 세션 → 마지막에 기기 기록.
      * 중간에 실패하면 기기 기록이 남아 다시 로그아웃하면 남은 것을 지운다(이미 지운 것은 0건·없음이라 안전)
      */
-    private void end(long userId, DeviceRecord device) {
+    private void end(UUID userId, DeviceRecord device) {
         int deleted = authorizations.deleteByDevice(principal(userId), device.deviceId());
         sessions.delete(device.sessionId());
         devices.remove(userId, device.deviceId());
@@ -131,8 +131,8 @@ public class DeviceService implements ManageDevicesUseCase {
         return max;
     }
 
-    private static String principal(long userId) {
-        return Long.toString(userId);
+    private static String principal(UUID userId) {
+        return userId.toString(); // SAS principal 이름 = userId 의 UUID 문자열
     }
 
     /** 화면에 보일 브라우저 정보. 길이를 자르고 제어 문자를 뺀다 */

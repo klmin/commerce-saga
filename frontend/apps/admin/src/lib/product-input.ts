@@ -90,7 +90,8 @@ export type AuditEntry = {
   /** 등록이면 null */
   before: AuditSnapshot | null;
   after: AuditSnapshot;
-  changedBy: number;
+  /** 바꾼 관리자 userId (UUID) */
+  changedBy: string;
   changedAt: string;
 };
 

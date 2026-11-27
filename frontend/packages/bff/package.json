@@ -8,6 +8,7 @@
     "./base": "./src/base.ts",
     "./me": "./src/me.ts",
     "./session": "./src/session.tsx",
+    "./short-id": "./src/short-id.ts",
     "./uuid": "./src/uuid.ts"
   },
   "scripts": {

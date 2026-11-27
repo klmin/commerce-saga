@@ -7,6 +7,7 @@ import com.klmin.commerce.authservice.auth.application.port.in.AuthenticateComma
 import com.klmin.commerce.authservice.auth.application.port.in.AuthenticatedUserResult;
 import com.klmin.commerce.authservice.auth.application.port.in.SignUpCommand;
 import com.klmin.commerce.authservice.auth.domain.User;
+import com.klmin.commerce.authservice.auth.domain.UserId;
 import com.klmin.commerce.authservice.auth.domain.UserStatus;
 import com.klmin.commerce.authservice.common.error.DomainValidationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,9 +46,10 @@ class AuthServiceTest {
 
     @Test
     void 가입하면_비밀번호는_해시로_저장되고_같은_아이디는_대소문자_달라도_거부() {
-        long id = service.signUp(new SignUpCommand("Alice", "password1"));
+        UUID id = service.signUp(new SignUpCommand("Alice", "password1"));
 
-        assertThat(users.findById(id).orElseThrow().passwordHash()).isEqualTo("hashed:password1");
+        assertThat(id.version()).isEqualTo(7); // 앱이 만든 UUIDv7 (ADR 0018)
+        assertThat(users.findById(UserId.of(id)).orElseThrow().passwordHash()).isEqualTo("hashed:password1");
         assertThatThrownBy(() -> service.signUp(new SignUpCommand("ALICE", "password2")))
                 .isInstanceOf(DuplicateLoginIdException.class);
         assertThatThrownBy(() -> service.signUp(new SignUpCommand("bobby", "short")))
@@ -55,7 +58,7 @@ class AuthServiceTest {
 
     @Test
     void 가입에_성공했을_때만_UserRegistered_를_한_번_남긴다() {
-        long id = service.signUp(new SignUpCommand("carol", "password1"));
+        UUID id = service.signUp(new SignUpCommand("carol", "password1"));
 
         assertThatThrownBy(() -> service.signUp(new SignUpCommand("carol", "password2")))
                 .isInstanceOf(DuplicateLoginIdException.class);
@@ -66,7 +69,7 @@ class AuthServiceTest {
 
     @Test
     void 로그인_확인은_토큰을_만들지_않고_userId_와_역할만_돌려준다() {
-        long id = service.signUp(new SignUpCommand("alice", "password1"));
+        UUID id = service.signUp(new SignUpCommand("alice", "password1"));
 
         AuthenticatedUserResult user = login("ALICE", "password1");
 
@@ -85,7 +88,7 @@ class AuthServiceTest {
 
     @Test
     void 정지된_계정은_비밀번호가_맞아도_로그인_실패() {
-        long id = service.signUp(new SignUpCommand("alice", "password1"));
+        UUID id = service.signUp(new SignUpCommand("alice", "password1"));
         suspend(id);
 
         assertThatThrownBy(() -> login("alice", "password1")).isInstanceOf(InvalidCredentialsException.class);
@@ -124,17 +127,17 @@ class AuthServiceTest {
 
     @Test
     void 토큰_클레임은_지금_역할을_읽고_정지된_사용자는_거절한다() {
-        long id = service.signUp(new SignUpCommand("alice", "password1"));
+        UUID id = service.signUp(new SignUpCommand("alice", "password1"));
         assertThat(service.currentClaims(id).roles()).containsExactly("USER");
 
         suspend(id);
         assertThatThrownBy(() -> service.currentClaims(id)).isInstanceOf(InvalidCredentialsException.class);
-        assertThatThrownBy(() -> service.currentClaims(999_999)).isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> service.currentClaims(UUID.randomUUID())).isInstanceOf(InvalidCredentialsException.class);
     }
 
-    private void suspend(long id) {
-        User user = users.findById(id).orElseThrow();
-        users.save(new User(id, user.loginId(), user.passwordHash(), user.roles(), UserStatus.SUSPENDED,
+    private void suspend(UUID id) {
+        User user = users.findById(UserId.of(id)).orElseThrow();
+        users.save(new User(user.id(), user.loginId(), user.passwordHash(), user.roles(), UserStatus.SUSPENDED,
                 user.createdAt(), user.updatedAt()));
     }
 }

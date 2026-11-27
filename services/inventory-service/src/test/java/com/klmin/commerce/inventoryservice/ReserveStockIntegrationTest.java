@@ -243,7 +243,7 @@ class ReserveStockIntegrationTest {
         sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 2))));
         awaitReplies(orderId, 1);
 
-        send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId, 1L, 2000L, 0L, 2000L));
+        send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId, UUID.fromString("01900000-0000-7000-8001-000000000001"), 2000L, 0L, 2000L));
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore));

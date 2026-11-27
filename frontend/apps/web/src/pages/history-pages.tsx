@@ -14,7 +14,7 @@ import { CursorNav } from "@/components/cursor-nav";
 import { LoadError, Page, Section } from "@commerce/ui/page";
 import { ListSkeleton } from "@commerce/ui/skeletons";
 import { ToneBadge } from "@/components/tone-badge";
-import { numberCursor, uuidCursor } from "@/lib/history/cursor";
+import { uuidCursor } from "@/lib/history/cursor";
 import {
   notificationTypeLabel,
   paymentStatusLabel,
@@ -199,7 +199,7 @@ export function PaymentsPage() {
 
 export function NotificationsPage() {
   const [params] = useSearchParams();
-  const before = numberCursor(params.get("before") ?? undefined);
+  const before = uuidCursor(params.get("before") ?? undefined);
   const notifications = useQuery({
     queryKey: ["notifications", before],
     queryFn: () => myNotifications(before),
@@ -238,10 +238,8 @@ export function NotificationsPage() {
               </ul>
               <CursorNav
                 basePath="/notifications"
-                isFirstPage={before === undefined}
-                nextCursor={
-                  items.length === NOTIFICATIONS_PAGE_SIZE ? String(items.at(-1)?.id) : undefined
-                }
+                isFirstPage={!before}
+                nextCursor={items.length === NOTIFICATIONS_PAGE_SIZE ? items.at(-1)?.id : undefined}
                 moreLabel="이전 알림 더 보기"
               />
             </>

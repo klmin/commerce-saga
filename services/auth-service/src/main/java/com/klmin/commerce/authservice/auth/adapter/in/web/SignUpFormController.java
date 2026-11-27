@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.io.IOException;
+import java.util.UUID;
 
 /**
  * 인증 화면의 가입 폼 {@code POST /signup} (설계 문서 4절 "가입", ADR 0017).
@@ -56,7 +57,7 @@ class SignUpFormController {
     @PostMapping("/signup")
     void signUp(@RequestParam(defaultValue = "") String loginId, @RequestParam(defaultValue = "") String password,
                 HttpServletRequest request, HttpServletResponse response) throws IOException {
-        long userId;
+        UUID userId;
         try {
             userId = signUp.signUp(new SignUpCommand(loginId, password));
         } catch (DuplicateLoginIdException e) {

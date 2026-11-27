@@ -67,7 +67,7 @@ class OAuthFlowIntegrationTest {
     JdbcClient jdbc;
 
     private String loginId;
-    private long userId;
+    private UUID userId;
 
     @BeforeEach
     void setUp() {
@@ -96,13 +96,13 @@ class OAuthFlowIntegrationTest {
         Tokens tokens = loginAndExchange();
 
         Jwt access = decode(tokens.accessToken());
-        assertThat(access.getSubject()).isEqualTo(Long.toString(userId));
+        assertThat(access.getSubject()).isEqualTo(userId.toString());
         assertThat(access.getClaimAsStringList("roles")).containsExactly("USER");
         assertThat(access.getClaimAsString("iss")).isEqualTo(ISSUER);
         assertThat(access.getExpiresAt()).isBefore(access.getIssuedAt().plusSeconds(15 * 60 + 1));
 
         Jwt id = decode(tokens.idToken());
-        assertThat(id.getSubject()).isEqualTo(Long.toString(userId));
+        assertThat(id.getSubject()).isEqualTo(userId.toString());
         assertThat(id.getAudience()).containsExactly(CLIENT);
         assertThat(tokens.refreshToken()).isNotBlank();
     }
@@ -189,8 +189,8 @@ class OAuthFlowIntegrationTest {
         MvcResult signedUp = browser.perform(post("/signup").param("loginId", newLoginId).param("password", "password1")
                 .param("_csrf", csrf));
         assertThat(location(signedUp)).startsWith("/oauth2/authorize?");
-        Long newUserId = jdbc.sql("select id from users where login_id = ?").param(newLoginId).query(Long.class).single();
-        assertThat(jdbc.sql("select count(*) from outbox where aggregateid = ?").param(Long.toString(newUserId))
+        UUID newUserId = jdbc.sql("select id from users where login_id = ?").param(newLoginId).query(UUID.class).single();
+        assertThat(jdbc.sql("select count(*) from outbox where aggregateid = ?").param(newUserId.toString())
                 .query(Long.class).single()).isEqualTo(1);
 
         MvcResult code = browser.perform(get(URI.create(location(signedUp))).accept(MediaType.TEXT_HTML));
@@ -244,7 +244,7 @@ class OAuthFlowIntegrationTest {
                 .andExpect(status().isOk()).andReturn());
 
         Jwt access = decode(token.get("access_token").asString());
-        assertThat(access.getSubject()).isEqualTo(Long.toString(userId));
+        assertThat(access.getSubject()).isEqualTo(userId.toString());
         assertThat(access.getClaimAsStringList("roles")).containsExactly("USER");
         assertThat(token.has("refresh_token")).isFalse();
     }
@@ -336,7 +336,7 @@ class OAuthFlowIntegrationTest {
 
     private long authorizations() {
         return jdbc.sql("select count(*) from oauth2_authorization where principal_name = ?")
-                .param(Long.toString(userId)).query(Long.class).single();
+                .param(userId.toString()).query(Long.class).single();
     }
 
     // SAS 는 GET 인가 요청의 값을 쿼리 문자열에서 읽는다

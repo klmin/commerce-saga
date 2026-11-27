@@ -52,7 +52,7 @@ class OrderEventsListener {
         }
     }
 
-    private void notify(UUID orderId, long userId, String type, String message) {
+    private void notify(UUID orderId, UUID userId, String type, String message) {
         if (repository.insertIfAbsent(orderId, userId, type, message)) {
             // 실제 발송(메일·푸시) 대신 로그. 사용자 식별자만 남기고 개인정보는 남기지 않는다
             log.info("알림 발송: {} (orderId={}, userId={})", type, orderId, userId);
@@ -77,9 +77,10 @@ class OrderEventsListener {
     }
 
     // 사용자 ID 가 잘못된 알림은 조회할 수 없고, (order_id, type) 유니크 때문에 나중에 바로잡을 수도 없다
-    private static long requireUserId(long userId, ConsumerRecord<?, ?> record) {
-        if (userId <= 0) {
-            throw new NonRetryableMessageException("invalid userId " + userId + ": " + describe(record));
+    // UUID 형식이 아닌 값은 본문 역직렬화(JacksonException)에서 이미 DLT 로 간다
+    private static UUID requireUserId(UUID userId, ConsumerRecord<?, ?> record) {
+        if (userId == null) {
+            throw new NonRetryableMessageException("userId missing: " + describe(record));
         }
         return userId;
     }

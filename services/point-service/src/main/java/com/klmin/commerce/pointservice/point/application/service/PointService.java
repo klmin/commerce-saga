@@ -67,8 +67,8 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
             reject(command, "invalid command: amount must be positive", now);
             return;
         }
-        if (command.userId() <= 0) {
-            reject(command, "invalid command: userId must be positive", now);
+        if (command.userId() == null) {
+            reject(command, "invalid command: userId missing", now);
             return;
         }
         UserId userId = UserId.of(command.userId());
@@ -122,7 +122,7 @@ class PointService implements UsePointUseCase, RefundPointUseCase, GetPointBalan
 
     @Override
     @Transactional(readOnly = true)
-    public PointAccount getBalance(long userId) {
+    public PointAccount getBalance(UUID userId) {
         return accountPort.findById(UserId.of(userId)).orElseThrow(() -> new PointAccountNotFoundException(userId));
     }
 

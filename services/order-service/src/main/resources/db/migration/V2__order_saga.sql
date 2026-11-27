@@ -9,7 +9,7 @@ update orders set status = 'CANCELLED' where status = 'REJECTED';
 
 create table order_sagas (
     order_id       uuid primary key references orders (id),
-    user_id        bigint      not null,
+    user_id        uuid        not null,
     point_amount   bigint      not null,
     paid_amount    bigint      not null,
     state          varchar(30) not null,

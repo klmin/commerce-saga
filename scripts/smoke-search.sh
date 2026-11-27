@@ -25,7 +25,6 @@ KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:29092}
 SKIP_OUTAGE=${SKIP_OUTAGE:-false}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 PRODUCT_ID=$PRODUCT_MOUSE   # 무선 마우스 (시드 2)
-ADMIN=100
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
@@ -33,7 +32,7 @@ field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 urlencode() { python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$1" 2>/dev/null \
   || node -e 'console.log(encodeURIComponent(process.argv[1]))' "$1"; }
 admin_put() { # path json
-  curl -sf -X PUT "$GATEWAY_URL/api/admin/products/$PRODUCT_ID$1" -H "$(auth $ADMIN)" \
+  curl -sf -X PUT "$GATEWAY_URL/api/admin/products/$PRODUCT_ID$1" -H "$(auth "$ADMIN")" \
     -H 'Content-Type: application/json' -d "$2" > /dev/null
 }
 search() { # 검색어 [추가 쿼리]

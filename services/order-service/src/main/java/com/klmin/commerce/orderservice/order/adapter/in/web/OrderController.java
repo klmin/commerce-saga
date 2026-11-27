@@ -51,7 +51,7 @@ class OrderController {
      */
     @PostMapping
     ResponseEntity<OrderResponse> placeOrder(
-            @CurrentUserId long userId,
+            @CurrentUserId UUID userId,
             @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey,
             @Valid @RequestBody PlaceOrderRequest request) {
         PlaceOrderResult result = placeOrderUseCase.placeOrder(request.toCommand(userId, idempotencyKey));
@@ -66,7 +66,7 @@ class OrderController {
     /** 본인 주문 목록 (최신순, 커서 페이징). 다음 쪽은 마지막 orderId 를 before 로 */
     @GetMapping
     List<OrderSummaryResponse> myOrders(
-            @CurrentUserId long userId,
+            @CurrentUserId UUID userId,
             @RequestParam(required = false) UUID before,
             @RequestParam(defaultValue = "20") @Min(1) @Max(ListMyOrdersQuery.MAX_SIZE) int size) {
         return listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(userId, before, size)).stream()
@@ -76,7 +76,7 @@ class OrderController {
 
     @GetMapping("/{orderId}")
     OrderResponse getOrder(
-            @CurrentUserId long userId,
+            @CurrentUserId UUID userId,
             @PathVariable UUID orderId) {
         return OrderResponse.from(getOrderUseCase.getOrder(new GetOrderQuery(orderId, userId)));
     }

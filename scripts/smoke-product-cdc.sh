@@ -28,13 +28,12 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-30}
 TOPIC=product.cdc.products
 # 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
 PRODUCT_ID=$(product_id "${PRODUCT_ID:-4}")
-ADMIN=100
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 set_price() {
-  curl -sf -X PUT "$GATEWAY_URL/api/admin/products/$PRODUCT_ID/price" -H "$(auth $ADMIN)" \
+  curl -sf -X PUT "$GATEWAY_URL/api/admin/products/$PRODUCT_ID/price" -H "$(auth "$ADMIN")" \
     -H 'Content-Type: application/json' -d "{\"price\":$1}" > /dev/null
 }
 

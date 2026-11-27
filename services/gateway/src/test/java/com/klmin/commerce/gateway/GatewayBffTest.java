@@ -68,6 +68,7 @@ class GatewayBffTest {
 
     private static final RSAKey KEY = rsaKey();
     private static final AtomicReference<String> ISSUER_HOLDER = new AtomicReference<>();
+    private static final String USER_ID = "01900000-0000-7000-8001-000000000008";
     private static final AtomicReference<String> NONCE = new AtomicReference<>();
     private static final AtomicReference<String> AUDIENCE = new AtomicReference<>("gateway-web");
     private static final AtomicReference<Long> ACCESS_TTL = new AtomicReference<>(600L);
@@ -159,7 +160,7 @@ class GatewayBffTest {
         HttpResponse<String> me = get("/api/me", "localhost:5173");
         assertThat(me.statusCode()).isEqualTo(200);
         // 로그인 기기 화면 주소 = SAS 공개 주소 + /sessions/login (후속 5-6)
-        assertThat(me.body()).isEqualTo("{\"userId\":8,\"roles\":[\"ADMIN\",\"USER\"],\"devicesUrl\":\""
+        assertThat(me.body()).isEqualTo("{\"userId\":\"" + USER_ID + "\",\"roles\":[\"ADMIN\",\"USER\"],\"devicesUrl\":\""
                 + ISSUER + "/sessions/login\"}");
         // 서비스로 넘기지 않는다
         assertThat(LAST_API.get()).isNull();
@@ -291,7 +292,7 @@ class GatewayBffTest {
 
     @Test
     void Bearer_로_온_요청은_세션_없이도_그대로_검증해_넘긴다() throws Exception {
-        String token = jwt(Map.of("sub", "42", "roles", List.of("USER")), 300, "gateway-web", null);
+        String token = jwt(Map.of("sub", "01900000-0000-7000-8001-000000000042", "roles", List.of("USER")), 300, "gateway-web", null);
         HttpResponse<String> response = browser.send(request("/api/orders/abc", "localhost:5173")
                 .header("Authorization", "Bearer " + token).GET().build(), HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(200);
@@ -389,8 +390,8 @@ class GatewayBffTest {
                         respond(exchange, 400, "{\"error\":\"invalid_grant\"}");
                         return;
                     }
-                    String access = jwt(Map.of("sub", "8", "roles", ROLES.get()), ACCESS_TTL.get(), AUDIENCE.get(), null);
-                    String id = jwt(Map.of("sub", "8", "roles", ROLES.get(), "auth_time", Instant.now().getEpochSecond()),
+                    String access = jwt(Map.of("sub", USER_ID, "roles", ROLES.get()), ACCESS_TTL.get(), AUDIENCE.get(), null);
+                    String id = jwt(Map.of("sub", USER_ID, "roles", ROLES.get(), "auth_time", Instant.now().getEpochSecond()),
                             600, AUDIENCE.get(), refresh ? null : NONCE.get());
                     respond(exchange, """
                             {"access_token":"%s","token_type":"Bearer","expires_in":%d,"scope":"openid",

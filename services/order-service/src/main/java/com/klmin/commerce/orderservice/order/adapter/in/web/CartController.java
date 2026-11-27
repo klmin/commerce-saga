@@ -34,19 +34,19 @@ class CartController {
     }
 
     @GetMapping
-    CartResponse get(@CurrentUserId long userId) {
+    CartResponse get(@CurrentUserId UUID userId) {
         return CartResponse.from(cartUseCase.get(userId));
     }
 
     /** 담기 또는 수량 바꾸기 (수량은 더하지 않고 그 값으로) */
     @PutMapping("/items/{productId}")
-    CartResponse put(@CurrentUserId long userId, @PathVariable UUID productId,
+    CartResponse put(@CurrentUserId UUID userId, @PathVariable UUID productId,
                      @Valid @RequestBody PutItemRequest request) {
         return CartResponse.from(cartUseCase.put(userId, productId, request.quantity()));
     }
 
     @DeleteMapping("/items/{productId}")
-    CartResponse remove(@CurrentUserId long userId, @PathVariable UUID productId) {
+    CartResponse remove(@CurrentUserId UUID userId, @PathVariable UUID productId) {
         return CartResponse.from(cartUseCase.remove(userId, productId));
     }
 

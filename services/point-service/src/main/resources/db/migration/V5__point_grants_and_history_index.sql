@@ -2,7 +2,7 @@
 -- 지급 기록 (가입 축하 등). 계정을 만든 트랜잭션에서 함께 INSERT 한다. id 는 UUIDv7 (생성 순서)
 create table point_grants (
     id         uuid        primary key,
-    user_id    bigint      not null,
+    user_id    uuid        not null,
     amount     bigint      not null check (amount > 0),
     type       varchar(30) not null,
     created_at timestamptz not null

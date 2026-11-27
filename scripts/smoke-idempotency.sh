@@ -18,8 +18,8 @@ source "$(dirname "$0")/lib/products.sh"
 
 GATEWAY_URL=${GATEWAY_URL:-http://localhost:8000}
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
-USER_ID=${USER_ID:-3}
-OTHER_USER_ID=${OTHER_USER_ID:-4}
+USER_ID=$(user_id "${USER_ID:-3}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
+OTHER_USER_ID=$(user_id "${OTHER_USER_ID:-4}")
 POINT=100
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

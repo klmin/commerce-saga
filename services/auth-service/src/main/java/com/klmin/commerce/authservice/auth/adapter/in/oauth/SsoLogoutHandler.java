@@ -10,6 +10,9 @@ import org.springframework.security.oauth2.server.authorization.oidc.authenticat
 import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+import java.util.UUID;
+
 /**
  * OIDC 로그아웃({@code /connect/logout}) 때 이 기기(브라우저)의 인가 기록을 지운다 (ADR 0017 "SSO 로그아웃", 후속 5-6).
  * SSO 세션은 SAS 의 기본 로그아웃 처리가 끝낸다. 인가 기록까지 지워야 이 브라우저의 다른 화면(클라이언트)이 들고 있던
@@ -34,12 +37,11 @@ public class SsoLogoutHandler implements LogoutHandler {
         if (user == null || !user.isAuthenticated()) {
             return;
         }
-        long userId;
-        try {
-            userId = Long.parseLong(user.getName());
-        } catch (NumberFormatException ignored) {
+        Optional<UUID> found = UserPrincipal.userId(user.getName());
+        if (found.isEmpty()) {
             return; // 우리 로그인 폼으로 로그인한 사용자가 아니다(지울 기록 없음)
         }
+        UUID userId = found.get();
         String deviceId = DeviceSession.currentDeviceId(request);
         if (deviceId == null) {
             authorizations.revokeAll(userId);

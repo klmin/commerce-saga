@@ -49,7 +49,7 @@ echo "== 13a. 가입하면 포인트 계정이 생긴다"
 signup_user "$login_id" "$PASSWORD" || fail "가입 실패"
 token=$(user_token "$login_id" "$PASSWORD") || fail "로그인 실패"
 user_id=$(token_sub "$token")
-[ -n "$user_id" ] || fail "토큰에 sub(userId) 없음"
+[[ $user_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || fail "토큰의 sub(userId) 가 UUIDv7 이 아님: '$user_id'"
 ok "가입 $login_id → userId $user_id"
 auth=(-H "Authorization: Bearer $token")
 
@@ -84,12 +84,12 @@ balance=$(call GET /api/points/me "${auth[@]}" | body_of | field balance)
 ok "주문 …${order_id: -8} COMPLETED, 잔액 ${SIGNUP_BONUS} → ${balance}P"
 
 echo "== 13c. 계정은 하나"
-rows=$(psql_point "select count(*) from point_accounts where user_id = $user_id")
+rows=$(psql_point "select count(*) from point_accounts where user_id = '$user_id'")
 [ "$rows" = 1 ] || fail "point_accounts 에 사용자 $user_id 행이 $rows 개"
 ok "point_accounts 사용자 $user_id 행 1개"
-seed=$(psql_point "select count(*) from point_accounts where user_id between 1 and 4")
+seed=$(psql_point "select count(*) from point_accounts where user_id in ('$USER1', '$USER2', '$USER3', '$USER4')")
 [ "$seed" = 4 ] || fail "시드 계정 수가 $seed"
-ok "시드 계정(1~4) 그대로"
+ok "시드 계정(user1~user4) 그대로"
 
 echo "== 13d. 포인트 내역 = 주문 사용 + 가입 축하 지급 한 번 (F-2a)"
 res=$(call GET "/api/points/me/history?size=20" "${auth[@]}")
@@ -103,7 +103,7 @@ second=$(sed -E 's/\},\{/}\n{/g' <<< "$history" | sed -n 2p)
   || fail "최신 항목이 주문 사용이 아님: $first"
 [ "$(field kind <<< "$second")" = SIGNUP_BONUS ] && [ "$(field amount <<< "$second")" = "$SIGNUP_BONUS" ] \
   || fail "두 번째 항목이 가입 축하 지급이 아님: $second"
-grants=$(psql_point "select count(*) from point_grants where user_id = $user_id")
+grants=$(psql_point "select count(*) from point_grants where user_id = '$user_id'")
 [ "$grants" = 1 ] || fail "point_grants 에 사용자 $user_id 행이 $grants 개"
 ok "내역: 주문 −${USE_POINT}P(USED) → 가입 축하 +${SIGNUP_BONUS}P, 지급 기록 1개"
 

@@ -11,10 +11,11 @@ import java.lang.annotation.Target;
 /**
  * 요청한 사용자 id = access token(JWT) 의 {@code sub} (ADR 0008). 1~3단계의 {@code X-User-Id} 헤더를 대신한다.
  * 경로·본문으로 사용자 id 를 받지 않으므로 다른 사용자로 행세할 방법이 없다.
+ * {@code sub} 는 userId 의 UUID 문자열(ADR 0018). UUID 가 아닌 {@code sub} 는 토큰 검증({@code SecurityConfig})에서 401 로 막는다.
  */
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@AuthenticationPrincipal(expression = "T(java.lang.Long).parseLong(subject)")
+@AuthenticationPrincipal(expression = "T(java.util.UUID).fromString(subject)")
 public @interface CurrentUserId {
 }

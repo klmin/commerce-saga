@@ -30,6 +30,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PaymentServiceTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+    static final UUID USER_2 = UUID.fromString("01900000-0000-7000-8001-000000000002");
+
     private static final Instant NOW = Instant.parse("2026-11-22T00:00:00Z");
 
     private final InMemoryPayments payments = new InMemoryPayments();
@@ -68,7 +71,7 @@ class PaymentServiceTest {
     void pay_approved_recordsAndRepliesApproved() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         Payment payment = payments.store.get(orderId);
         assertThat(payment.status()).isEqualTo(PaymentStatus.APPROVED);
@@ -81,7 +84,7 @@ class PaymentServiceTest {
         gateway.circuitOpen = true;
         UUID orderId = UUID.randomUUID();
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(gateway.calls).isZero();
         assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
@@ -96,7 +99,7 @@ class PaymentServiceTest {
         attempts.claim(orderId);
         gateway.circuitOpen = true;
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(gateway.calls).isZero();
         assertThat(attempts.sealed).doesNotContain(orderId);
@@ -108,13 +111,13 @@ class PaymentServiceTest {
     void pay_circuitOpen_seals_soLaterProcessingNeverCallsPg() {
         UUID orderId = UUID.randomUUID();
         gateway.circuitOpen = true;
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
         assertThat(attempts.sealed).contains(orderId);
 
         // 회로가 닫힌 다른 처리(다른 인스턴스·Saga 재전송)가 와도 PG 를 부르지 않고 같은 거절
         gateway.circuitOpen = false;
         payments.store.remove(orderId); // 앞선 처리의 기록이 아직 커밋되지 않은 경우
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(gateway.calls).isZero();
         assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
@@ -125,7 +128,7 @@ class PaymentServiceTest {
     void pay_claimsBeforeCallingPg() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(attempts.calls).containsEntry(orderId, 1);
     }
@@ -135,7 +138,7 @@ class PaymentServiceTest {
         gateway.change(new Settings(Mode.DECLINE, 0));
         UUID orderId = UUID.randomUUID();
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(payments.store.get(orderId).status()).isEqualTo(PaymentStatus.DECLINED);
         assertThat(replies.log).containsExactly("failed:" + orderId + ":declined");
@@ -145,9 +148,9 @@ class PaymentServiceTest {
     void duplicatePay_doesNotCallGatewayAgain_andRepliesSameResult() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
         gateway.change(new Settings(Mode.DECLINE, 0));
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(gateway.calls).isEqualTo(1);
         assertThat(replies.log).hasSize(2).allMatch(s -> s.startsWith("approved:"));
@@ -158,8 +161,8 @@ class PaymentServiceTest {
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
 
-        service.pay(messageId, new PayCommand(orderId, 1L, 5_000L));
-        service.pay(messageId, new PayCommand(orderId, 1L, 5_000L));
+        service.pay(messageId, new PayCommand(orderId, USER_1, 5_000L));
+        service.pay(messageId, new PayCommand(orderId, USER_1, 5_000L));
 
         assertThat(gateway.calls).isEqualTo(1);
         assertThat(replies.log).hasSize(1);
@@ -171,8 +174,8 @@ class PaymentServiceTest {
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
 
-        service.pay(messageId, new PayCommand(orderId, 1L, 0L));
-        service.pay(messageId, new PayCommand(orderId, 1L, 0L));
+        service.pay(messageId, new PayCommand(orderId, USER_1, 0L));
+        service.pay(messageId, new PayCommand(orderId, USER_1, 0L));
 
         assertThat(replies.log).hasSize(1);
     }
@@ -181,7 +184,7 @@ class PaymentServiceTest {
     void invalidAmount_repliesFailedWithoutCallingGateway() {
         UUID orderId = UUID.randomUUID();
 
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 0L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 0L));
 
         assertThat(gateway.calls).isZero();
         assertThat(payments.store).isEmpty();
@@ -189,12 +192,23 @@ class PaymentServiceTest {
     }
 
     @Test
+    void missingUserId_repliesFailedWithoutCallingGateway() {
+        UUID orderId = UUID.randomUUID();
+
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, null, 5_000L));
+
+        assertThat(gateway.calls).isZero();
+        assertThat(payments.store).isEmpty();
+        assertThat(replies.log).containsExactly("failed:" + orderId + ":invalid command: userId missing");
+    }
+
+    @Test
     void getPayment_onlyOwner() {
         UUID orderId = UUID.randomUUID();
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
 
-        assertThat(service.getPayment(new GetPaymentQuery(orderId, 1L)).amount()).isEqualTo(Money.of(5_000L));
-        assertThatThrownBy(() -> service.getPayment(new GetPaymentQuery(orderId, 2L)))
+        assertThat(service.getPayment(new GetPaymentQuery(orderId, USER_1)).amount()).isEqualTo(Money.of(5_000L));
+        assertThatThrownBy(() -> service.getPayment(new GetPaymentQuery(orderId, USER_2)))
                 .isInstanceOf(PaymentNotFoundException.class);
     }
 
@@ -210,7 +224,7 @@ class PaymentServiceTest {
         final List<UUID> refunds = new ArrayList<>();
 
         @Override
-        public GatewayResult approve(UUID orderId, long userId, Money amount) {
+        public GatewayResult approve(UUID orderId, UUID userId, Money amount) {
             if (circuitOpen) {
                 throw new com.klmin.commerce.paymentservice.payment.application.PaymentGatewayUnavailableException(orderId);
             }

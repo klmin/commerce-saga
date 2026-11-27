@@ -18,13 +18,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CircuitBreakingPaymentGatewayTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+
     private final StubPg pg = new StubPg();
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final CircuitBreakingPaymentGateway gateway = new CircuitBreakingPaymentGateway((PaymentGatewayPort) pg,
             new PaymentCircuitBreakerProperties(true, 50, 4, 4, Duration.ofMillis(200), 1), meters);
 
     private PaymentGatewayPort.GatewayResult approve() {
-        return gateway.approve(UUID.randomUUID(), 1L, Money.of(1_000));
+        return gateway.approve(UUID.randomUUID(), USER_1, Money.of(1_000));
     }
 
     @Test
@@ -81,7 +83,7 @@ class CircuitBreakingPaymentGatewayTest {
                 new PaymentCircuitBreakerProperties(false, 50, 4, 4, Duration.ofMinutes(1), 1), new SimpleMeterRegistry());
         pg.timeout = true;
         for (int i = 0; i < 10; i++) {
-            assertThatThrownBy(() -> off.approve(UUID.randomUUID(), 1L, Money.of(1)))
+            assertThatThrownBy(() -> off.approve(UUID.randomUUID(), USER_1, Money.of(1)))
                     .isInstanceOf(PaymentGatewayTimeoutException.class);
         }
     }
@@ -93,7 +95,7 @@ class CircuitBreakingPaymentGatewayTest {
         final AtomicInteger refunds = new AtomicInteger();
 
         @Override
-        public GatewayResult approve(UUID orderId, long userId, Money amount) {
+        public GatewayResult approve(UUID orderId, UUID userId, Money amount) {
             calls.incrementAndGet();
             if (timeout) {
                 throw new PaymentGatewayTimeoutException(orderId);

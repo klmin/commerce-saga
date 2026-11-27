@@ -39,6 +39,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest({PaymentController.class, PaymentFaultController.class})
 class PaymentControllerTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+    static final UUID USER_2 = UUID.fromString("01900000-0000-7000-8001-000000000002");
+    static final UUID ADMIN = UUID.fromString("01900000-0000-7000-8001-000000000100");
+
     @Autowired
     MockMvc mvc;
 
@@ -54,10 +58,10 @@ class PaymentControllerTest {
     @Test
     void getByOrder_ownPayment() throws Exception {
         UUID orderId = UUID.randomUUID();
-        Payment payment = Payment.approved(UUID.randomUUID(), orderId, 1L, Money.of(5_000L), "tx", Instant.now());
-        given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 1L))).willReturn(payment);
+        Payment payment = Payment.approved(UUID.randomUUID(), orderId, USER_1, Money.of(5_000L), "tx", Instant.now());
+        given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, USER_1))).willReturn(payment);
 
-        mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject("1"))))
+        mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject(USER_1.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("APPROVED"))
                 .andExpect(jsonPath("$.amount").value(5000));
@@ -66,10 +70,10 @@ class PaymentControllerTest {
     @Test
     void getByOrder_notOwned_returns404() throws Exception {
         UUID orderId = UUID.randomUUID();
-        given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 2L)))
+        given(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, USER_2)))
                 .willThrow(new PaymentNotFoundException(orderId));
 
-        mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject("2"))))
+        mvc.perform(get("/payments/orders/{id}", orderId).with(jwt().jwt(j -> j.subject(USER_2.toString()))))
                 .andExpect(status().isNotFound());
     }
 
@@ -79,11 +83,11 @@ class PaymentControllerTest {
         PaymentSummaryResult summary = new PaymentSummaryResult(UUID.randomUUID(), UUID.randomUUID(), 5_000L, "REFUNDED",
                 "refunded: order cancelled", Instant.parse("2026-11-23T00:00:00Z"),
                 Instant.parse("2026-11-23T00:00:05Z"));
-        given(listMyPaymentsUseCase.listMyPayments(new ListMyPaymentsQuery(1L, before, 5)))
+        given(listMyPaymentsUseCase.listMyPayments(new ListMyPaymentsQuery(USER_1, before, 5)))
                 .willReturn(List.of(summary));
 
         mvc.perform(get("/payments").param("before", before.toString()).param("size", "5")
-                        .with(jwt().jwt(j -> j.subject("1"))))
+                        .with(jwt().jwt(j -> j.subject(USER_1.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].paymentId").value(summary.paymentId().toString()))
                 .andExpect(jsonPath("$[0].status").value("REFUNDED"))
@@ -92,12 +96,12 @@ class PaymentControllerTest {
 
     @Test
     void myPayments_defaultsAndValidation() throws Exception {
-        given(listMyPaymentsUseCase.listMyPayments(new ListMyPaymentsQuery(1L, null, 20))).willReturn(List.of());
+        given(listMyPaymentsUseCase.listMyPayments(new ListMyPaymentsQuery(USER_1, null, 20))).willReturn(List.of());
 
-        mvc.perform(get("/payments").with(jwt().jwt(j -> j.subject("1"))))
+        mvc.perform(get("/payments").with(jwt().jwt(j -> j.subject(USER_1.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
-        mvc.perform(get("/payments").param("size", "0").with(jwt().jwt(j -> j.subject("1"))))
+        mvc.perform(get("/payments").param("size", "0").with(jwt().jwt(j -> j.subject(USER_1.toString()))))
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/payments"))
                 .andExpect(status().isUnauthorized());
@@ -130,13 +134,13 @@ class PaymentControllerTest {
         String body = "{\"mode\":\"DECLINE\",\"delayMillis\":0}";
         mvc.perform(put("/admin/payment-faults").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(put("/admin/payment-faults").with(jwt().jwt(j -> j.subject("1")).authorities(new SimpleGrantedAuthority("ROLE_USER")))
+        mvc.perform(put("/admin/payment-faults").with(jwt().jwt(j -> j.subject(USER_1.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isForbidden());
         verify(paymentFaultUseCase, never()).change(any());
     }
 
     private static JwtRequestPostProcessor admin() {
-        return jwt().jwt(j -> j.subject("100")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        return jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
     }
 }

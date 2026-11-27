@@ -11,8 +11,10 @@ import org.springframework.context.annotation.Import;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** cart_items 저장(upsert)과 장바구니 주문의 줄 삭제가 주문 트랜잭션과 함께 커밋되는지 (Postgres) */
@@ -29,7 +31,7 @@ class CartIntegrationTest {
 
     @Test
     void putTwice_keepsSeenPrice_andOrderFromCartRemovesOrderedLines() {
-        long user = 70_001L;
+        UUID user = uid(70_001);
         cart.put(user, pid(10), 1);
         cart.put(user, pid(10), 3);
         cart.put(user, pid(11), 2);
@@ -44,6 +46,6 @@ class CartIntegrationTest {
 
         assertThat(cart.get(user).items()).extracting(CartResult.Item::productId).containsExactly(pid(11));
         // 다른 사용자의 장바구니는 그대로
-        assertThat(cart.get(70_002L).items()).isEmpty();
+        assertThat(cart.get(uid(70_002)).items()).isEmpty();
     }
 }

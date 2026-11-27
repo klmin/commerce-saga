@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -30,10 +31,10 @@ class CartServiceTest {
 
     @Test
     void put_storesCurrentPriceAsSeenPrice_andShowsPriceChangeLater() {
-        service.put(7L, pid(1), 2);
+        service.put(uid(7), pid(1), 2);
         catalog.products.put(pid(1), new CatalogProduct(pid(1), "키보드", 42_000L, true));
 
-        CartResult result = service.get(7L);
+        CartResult result = service.get(uid(7));
 
         assertThat(result.pricesAvailable()).isTrue();
         assertThat(result.items()).singleElement().satisfies(i -> {
@@ -49,24 +50,24 @@ class CartServiceTest {
     void put_unknownOrStoppedProduct_422() {
         catalog.products.put(pid(2), new CatalogProduct(pid(2), "마우스", 25_000L, false));
 
-        assertThatThrownBy(() -> service.put(7L, pid(9), 1)).isInstanceOf(ProductNotOrderableException.class);
-        assertThatThrownBy(() -> service.put(7L, pid(2), 1)).isInstanceOf(ProductNotOrderableException.class);
-        assertThat(service.get(7L).items()).isEmpty();
+        assertThatThrownBy(() -> service.put(uid(7), pid(9), 1)).isInstanceOf(ProductNotOrderableException.class);
+        assertThatThrownBy(() -> service.put(uid(7), pid(2), 1)).isInstanceOf(ProductNotOrderableException.class);
+        assertThat(service.get(uid(7)).items()).isEmpty();
     }
 
     @Test
     void put_catalogDown_503() {
         catalog.down = true;
 
-        assertThatThrownBy(() -> service.put(7L, pid(1), 1)).isInstanceOf(ProductCatalogUnavailableException.class);
+        assertThatThrownBy(() -> service.put(uid(7), pid(1), 1)).isInstanceOf(ProductCatalogUnavailableException.class);
     }
 
     @Test
     void get_catalogDown_fallsBackToSeenPrices() {
-        service.put(7L, pid(1), 1);
+        service.put(uid(7), pid(1), 1);
         catalog.down = true;
 
-        CartResult result = service.get(7L);
+        CartResult result = service.get(uid(7));
 
         assertThat(result.pricesAvailable()).isFalse();
         assertThat(result.items()).singleElement().satisfies(i -> {
@@ -78,20 +79,20 @@ class CartServiceTest {
 
     @Test
     void get_productRemovedFromCatalog_isNotOnSale() {
-        service.put(7L, pid(1), 1);
+        service.put(uid(7), pid(1), 1);
         catalog.products.remove(pid(1));
 
-        assertThat(service.get(7L).items()).singleElement()
+        assertThat(service.get(uid(7)).items()).singleElement()
                 .satisfies(i -> assertThat(i.onSale()).isFalse());
     }
 
     @Test
     void cartsAreSeparatedByUser_andRemoveWorks() {
-        service.put(7L, pid(1), 1);
-        service.put(8L, pid(2), 1);
+        service.put(uid(7), pid(1), 1);
+        service.put(uid(8), pid(2), 1);
 
-        assertThat(service.get(7L).items()).extracting(CartResult.Item::productId).containsExactly(pid(1));
-        assertThat(service.remove(7L, pid(1)).items()).isEmpty();
-        assertThat(service.get(8L).items()).hasSize(1);
+        assertThat(service.get(uid(7)).items()).extracting(CartResult.Item::productId).containsExactly(pid(1));
+        assertThat(service.remove(uid(7), pid(1)).items()).isEmpty();
+        assertThat(service.get(uid(8)).items()).hasSize(1);
     }
 }

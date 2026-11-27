@@ -31,6 +31,8 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers(disabledWithoutDocker = true)
 class FakePaymentGatewayTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+
     @Autowired
     DataSource dataSource;
 
@@ -39,22 +41,22 @@ class FakePaymentGatewayTest {
         FakePaymentGateway gateway = new FakePaymentGateway(dataSource, Mode.APPROVE, 0);
         UUID orderId = UUID.randomUUID();
 
-        GatewayResult first = gateway.approve(orderId, 1L, Money.of(100L));
+        GatewayResult first = gateway.approve(orderId, USER_1, Money.of(100L));
         gateway.change(new Settings(Mode.DECLINE, 0));
-        GatewayResult second = gateway.approve(orderId, 1L, Money.of(100L));
+        GatewayResult second = gateway.approve(orderId, USER_1, Money.of(100L));
 
         assertThat(first.approved()).isTrue();
         assertThat(second).isEqualTo(first);
-        assertThat(gateway.approve(UUID.randomUUID(), 1L, Money.of(100L)).approved()).isFalse();
+        assertThat(gateway.approve(UUID.randomUUID(), USER_1, Money.of(100L)).approved()).isFalse();
     }
 
     @Test
     void sameOrder_returnsFirstResult_afterRestart() {
         UUID orderId = UUID.randomUUID();
-        GatewayResult beforeRestart = new FakePaymentGateway(dataSource, Mode.APPROVE, 0).approve(orderId, 1L, Money.of(100L));
+        GatewayResult beforeRestart = new FakePaymentGateway(dataSource, Mode.APPROVE, 0).approve(orderId, USER_1, Money.of(100L));
 
         // 재시작: 새 인스턴스, 장애 주입 모드도 초기값(DECLINE)으로 바뀐 상황
-        GatewayResult afterRestart = new FakePaymentGateway(dataSource, Mode.DECLINE, 0).approve(orderId, 1L, Money.of(100L));
+        GatewayResult afterRestart = new FakePaymentGateway(dataSource, Mode.DECLINE, 0).approve(orderId, USER_1, Money.of(100L));
 
         assertThat(afterRestart).isEqualTo(beforeRestart);
         assertThat(afterRestart.approved()).isTrue();
@@ -65,7 +67,7 @@ class FakePaymentGatewayTest {
         FakePaymentGateway gateway = new FakePaymentGateway(dataSource, Mode.DELAY, 50);
 
         long start = System.nanoTime();
-        GatewayResult result = gateway.approve(UUID.randomUUID(), 1L, Money.of(100L));
+        GatewayResult result = gateway.approve(UUID.randomUUID(), USER_1, Money.of(100L));
 
         assertThat(result.approved()).isTrue();
         assertThat((System.nanoTime() - start) / 1_000_000).isGreaterThanOrEqualTo(45);
@@ -76,7 +78,7 @@ class FakePaymentGatewayTest {
         FakePaymentGateway gateway = new FakePaymentGateway(dataSource, Mode.DELAY, 600, Duration.ofMillis(100));
         UUID orderId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> gateway.approve(orderId, 1L, Money.of(100L)))
+        assertThatThrownBy(() -> gateway.approve(orderId, USER_1, Money.of(100L)))
                 .isInstanceOf(PaymentGatewayTimeoutException.class);
         // PG 는 아직 처리 중 (원장에 없음)
         assertThat(gateway.inquire(orderId)).isEmpty();
@@ -84,7 +86,7 @@ class FakePaymentGatewayTest {
         await().atMost(Duration.ofSeconds(5)).until(() -> gateway.inquire(orderId).isPresent());
         assertThat(gateway.inquire(orderId).orElseThrow().approved()).isTrue();
         // 같은 주문 재요청은 늦게 확정된 그 결과 (두 번 승인되지 않음)
-        assertThat(gateway.approve(orderId, 1L, Money.of(100L))).isEqualTo(gateway.inquire(orderId).orElseThrow());
+        assertThat(gateway.approve(orderId, USER_1, Money.of(100L))).isEqualTo(gateway.inquire(orderId).orElseThrow());
     }
 
     @Test
@@ -103,18 +105,18 @@ class FakePaymentGatewayTest {
         FakePaymentGateway gateway = new FakePaymentGateway(flaky, Mode.APPROVE, 0);
         UUID orderId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> gateway.approve(orderId, 1L, Money.of(100L))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> gateway.approve(orderId, USER_1, Money.of(100L))).isInstanceOf(IllegalStateException.class);
 
         // 실패한 처리가 남아 있으면 재시도도 같은 실패를 받는다
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-                assertThat(gateway.approve(orderId, 1L, Money.of(100L)).approved()).isTrue());
+                assertThat(gateway.approve(orderId, USER_1, Money.of(100L)).approved()).isTrue());
     }
 
     @Test
     void refund_marksApprovedTransactionOnce_andIgnoresUnknownOrder() {
         FakePaymentGateway gateway = new FakePaymentGateway(dataSource, Mode.APPROVE, 0);
         UUID orderId = UUID.randomUUID();
-        gateway.approve(orderId, 1L, Money.of(100L));
+        gateway.approve(orderId, USER_1, Money.of(100L));
 
         gateway.refund(orderId);
         gateway.refund(orderId);

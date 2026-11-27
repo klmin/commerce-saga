@@ -1,14 +1,15 @@
 # 스크립트용 access token. 시나리오 스크립트가 source 해서 쓴다.
 #
 #   source "$(dirname "$0")/lib/auth.sh"
-#   curl "$ORDER_URL/orders/$id" -H "$(auth 1)"          # 사용자 1 로
-#   curl -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" ...   # 관리자로
+#   curl "$ORDER_URL/orders/$id" -H "$(auth "$USER1")"          # 사용자 1 로
+#   curl -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" ...   # 관리자로
 #
 # SAS(auth-service)의 스크립트용 공개 클라이언트(scripts: 시크릿 없음, PKCE, 루프백 redirect, 후속 5-3c)로 인가 코드 흐름을
 # curl 로 돈다: 인가 요청 → (로그인 화면 대신) GET csrf → 폼 로그인 → 인가 코드(redirect 주소에서 읽음) → 토큰 교환.
 # 브라우저 앱(Gateway BFF)과 같은 SAS 로그인이고 같은 서명 키·issuer 의 토큰이다.
 #
-# 사용자는 auth-service 의 개발용 시드(db/dev-seed): id 1~4 = user1~user4, 100 = admin, 비밀번호 local-dev-pass.
+# 사용자는 auth-service 의 개발용 시드(db/dev-seed): user1~user4·admin, 비밀번호 local-dev-pass.
+# id 는 고정 UUID(USER1~USER4·ADMIN, lib/users.sh). auth 에는 UUID 를 주고, 시드 번호(1~4, 100 = admin)를 줘도 된다.
 # 토큰은 파일에 10분 캐시한다(access token 수명 15분). auth-service 를 다시 띄워 서명 키가 바뀌었으면 지운다: rm -rf "$TOKEN_CACHE_DIR"
 
 AUTH_URL=${AUTH_URL:-http://localhost:8086}
@@ -17,12 +18,8 @@ TOKEN_CACHE_DIR=${TOKEN_CACHE_DIR:-${TMPDIR:-/tmp}/commerce-saga-tokens}
 SCRIPTS_CLIENT_ID=${SCRIPTS_CLIENT_ID:-scripts}
 SCRIPTS_REDIRECT_URI=${SCRIPTS_REDIRECT_URI:-http://127.0.0.1/scripts/callback}
 
-login_id_of() { # userId
-  case $1 in
-    100) echo admin ;;
-    *) echo "user$1" ;;
-  esac
-}
+# 시드 사용자 고정 UUID(USER1~USER4·ADMIN), user_id·user_label·login_id_of
+source "$(dirname "${BASH_SOURCE[0]}")/users.sh"
 
 # base64url (패딩 없음)
 _b64url() { base64 | tr '+/' '-_' | tr -d '=\n'; }
@@ -93,7 +90,7 @@ signup_user() { # loginId password
   esac
 }
 
-# access token 의 sub (userId)
+# access token 의 sub (userId, 소문자 UUID 문자열)
 token_sub() { # token
   local payload
   payload=$(printf '%s' "$1" | cut -d. -f2 | tr '_-' '/+')
@@ -101,19 +98,28 @@ token_sub() { # token
   printf '%s' "$payload" | base64 -d 2>/dev/null | sed -nE 's/.*"sub":"([^"]+)".*/\1/p'
 }
 
-access_token() { # userId
-  local file="$TOKEN_CACHE_DIR/$1" token
+access_token() { # userId (UUID | 시드 번호)
+  local id file login token sub
+  id=$(user_id "$1")
+  file="$TOKEN_CACHE_DIR/$id"
   mkdir -p "$TOKEN_CACHE_DIR"
   if [ -s "$file" ] && [ $(( $(date +%s) - $(stat -c %Y "$file") )) -lt 600 ]; then
     cat "$file"
     return 0
   fi
-  token=$(user_token "$(login_id_of "$1")") || return 1
+  login=$(login_id_of "$id") || return 1
+  token=$(user_token "$login") || return 1
+  # 시드가 예전(숫자 id) DB 그대로면 sub 가 다르다. 환경을 새로 만들어야 한다 (ADR 0018)
+  sub=$(token_sub "$token")
+  if [ "$sub" != "$id" ]; then
+    echo "FAIL: $login 토큰의 sub 가 $sub (기대 $id). auth_db 를 새로 만들었는지 확인" >&2
+    return 1
+  fi
   printf '%s' "$token" > "$file"
   printf '%s' "$token"
 }
 
 # curl -H 에 그대로 넣는 Authorization 헤더
-auth() { # userId
+auth() { # userId (UUID | 시드 번호)
   printf 'Authorization: Bearer %s' "$(access_token "$1")"
 }

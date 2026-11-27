@@ -1,6 +1,7 @@
 package com.klmin.commerce.authservice.auth.application.port.in;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 로그인 기기 관리 (후속 5-6, ADR 0017). 기기 하나 = 브라우저 하나의 SSO 로그인 세션({@code AUTH_SESSION}).
@@ -10,20 +11,20 @@ import java.util.List;
 public interface ManageDevicesUseCase {
 
     /** 로그인(또는 가입 후 로그인)한 SSO 세션을 기기로 남긴다 @return 새 기기 id (세션에 둔다) */
-    String register(long userId, String sessionId, String userAgent);
+    String register(UUID userId, String sessionId, String userAgent);
 
     /** 이 사용자의 기기. 지금 기기가 맨 앞, 그다음 최근 활동 순 */
-    List<DeviceResult> devices(long userId, String currentDeviceId);
+    List<DeviceResult> devices(UUID userId, String currentDeviceId);
 
     /** 다른 기기 하나를 로그아웃: SSO 세션과 그 기기의 인가 기록을 지운다. 지금 기기는 로그아웃(OIDC)으로 */
-    void logout(long userId, String deviceId, String currentDeviceId);
+    void logout(UUID userId, String deviceId, String currentDeviceId);
 
     /** 지금 기기를 뺀 모든 기기를 로그아웃 @return 로그아웃한 기기 수 */
-    int logoutOthers(long userId, String currentDeviceId);
+    int logoutOthers(UUID userId, String currentDeviceId);
 
     /** 이 기기가 OIDC 로그아웃했다(SSO 세션은 SAS 가 끝낸다): 이 기기의 인가 기록을 지우고 기기를 잊는다 */
-    void loggedOut(long userId, String deviceId);
+    void loggedOut(UUID userId, String deviceId);
 
     /** 이 사용자의 새 인가 기록(SSO 로 다른 화면 로그인 등 = 새 refresh token)이 기기에 묶였다: 기기 기록의 보존 기간을 늘린다 */
-    void authorized(long userId);
+    void authorized(UUID userId);
 }

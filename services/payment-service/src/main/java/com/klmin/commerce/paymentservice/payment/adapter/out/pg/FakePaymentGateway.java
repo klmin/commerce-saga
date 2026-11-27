@@ -78,7 +78,7 @@ class FakePaymentGateway implements PaymentGatewayPort, PaymentGatewayFaultPort,
     }
 
     @Override
-    public GatewayResult approve(UUID orderId, long userId, Money amount) {
+    public GatewayResult approve(UUID orderId, UUID userId, Money amount) {
         GatewayResult previous = find(orderId);
         if (previous != null) {
             return previous;
@@ -102,7 +102,7 @@ class FakePaymentGateway implements PaymentGatewayPort, PaymentGatewayFaultPort,
     }
 
     // PG 쪽 처리: 결정(지연 포함) → 원장 기록. 동시에 같은 주문이 들어오면 먼저 들어간 결과가 이긴다
-    private GatewayResult process(UUID orderId, long userId, long amount, Settings current) {
+    private GatewayResult process(UUID orderId, UUID userId, long amount, Settings current) {
         GatewayResult decided = decide(current);
         ledger.sql(INSERT)
                 .params(orderId, userId, amount, decided.approved(), decided.transactionId(), decided.reason())
