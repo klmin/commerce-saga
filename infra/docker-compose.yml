@@ -276,7 +276,7 @@ services:
 
   # trace(Explore → Tempo)·로그(Explore → Loki, trace 와 서로 링크), 메트릭·경보(대시보드 "commerce-saga", Alerting). 로컬 개발용 익명 관리자
   grafana:
-    image: grafana/grafana:13.2.6
+    image: grafana/grafana:13.3.1
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
