@@ -15,7 +15,7 @@
 #   12c. Prometheus 가 firing 경보를 Alertmanager 로 보내 DeadLetterMessage 가 Alertmanager 에 도착하고 receiver 가 붙는다
 #        (DISCORD_WEBHOOK_URL 이 있으면 discord, 없으면 null. Discord 로 실제 나갔는지는 채널에서 본다)
 set -euo pipefail
-# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+# access token (ADR 0008). 개발용 시드 사용자 USER1~USER4, 관리자 ADMIN (고정 UUID, lib/users.sh)
 source "$(dirname "$0")/lib/auth.sh"
 # 시드 상품 고정 UUID (PRODUCT_KEYBOARD 등)
 source "$(dirname "$0")/lib/products.sh"
@@ -26,7 +26,7 @@ PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 PROMETHEUS_URL=${PROMETHEUS_URL:-http://localhost:9091}
 ALERTMANAGER_URL=${ALERTMANAGER_URL:-http://localhost:9095}
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
-USER_ID=${USER_ID:-1}
+USER_ID=$(user_id "${USER_ID:-1}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-120}
 
 uuid() {
@@ -46,7 +46,7 @@ wait_until() { # description timeout-seconds command...
 }
 
 fault() { # mode delayMillis
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":$2}" > /dev/null
 }
 trap 'fault APPROVE 0 || true' EXIT
@@ -98,11 +98,11 @@ echo "== 12b. PG 지연 45초 → PaymentResultUnknown, SagaTimeoutGiveUp firing
 give_up_query='sum(commerce_saga_timeout_give_ups_total)'
 give_ups_before=$(metric "$give_up_query")
 fault DELAY 45000
-id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
+id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth "$USER_ID")" \
   -d "{\"lines\":[{\"productId\":\"$PRODUCT_KEYBOARD\",\"quantity\":1,\"unitPrice\":39000}],\"pointAmount\":100}" \
   | sed -nE 's/.*"orderId":"([^"]+)".*/\1/p')
 echo "  주문 …${id: -8}"
-payment_status() { curl -s "$PAYMENT_URL/payments/orders/$id" -H "$(auth $USER_ID)" | sed -nE 's/.*"status":"([A-Z]+)".*/\1/p'; }
+payment_status() { curl -s "$PAYMENT_URL/payments/orders/$id" -H "$(auth "$USER_ID")" | sed -nE 's/.*"status":"([A-Z]+)".*/\1/p'; }
 payment_is() { [ "$(payment_status)" = "$1" ]; }
 wait_until "결제 UNKNOWN" 30 payment_is UNKNOWN
 fault APPROVE 0   # 이미 PG 에서 처리 중인 요청은 지연 그대로 진행된다

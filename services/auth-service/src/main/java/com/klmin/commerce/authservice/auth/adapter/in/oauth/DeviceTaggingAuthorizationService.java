@@ -66,13 +66,7 @@ public final class DeviceTaggingAuthorizationService implements OAuth2Authorizat
     }
 
     private void extendDevices(String principalName) {
-        long userId;
-        try {
-            userId = Long.parseLong(principalName);
-        } catch (NumberFormatException e) {
-            return;
-        }
-        devices.getObject().authorized(userId);
+        UserPrincipal.userId(principalName).ifPresent(userId -> devices.getObject().authorized(userId));
     }
 
     /**

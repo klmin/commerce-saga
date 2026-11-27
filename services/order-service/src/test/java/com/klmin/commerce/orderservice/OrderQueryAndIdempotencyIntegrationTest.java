@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -43,17 +44,17 @@ class OrderQueryAndIdempotencyIntegrationTest {
     @Autowired
     JdbcClient jdbc;
 
-    private static PlaceOrderCommand command(long userId, int quantity, String key) {
+    private static PlaceOrderCommand command(UUID userId, int quantity, String key) {
         return new PlaceOrderCommand(userId, List.of(new PlaceOrderCommand.Line(pid(10), quantity, 1_000L)), 0L, key);
     }
 
-    private long count(String table, long userId) {
+    private long count(String table, UUID userId) {
         return jdbc.sql("select count(*) from " + table + " where user_id = ?").param(userId).query(Long.class).single();
     }
 
     @Test
     void sameKeyAtTheSameTime_createsOneOrder_andEveryoneGetsIt() throws Exception {
-        long userId = 41L;
+        UUID userId = uid(41);
         int threads = 8;
         CountDownLatch start = new CountDownLatch(1);
         List<Future<PlaceOrderResult>> results;
@@ -83,7 +84,7 @@ class OrderQueryAndIdempotencyIntegrationTest {
 
     @Test
     void sameKeyDifferentBody_isRejected_andRollsBackNothingOfTheFirst() {
-        long userId = 42L;
+        UUID userId = uid(42);
         PlaceOrderResult first = placeOrderUseCase.placeOrder(command(userId, 1, "k"));
 
         assertThatThrownBy(() -> placeOrderUseCase.placeOrder(command(userId, 2, "k")))
@@ -94,11 +95,11 @@ class OrderQueryAndIdempotencyIntegrationTest {
 
     @Test
     void myOrders_newestFirst_withCursor_onlyMine() {
-        long userId = 43L;
+        UUID userId = uid(43);
         UUID first = placeOrderUseCase.placeOrder(command(userId, 1, null)).order().id();
         UUID second = placeOrderUseCase.placeOrder(command(userId, 2, null)).order().id();
         UUID third = placeOrderUseCase.placeOrder(command(userId, 3, null)).order().id();
-        placeOrderUseCase.placeOrder(command(44L, 1, null));
+        placeOrderUseCase.placeOrder(command(uid(44), 1, null));
 
         List<OrderSummaryResult> page1 = listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(userId, null, 2));
         List<OrderSummaryResult> page2 = listMyOrdersUseCase.listMyOrders(
@@ -109,6 +110,6 @@ class OrderQueryAndIdempotencyIntegrationTest {
         assertThat(page1.getFirst().lines()).containsExactly(new OrderSummaryResult.Line(pid(10), 3, 1_000L));
         assertThat(page1.getFirst().totalAmount()).isEqualTo(3_000L);
         assertThat(page1.getFirst().status()).isNotBlank();
-        assertThat(listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(45L, null, 20))).isEmpty();
+        assertThat(listMyOrdersUseCase.listMyOrders(new ListMyOrdersQuery(uid(45), null, 20))).isEmpty();
     }
 }

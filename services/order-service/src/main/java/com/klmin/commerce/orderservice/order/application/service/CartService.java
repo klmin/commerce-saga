@@ -45,12 +45,12 @@ class CartService implements CartUseCase {
     }
 
     @Override
-    public CartResult get(long userId) {
+    public CartResult get(UUID userId) {
         return view(cartPort.findByUserId(UserId.of(userId)));
     }
 
     @Override
-    public CartResult put(long userId, UUID productId, int quantity) {
+    public CartResult put(UUID userId, UUID productId, int quantity) {
         UserId user = UserId.of(userId);
         ProductId product = ProductId.of(productId);
         Quantity qty = Quantity.of(quantity);
@@ -66,7 +66,7 @@ class CartService implements CartUseCase {
     }
 
     @Override
-    public CartResult remove(long userId, UUID productId) {
+    public CartResult remove(UUID userId, UUID productId) {
         UserId user = UserId.of(userId);
         cartPort.delete(user, ProductId.of(productId));
         return get(userId);

@@ -34,6 +34,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_APPROVED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.PAYMENT_FAILED;
 import static com.klmin.commerce.orderservice.order.domain.SagaEventType.POINT_REFUNDED;
@@ -59,7 +60,7 @@ class OrderServiceTest {
                     Clock.fixed(NOW, ZoneOffset.UTC));
 
     /** 합계 2,500 */
-    private Order place(long userId, long pointAmount) {
+    private Order place(UUID userId, long pointAmount) {
         return service.placeOrder(new PlaceOrderCommand(userId, List.of(
                 new PlaceOrderCommand.Line(pid(10), 2, 1_000L),
                 new PlaceOrderCommand.Line(pid(11), 1, 500L)), pointAmount)).order();
@@ -71,7 +72,7 @@ class OrderServiceTest {
 
     @Test
     void placeOrder_savesOrderAndSaga_andRequestsStockReservation() {
-        Order order = place(1L, 1_000L);
+        Order order = place(uid(1), 1_000L);
 
         assertThat(orders.store.get(order.id()).status()).isEqualTo(OrderStatus.PENDING);
         assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.RESERVING_STOCK);
@@ -80,19 +81,19 @@ class OrderServiceTest {
 
     @Test
     void placeOrder_assignsTimeOrderedUuidV7() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
 
         assertThat(order.id().version()).isEqualTo(7);
     }
 
-    private PlaceOrderResult placeWithKey(long userId, String key, long pointAmount, PlaceOrderCommand.Line... lines) {
+    private PlaceOrderResult placeWithKey(UUID userId, String key, long pointAmount, PlaceOrderCommand.Line... lines) {
         return service.placeOrder(new PlaceOrderCommand(userId, List.of(lines), pointAmount, key));
     }
 
     @Test
     void sameIdempotencyKey_sameBody_returnsFirstOrder_withoutSecondSaga() {
-        PlaceOrderResult first = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
-        PlaceOrderResult again = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        PlaceOrderResult first = placeWithKey(uid(1), "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        PlaceOrderResult again = placeWithKey(uid(1), "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
         assertThat(first.created()).isTrue();
         assertThat(again.created()).isFalse();
@@ -104,9 +105,9 @@ class OrderServiceTest {
 
     @Test
     void sameIdempotencyKey_lineOrderDiffers_isSameRequest() {
-        PlaceOrderResult first = placeWithKey(1L, "k-1", 0L,
+        PlaceOrderResult first = placeWithKey(uid(1), "k-1", 0L,
                 new PlaceOrderCommand.Line(pid(10), 2, 1_000L), new PlaceOrderCommand.Line(pid(11), 1, 500L));
-        PlaceOrderResult again = placeWithKey(1L, "k-1", 0L,
+        PlaceOrderResult again = placeWithKey(uid(1), "k-1", 0L,
                 new PlaceOrderCommand.Line(pid(11), 1, 500L), new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
         assertThat(again.created()).isFalse();
@@ -115,11 +116,11 @@ class OrderServiceTest {
 
     @Test
     void sameIdempotencyKey_differentBody_isRejected_andCreatesNothing() {
-        placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        placeWithKey(uid(1), "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
-        assertThatThrownBy(() -> placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 3, 1_000L)))
+        assertThatThrownBy(() -> placeWithKey(uid(1), "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 3, 1_000L)))
                 .isInstanceOf(IdempotencyKeyReusedException.class);
-        assertThatThrownBy(() -> placeWithKey(1L, "k-1", 500L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L)))
+        assertThatThrownBy(() -> placeWithKey(uid(1), "k-1", 500L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L)))
                 .isInstanceOf(IdempotencyKeyReusedException.class);
         assertThat(orders.store).hasSize(1);
         assertThat(sent.log).hasSize(1);
@@ -127,18 +128,18 @@ class OrderServiceTest {
 
     @Test
     void idempotencyKey_isScopedPerUser() {
-        PlaceOrderResult mine = placeWithKey(1L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
-        PlaceOrderResult theirs = placeWithKey(2L, "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        PlaceOrderResult mine = placeWithKey(uid(1), "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
+        PlaceOrderResult theirs = placeWithKey(uid(2), "k-1", 0L, new PlaceOrderCommand.Line(pid(10), 2, 1_000L));
 
         assertThat(theirs.created()).isTrue();
         assertThat(theirs.order().id()).isNotEqualTo(mine.order().id());
-        assertThat(theirs.order().userId()).isEqualTo(UserId.of(2L));
+        assertThat(theirs.order().userId()).isEqualTo(UserId.of(uid(2)));
     }
 
     @Test
     void withoutIdempotencyKey_everyRequestCreatesOrder() {
-        Order a = place(1L, 0L);
-        Order b = place(1L, 0L);
+        Order a = place(uid(1), 0L);
+        Order b = place(uid(1), 0L);
 
         assertThat(a.id()).isNotEqualTo(b.id());
         assertThat(keys.store).isEmpty();
@@ -148,20 +149,20 @@ class OrderServiceTest {
     void invalidIdempotencyKey_isDomainValidationError() {
         List<PlaceOrderCommand.Line> lines = List.of(new PlaceOrderCommand.Line(pid(10), 1, 1_000L));
 
-        assertThatThrownBy(() -> new PlaceOrderCommand(1L, lines, 0L, ""))
+        assertThatThrownBy(() -> new PlaceOrderCommand(uid(1), lines, 0L, ""))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> new PlaceOrderCommand(1L, lines, 0L, "has space"))
+        assertThatThrownBy(() -> new PlaceOrderCommand(uid(1), lines, 0L, "has space"))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> new PlaceOrderCommand(1L, lines, 0L, "가나다"))
+        assertThatThrownBy(() -> new PlaceOrderCommand(uid(1), lines, 0L, "가나다"))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> new PlaceOrderCommand(1L, lines, 0L, "x".repeat(101)))
+        assertThatThrownBy(() -> new PlaceOrderCommand(uid(1), lines, 0L, "x".repeat(101)))
                 .isInstanceOf(DomainValidationException.class);
-        assertThat(new PlaceOrderCommand(1L, lines, 0L, "x".repeat(100)).idempotencyKey()).hasSize(100);
+        assertThat(new PlaceOrderCommand(uid(1), lines, 0L, "x".repeat(100)).idempotencyKey()).hasSize(100);
     }
 
     @Test
     void happyPath_sendsEachCommandOnce_andPublishesOrderCompleted() {
-        Order order = place(1L, 1_000L);
+        Order order = place(uid(1), 1_000L);
 
         reply(order, STOCK_RESERVED);
         reply(order, POINT_USED);
@@ -169,8 +170,8 @@ class OrderServiceTest {
 
         assertThat(sent.log).containsExactly(
                 "reserveStock:" + order.id(),
-                "usePoint:" + order.id() + ":1:1000",
-                "pay:" + order.id() + ":1:1500",
+                "usePoint:" + order.id() + ":" + uid(1) + ":1000",
+                "pay:" + order.id() + ":" + uid(1) + ":1500",
                 "completed:" + order.id());
         assertThat(orders.store.get(order.id()).status()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.COMPLETED);
@@ -180,7 +181,7 @@ class OrderServiceTest {
 
     @Test
     void lateReplyAfterFinish_doesNotRecordOutcomeAgain() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
         reply(order, STOCK_RESERVED);
         reply(order, PAYMENT_APPROVED);
 
@@ -193,7 +194,7 @@ class OrderServiceTest {
 
     @Test
     void paymentFailed_compensatesInReverseOrder_andPublishesOrderCancelled() {
-        Order order = place(1L, 1_000L);
+        Order order = place(uid(1), 1_000L);
         reply(order, STOCK_RESERVED);
         reply(order, POINT_USED);
 
@@ -214,7 +215,7 @@ class OrderServiceTest {
 
     @Test
     void stockReservationFailed_cancelsImmediately() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
 
         reply(order, STOCK_RESERVATION_FAILED);
 
@@ -224,7 +225,7 @@ class OrderServiceTest {
 
     @Test
     void redeliveredReply_isSkippedBeforeTouchingSaga() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
         UUID messageId = UUID.randomUUID();
         SagaReplyCommand reserved = SagaReplyCommand.of(order.id(), STOCK_RESERVED);
 
@@ -239,7 +240,7 @@ class OrderServiceTest {
 
     @Test
     void duplicateAndLateReplies_doNotSendAnything() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
         reply(order, STOCK_RESERVED);
         int before = sent.log.size();
 
@@ -260,19 +261,19 @@ class OrderServiceTest {
 
     @Test
     void getSaga_onlyOwner() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
 
-        assertThat(service.getSaga(new GetOrderQuery(order.id(), 1L)).state()).isEqualTo(SagaState.RESERVING_STOCK);
-        assertThatThrownBy(() -> service.getSaga(new GetOrderQuery(order.id(), 2L)))
+        assertThat(service.getSaga(new GetOrderQuery(order.id(), uid(1))).state()).isEqualTo(SagaState.RESERVING_STOCK);
+        assertThatThrownBy(() -> service.getSaga(new GetOrderQuery(order.id(), uid(2))))
                 .isInstanceOf(SagaNotFoundException.class);
     }
 
     @Test
     void getOrder_hidesOtherUsersOrder() {
-        Order order = place(1L, 0L);
+        Order order = place(uid(1), 0L);
 
-        assertThat(service.getOrder(new GetOrderQuery(order.id(), 1L)).id()).isEqualTo(order.id());
-        assertThatThrownBy(() -> service.getOrder(new GetOrderQuery(order.id(), 2L)))
+        assertThat(service.getOrder(new GetOrderQuery(order.id(), uid(1))).id()).isEqualTo(order.id());
+        assertThatThrownBy(() -> service.getOrder(new GetOrderQuery(order.id(), uid(2))))
                 .isInstanceOf(OrderNotFoundException.class);
     }
 

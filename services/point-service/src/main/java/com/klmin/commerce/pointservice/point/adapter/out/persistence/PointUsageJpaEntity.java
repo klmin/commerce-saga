@@ -21,7 +21,7 @@ class PointUsageJpaEntity {
     private UUID orderId;
 
     @Column(name = "user_id")
-    private Long userId;
+    private UUID userId;
 
     @Column(nullable = false)
     private long amount;
@@ -46,7 +46,7 @@ class PointUsageJpaEntity {
     protected PointUsageJpaEntity() {
     }
 
-    PointUsageJpaEntity(UUID orderId, Long userId, long amount, PointUsageStatus status, String reason,
+    PointUsageJpaEntity(UUID orderId, UUID userId, long amount, PointUsageStatus status, String reason,
                         Instant createdAt, Instant updatedAt) {
         this.orderId = orderId;
         this.userId = userId;
@@ -66,7 +66,7 @@ class PointUsageJpaEntity {
         return orderId;
     }
 
-    Long getUserId() {
+    UUID getUserId() {
         return userId;
     }
 

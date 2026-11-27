@@ -3,7 +3,8 @@ import { z } from "zod";
 import { api } from "./api";
 
 const me = z.object({
-  userId: z.number().int(),
+  // 사용자 id: UUID(v7) 문자열 (ADR 0018)
+  userId: z.string(),
   roles: z.array(z.string()),
   // 로그인 기기 화면 주소 (인증 화면, 후속 5-6). 옛 Gateway 는 보내지 않는다
   devicesUrl: z.string().optional(),

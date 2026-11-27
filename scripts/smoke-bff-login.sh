@@ -45,7 +45,12 @@ grep -q 'GW_SESSION' "$jar" || fail "BFF 세션 쿠키(GW_SESSION)가 없다"
 
 echo "== 세션으로 /api/me"
 me=$(c "$BASE_URL/api/me")
-case "$me" in *'"userId"'*) echo "   $me" ;; *) fail "/api/me → $me" ;; esac
+# userId 는 UUID 문자열 (ADR 0018). 시드 user1 이면 고정 UUID(scripts/lib/users.sh 의 USER1)
+grep -qE '"userId":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"' <<< "$me" || fail "/api/me → $me"
+if [ "$LOGIN_ID" = user1 ]; then
+  case "$me" in *'"userId":"01900000-0000-7000-8001-000000000001"'*) ;; *) fail "user1 의 userId 가 시드 UUID 가 아니다: $me" ;; esac
+fi
+echo "   $me"
 
 echo "== 세션으로 API (Gateway 가 토큰을 붙여 서비스로)"
 code=$(c -o /dev/null -w '%{http_code}' "$BASE_URL/api/points/me")

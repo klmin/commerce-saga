@@ -26,7 +26,7 @@ class OrderJpaEntity {
     private UUID id;
 
     @Column(name = "user_id", nullable = false)
-    private long userId;
+    private UUID userId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -60,7 +60,7 @@ class OrderJpaEntity {
     protected OrderJpaEntity() {
     }
 
-    OrderJpaEntity(UUID id, long userId, OrderStatus status, long totalAmount, long pointAmount,
+    OrderJpaEntity(UUID id, UUID userId, OrderStatus status, long totalAmount, long pointAmount,
                    String cancelReason, Instant createdAt, Instant updatedAt, List<OrderLineEmbeddable> lines) {
         this.id = id;
         this.userId = userId;
@@ -83,7 +83,7 @@ class OrderJpaEntity {
         return id;
     }
 
-    long getUserId() {
+    UUID getUserId() {
         return userId;
     }
 

@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.klmin.commerce.orderservice.TestProductIds.pid;
+import static com.klmin.commerce.orderservice.TestUserIds.uid;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -97,14 +98,14 @@ class OrderFlowIntegrationTest {
     }
 
     /** 합계 2,000 */
-    private Order place(long userId, long pointAmount) {
+    private Order place(UUID userId, long pointAmount) {
         return placeOrderUseCase.placeOrder(new PlaceOrderCommand(userId, List.of(
                 new PlaceOrderCommand.Line(pid(10), 2, 1_000L)), pointAmount)).order();
     }
 
     @Test
     void happyPath_reserveStock_usePoint_pay_thenOrderCompletedEvent() {
-        Order order = place(1L, 500L);
+        Order order = place(uid(1), 500L);
 
         ReserveStock reserve = expect(order, Topics.INVENTORY_COMMAND, ReserveStock.TYPE, ReserveStock.class);
         assertThat(reserve.lines()).containsExactly(new ReserveStock.Line(pid(10), 2));
@@ -112,7 +113,7 @@ class OrderFlowIntegrationTest {
 
         UsePoint usePoint = expect(order, Topics.POINT_COMMAND, UsePoint.TYPE, UsePoint.class);
         assertThat(usePoint.amount()).isEqualTo(500L);
-        assertThat(usePoint.userId()).isEqualTo(1L);
+        assertThat(usePoint.userId()).isEqualTo(uid(1));
         reply(order, Topics.POINT_REPLY, PointUsed.TYPE, new PointUsed(order.id()));
 
         Pay pay = expect(order, Topics.PAYMENT_COMMAND, Pay.TYPE, Pay.class);
@@ -129,7 +130,7 @@ class OrderFlowIntegrationTest {
 
     @Test
     void paymentFailed_refundsPointThenReleasesStock_thenOrderCancelledEvent() {
-        Order order = place(2L, 500L);
+        Order order = place(uid(2), 500L);
         expect(order, Topics.INVENTORY_COMMAND, ReserveStock.TYPE, ReserveStock.class);
         reply(order, Topics.INVENTORY_REPLY, StockReserved.TYPE, new StockReserved(order.id()));
         expect(order, Topics.POINT_COMMAND, UsePoint.TYPE, UsePoint.class);
@@ -154,7 +155,7 @@ class OrderFlowIntegrationTest {
 
     @Test
     void duplicateReply_doesNotSendNextCommandTwice() {
-        Order order = place(3L, 0L);
+        Order order = place(uid(3), 0L);
         expect(order, Topics.INVENTORY_COMMAND, ReserveStock.TYPE, ReserveStock.class);
 
         reply(order, Topics.INVENTORY_REPLY, StockReserved.TYPE, new StockReserved(order.id()));
@@ -169,7 +170,7 @@ class OrderFlowIntegrationTest {
 
     @Test
     void invalidReply_goesToDlt_andDoesNotBlockLaterReplies() {
-        Order order = place(4L, 0L);
+        Order order = place(uid(4), 0L);
         expect(order, Topics.INVENTORY_COMMAND, ReserveStock.TYPE, ReserveStock.class);
 
         try (Consumer<String, String> dltConsumer =

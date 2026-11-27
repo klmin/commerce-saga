@@ -27,6 +27,9 @@ class PointHistoryPersistenceAdapterTest {
     static final PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:18-alpine"));
 
     private static final Instant NOW = Instant.parse("2026-11-24T10:00:00Z");
+    private static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+    private static final UUID USER_2 = UUID.fromString("01900000-0000-7000-8001-000000000002");
+    private static final UUID USER_3 = UUID.fromString("01900000-0000-7000-8001-000000000003");
 
     private JdbcClient jdbc;
     private PointHistoryPersistenceAdapter adapter;
@@ -44,17 +47,17 @@ class PointHistoryPersistenceAdapterTest {
 
     @Test
     void usagesAndGrants_newestFirst_withCursor_onlyMine() {
-        UUID bonus = grant(1L, 1_000L);
-        UUID used = usage(1L, 300L, "USED", null);
-        UUID refunded = usage(1L, 200L, "REFUNDED", "order cancelled");
-        UUID rejected = usage(1L, 5_000L, "REJECTED", "insufficient points");
-        usage(2L, 100L, "USED", null);
-        grant(2L, 1_000L);
+        UUID bonus = grant(USER_1, 1_000L);
+        UUID used = usage(USER_1, 300L, "USED", null);
+        UUID refunded = usage(USER_1, 200L, "REFUNDED", "order cancelled");
+        UUID rejected = usage(USER_1, 5_000L, "REJECTED", "insufficient points");
+        usage(USER_2, 100L, "USED", null);
+        grant(USER_2, 1_000L);
         refundedBeforeUsage(); // 사용자를 모르는 기록은 누구의 내역에도 없다
 
-        List<PointHistoryEntryResult> page1 = adapter.findByUser(1L, null, 2);
-        List<PointHistoryEntryResult> page2 = adapter.findByUser(1L, page1.getLast().entryId(), 2);
-        List<PointHistoryEntryResult> page3 = adapter.findByUser(1L, page2.getLast().entryId(), 2);
+        List<PointHistoryEntryResult> page1 = adapter.findByUser(USER_1, null, 2);
+        List<PointHistoryEntryResult> page2 = adapter.findByUser(USER_1, page1.getLast().entryId(), 2);
+        List<PointHistoryEntryResult> page3 = adapter.findByUser(USER_1, page2.getLast().entryId(), 2);
 
         assertThat(page1).extracting(PointHistoryEntryResult::entryId).containsExactly(rejected, refunded);
         assertThat(page2).extracting(PointHistoryEntryResult::entryId).containsExactly(used, bonus);
@@ -74,27 +77,27 @@ class PointHistoryPersistenceAdapterTest {
         assertThat(bonusEntry.status()).isEqualTo("GRANTED");
         assertThat(bonusEntry.createdAt()).isEqualTo(NOW);
 
-        assertThat(adapter.findByUser(3L, null, 20)).isEmpty();
-        assertThat(adapter.findByUser(1L, null, 50)).hasSize(4);
+        assertThat(adapter.findByUser(USER_3, null, 20)).isEmpty();
+        assertThat(adapter.findByUser(USER_1, null, 50)).hasSize(4);
     }
 
     @Test
     void manyGrantsOrUsages_onOneSide_stillPageBySize() {
         for (int i = 0; i < 3; i++) {
-            usage(1L, 10L, "USED", null);
+            usage(USER_1, 10L, "USED", null);
         }
         UUID between = UuidCreator.getTimeOrderedEpoch(); // 어느 표에도 없는 커서여도 그보다 오래된 것만
 
-        UUID newestGrant = grant(1L, 500L);
+        UUID newestGrant = grant(USER_1, 500L);
 
-        List<PointHistoryEntryResult> page = adapter.findByUser(1L, null, 2);
+        List<PointHistoryEntryResult> page = adapter.findByUser(USER_1, null, 2);
         assertThat(page).hasSize(2);
         assertThat(page.getFirst().entryId()).isEqualTo(newestGrant);
-        assertThat(adapter.findByUser(1L, between, 20)).hasSize(3)
+        assertThat(adapter.findByUser(USER_1, between, 20)).hasSize(3)
                 .allSatisfy(e -> assertThat(e.kind()).isEqualTo("ORDER"));
     }
 
-    private UUID usage(long userId, long amount, String status, String reason) {
+    private UUID usage(UUID userId, long amount, String status, String reason) {
         UUID orderId = UuidCreator.getTimeOrderedEpoch();
         jdbc.sql("""
                         insert into point_usages (order_id, user_id, amount, status, reason, created_at, updated_at,
@@ -114,7 +117,7 @@ class PointHistoryPersistenceAdapterTest {
                 .update();
     }
 
-    private UUID grant(long userId, long amount) {
+    private UUID grant(UUID userId, long amount) {
         UUID id = UuidCreator.getTimeOrderedEpoch();
         jdbc.sql("insert into point_grants (id, user_id, amount, type, created_at) values (?, ?, ?, 'SIGNUP_BONUS', ?)")
                 .params(id, userId, amount, Timestamp.from(NOW))

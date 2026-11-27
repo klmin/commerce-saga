@@ -57,7 +57,7 @@ class SagaMigrationTest {
     private static void insertPhase1Order(JdbcClient jdbc, UUID id, String status, long total) {
         jdbc.sql("""
                         insert into orders (id, user_id, status, total_amount, reject_reason, created_at, updated_at, version)
-                        values (?, 1, ?, ?, null, now(), now(), 0)
+                        values (?, '01900000-0000-7000-8001-000000000001', ?, ?, null, now(), now(), 0)
                         """)
                 .params(id, status, total)
                 .update();

@@ -56,7 +56,7 @@ describe("auditChanges", () => {
     action: "PRICE_CHANGED",
     before: base,
     after: base,
-    changedBy: 1000,
+    changedBy: "01900000-0000-7000-8001-000000000100",
     changedAt: "2026-11-25T00:00:00Z",
     ...e,
   });

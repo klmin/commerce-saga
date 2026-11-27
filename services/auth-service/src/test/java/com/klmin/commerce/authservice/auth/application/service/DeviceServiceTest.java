@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,15 +27,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class DeviceServiceTest {
 
     static final Instant NOW = Instant.parse("2026-11-26T10:00:00Z");
-    static final long USER = 7;
+    static final UUID USER = UUID.fromString("01900000-0000-7000-8001-000000000007");
+    static final UUID OTHER_USER = UUID.fromString("01900000-0000-7000-8001-000000000008");
 
-    final Map<Long, Map<String, DevicePort.DeviceRecord>> deviceStore = new HashMap<>();
+    final Map<UUID, Map<String, DevicePort.DeviceRecord>> deviceStore = new HashMap<>();
     final Map<String, Instant> liveSessions = new HashMap<>();
     final List<String> deletedSessions = new ArrayList<>();
     /** deviceId → 마지막 토큰 발급 시각 (refresh 가 살아 있는 인가 기록) */
     final Map<String, Instant> liveTokens = new HashMap<>();
     final List<String> revokedDevices = new ArrayList<>();
-    final List<Long> extended = new ArrayList<>();
+    final List<UUID> extended = new ArrayList<>();
     /** 이 기기의 인가 기록 삭제가 실패한다 (DB 장애) */
     String failRevokeOf;
 
@@ -44,22 +46,22 @@ class DeviceServiceTest {
     void setUp() {
         DevicePort devices = new DevicePort() {
             @Override
-            public void save(long userId, DeviceRecord device) {
+            public void save(UUID userId, DeviceRecord device) {
                 deviceStore.computeIfAbsent(userId, k -> new LinkedHashMap<>()).put(device.deviceId(), device);
             }
 
             @Override
-            public List<DeviceRecord> findAll(long userId) {
+            public List<DeviceRecord> findAll(UUID userId) {
                 return new ArrayList<>(deviceStore.getOrDefault(userId, Map.of()).values());
             }
 
             @Override
-            public void remove(long userId, String deviceId) {
+            public void remove(UUID userId, String deviceId) {
                 deviceStore.getOrDefault(userId, new HashMap<>()).remove(deviceId);
             }
 
             @Override
-            public void extend(long userId) {
+            public void extend(UUID userId) {
                 extended.add(userId);
             }
         };
@@ -83,7 +85,7 @@ class DeviceServiceTest {
 
             @Override
             public int deleteByDevice(String principalName, String deviceId) {
-                assertThat(principalName).isEqualTo(Long.toString(USER));
+                assertThat(principalName).isEqualTo(USER.toString());
                 if (deviceId.equals(failRevokeOf)) {
                     throw new IllegalStateException("DB 장애");
                 }
@@ -158,7 +160,7 @@ class DeviceServiceTest {
     @Test
     void 없는_기기나_남의_기기는_404() {
         String mine = login("s-mine", "A");
-        String someoneElse = service.register(USER + 1, "s-x", "X");
+        String someoneElse = service.register(OTHER_USER, "s-x", "X");
 
         assertThatThrownBy(() -> service.logout(USER, someoneElse, mine)).isInstanceOf(DeviceNotFoundException.class);
         assertThat(deletedSessions).isEmpty();

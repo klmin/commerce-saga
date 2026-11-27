@@ -39,6 +39,9 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers(disabledWithoutDocker = true)
 class PaymentIntegrationTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+    static final UUID USER_2 = UUID.fromString("01900000-0000-7000-8001-000000000002");
+
     @Autowired
     GetPaymentUseCase getPaymentUseCase;
 
@@ -75,12 +78,12 @@ class PaymentIntegrationTest {
     void pay_approved_andDuplicateRepliesSamePayment() {
         UUID orderId = UUID.randomUUID();
 
-        send(new Pay(orderId, 1L, 5_000L));
-        send(new Pay(orderId, 1L, 5_000L));
+        send(new Pay(orderId, USER_1, 5_000L));
+        send(new Pay(orderId, USER_1, 5_000L));
 
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 2);
         assertThat(replies).allMatch(r -> PaymentApproved.TYPE.equals(type(r)));
-        UUID paymentId = getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 1L)).id();
+        UUID paymentId = getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, USER_1)).id();
         assertThat(replies).allMatch(r ->
                 paymentId.equals(json.readValue(r.value(), PaymentApproved.class).paymentId()));
     }
@@ -90,11 +93,11 @@ class PaymentIntegrationTest {
         paymentFaultUseCase.change(new Settings(Mode.DECLINE, 0));
         UUID orderId = UUID.randomUUID();
 
-        send(new Pay(orderId, 2L, 3_000L));
+        send(new Pay(orderId, USER_2, 3_000L));
 
         ConsumerRecord<String, String> reply = awaitReplies(orderId, 1).getFirst();
         assertThat(type(reply)).isEqualTo(PaymentFailed.TYPE);
-        assertThat(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, 2L)).status().name())
+        assertThat(getPaymentUseCase.getPayment(new GetPaymentQuery(orderId, USER_2)).status().name())
                 .isEqualTo("DECLINED");
     }
 

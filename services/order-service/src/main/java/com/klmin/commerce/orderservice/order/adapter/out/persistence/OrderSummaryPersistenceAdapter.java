@@ -43,7 +43,7 @@ class OrderSummaryPersistenceAdapter implements LoadOrderSummariesPort {
     }
 
     @Override
-    public List<OrderSummaryResult> findByUser(long userId, UUID before, int size) {
+    public List<OrderSummaryResult> findByUser(UUID userId, UUID before, int size) {
         List<Row> rows = jdbc.sql(ORDERS)
                 .param("userId", userId)
                 .param("before", before)

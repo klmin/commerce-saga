@@ -27,7 +27,8 @@ export async function myPayments(before?: string): Promise<Payment[]> {
 }
 
 const notification = z.object({
-  id: z.number().int(),
+  // 알림 id: UUIDv7 문자열 (ADR 0018)
+  id: z.string(),
   orderId: z.string(),
   // OrderCompleted·OrderCancelled (order.events)
   type: z.string(),
@@ -39,11 +40,11 @@ export type Notification = z.infer<typeof notification>;
 
 export const NOTIFICATIONS_PAGE_SIZE = 20;
 
-/** 내 알림 (최신순). 알림 id 는 숫자라 다음 쪽은 마지막 id 를 before 로 */
-export async function myNotifications(before?: number): Promise<Notification[]> {
+/** 내 알림 (최신순). 다음 쪽은 마지막 id(UUIDv7, id 순 = 시간 순)를 before 로 */
+export async function myNotifications(before?: string): Promise<Notification[]> {
   const params = new URLSearchParams({ size: String(NOTIFICATIONS_PAGE_SIZE) });
-  if (before !== undefined) {
-    params.set("before", String(before));
+  if (before) {
+    params.set("before", before);
   }
   return z.array(notification).parse(await api<unknown>(`/api/notifications/me?${params}`));
 }

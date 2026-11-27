@@ -17,7 +17,7 @@ source "$(dirname "$0")/lib/products.sh"
 
 ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
-USER_ID=${USER_ID:-4}
+USER_ID=$(user_id "${USER_ID:-4}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
 # 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
 PRODUCT_ID=$(product_id "${PRODUCT_ID:-2}")
 UNIT_PRICE=${UNIT_PRICE:-$(seed_price "$PRODUCT_ID")}
@@ -29,17 +29,17 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "  ok  $*"; }
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 fault() { # mode delayMillis
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":$2}" > /dev/null
 }
 circuit() { # 0 닫힘, 1 열림, 2 반열림
   curl -sf "$PAYMENT_URL/actuator/prometheus" | sed -nE 's/^payment_pg_circuit_state(\{[^}]*\})? ([0-9.]+).*/\2/p' | head -1 | cut -d. -f1
 }
 place_order() {
-  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
+  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth "$USER_ID")" \
     -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":0}" | field orderId
 }
-order_status() { curl -sf "$ORDER_URL/orders/$1" -H "$(auth $USER_ID)" | field status; }
+order_status() { curl -sf "$ORDER_URL/orders/$1" -H "$(auth "$USER_ID")" | field status; }
 wait_until() { # description seconds command...
   local what=$1 deadline=$(( $(date +%s) + $2 ))
   shift 2
@@ -64,7 +64,7 @@ echo "== 15b. 열린 동안의 주문은 PG 를 부르지 않고 바로 실패 �
 start=$(date +%s)
 order=$(place_order)
 wait_until "order CANCELLED" 30 status_is "$order" CANCELLED
-reason=$(curl -sf "$ORDER_URL/orders/$order" -H "$(auth $USER_ID)" | field cancelReason)
+reason=$(curl -sf "$ORDER_URL/orders/$order" -H "$(auth "$USER_ID")" | field cancelReason)
 case $reason in *"circuit open"*) ;; *) fail "취소 사유가 회로 열림이 아님: $reason" ;; esac
 ok "…${order: -8} CANCELLED $(( $(date +%s) - start ))초, 사유: $reason"
 

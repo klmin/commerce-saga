@@ -22,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** PG 타임아웃 → UNKNOWN → PG 조회로 확정, 결제 취소, 늦은 승인 자동 환불 (ADR 0007) */
 class PaymentTimeoutTest {
 
+    static final UUID USER_1 = UUID.fromString("01900000-0000-7000-8001-000000000001");
+
     private static final Instant T0 = Instant.parse("2026-11-23T00:00:00Z");
     private static final Duration NOT_FOUND_AFTER = Duration.ofMinutes(2);
 
@@ -39,11 +41,11 @@ class PaymentTimeoutTest {
     private final UUID orderId = UUID.randomUUID();
 
     private void pay() {
-        service.pay(UUID.randomUUID(), new PayCommand(orderId, 1L, 5_000L));
+        service.pay(UUID.randomUUID(), new PayCommand(orderId, USER_1, 5_000L));
     }
 
     private void cancel() {
-        service.cancel(UUID.randomUUID(), new CancelPaymentCommand(orderId, 1L, 5_000L));
+        service.cancel(UUID.randomUUID(), new CancelPaymentCommand(orderId, USER_1, 5_000L));
     }
 
     /** 스케줄러 한 번 분량 */
@@ -207,7 +209,7 @@ class PaymentTimeoutTest {
     @Test
     void redeliveredCancel_isSkipped() {
         UUID messageId = UUID.randomUUID();
-        CancelPaymentCommand command = new CancelPaymentCommand(orderId, 1L, 5_000L);
+        CancelPaymentCommand command = new CancelPaymentCommand(orderId, USER_1, 5_000L);
 
         service.cancel(messageId, command);
         service.cancel(messageId, command);

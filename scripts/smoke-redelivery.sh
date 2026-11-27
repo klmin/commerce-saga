@@ -14,7 +14,7 @@
 #      다시 받은 메시지를 모두 처리(lag 0)할 때까지 기다린 뒤 2 와 비교한다.
 #      LOG_DIR 을 주면 서비스 로그에서 "이미 처리한 ... 건너뜀" 이 찍혔는지도 본다
 set -euo pipefail
-# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+# access token (ADR 0008). 개발용 시드 사용자 USER1~USER4, 관리자 ADMIN (고정 UUID, lib/users.sh)
 source "$(dirname "$0")/lib/auth.sh"
 # 시드 상품 고정 UUID (product_id)
 source "$(dirname "$0")/lib/products.sh"
@@ -54,8 +54,8 @@ state() {
     echo "stock.$p.available=$(echo "$s" | field available)"
     echo "stock.$p.reserved=$(echo "$s" | field reserved)"
   done
-  for u in 1 2 3 4; do
-    echo "points.$u=$(curl -sf "$POINT_URL/points/me" -H "$(auth $u)" | field balance)"
+  for u in 1 2 3 4; do   # 시드 사용자 user1~user4 (스냅숏 키는 번호, 토큰은 시드 UUID)
+    echo "points.$u=$(curl -sf "$POINT_URL/points/me" -H "$(auth "$(user_id "$u")")" | field balance)"
   done
   local offset
   for t in "${TOPICS[@]}"; do

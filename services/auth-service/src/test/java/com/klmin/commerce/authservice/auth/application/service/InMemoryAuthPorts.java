@@ -5,6 +5,7 @@ import com.klmin.commerce.authservice.auth.application.port.out.LoginAttemptPort
 import com.klmin.commerce.authservice.auth.application.port.out.PasswordHasher;
 import com.klmin.commerce.authservice.auth.application.port.out.UserPort;
 import com.klmin.commerce.authservice.auth.domain.User;
+import com.klmin.commerce.authservice.auth.domain.UserId;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -15,7 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.UUID;
 
 /** AuthService 단위 테스트용 인메모리 포트 구현 */
 final class InMemoryAuthPorts {
@@ -51,19 +52,15 @@ final class InMemoryAuthPorts {
     }
 
     static final class Users implements UserPort {
-        final Map<Long, User> byId = new HashMap<>();
-        private final AtomicLong sequence = new AtomicLong();
+        final Map<UserId, User> byId = new HashMap<>();
 
         @Override
         public User save(User user) {
-            if (user.id() == null && findByLoginId(user.loginId()).isPresent()) {
+            if (!byId.containsKey(user.id()) && findByLoginId(user.loginId()).isPresent()) {
                 throw new DuplicateLoginIdException();
             }
-            long id = user.id() != null ? user.id() : sequence.incrementAndGet();
-            User saved = new User(id, user.loginId(), user.passwordHash(), user.roles(), user.status(),
-                    user.createdAt(), user.updatedAt());
-            byId.put(id, saved);
-            return saved;
+            byId.put(user.id(), user);
+            return user;
         }
 
         @Override
@@ -72,7 +69,7 @@ final class InMemoryAuthPorts {
         }
 
         @Override
-        public Optional<User> findById(long id) {
+        public Optional<User> findById(UserId id) {
             return Optional.ofNullable(byId.get(id));
         }
     }
@@ -82,7 +79,7 @@ final class InMemoryAuthPorts {
         final java.util.List<String> log = new java.util.ArrayList<>();
 
         @Override
-        public void userRegistered(long userId, Instant registeredAt) {
+        public void userRegistered(UUID userId, Instant registeredAt) {
             log.add("UserRegistered:" + userId + "@" + registeredAt);
         }
     }

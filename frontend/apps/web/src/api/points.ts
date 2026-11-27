@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { api, ApiError } from "@commerce/bff/api";
 
-const pointBalance = z.object({ userId: z.number().int(), balance: z.number().int() });
+const pointBalance = z.object({ userId: z.string(), balance: z.number().int() });
 
 const pointHistoryEntry = z.object({
   entryId: z.string(),

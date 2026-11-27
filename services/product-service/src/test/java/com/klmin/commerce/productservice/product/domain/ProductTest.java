@@ -13,6 +13,7 @@ class ProductTest {
 
     private static final Instant T0 = Instant.parse("2026-11-25T00:00:00Z");
     private static final Instant T1 = T0.plusSeconds(60);
+    private static final UserId ADMIN = UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000100"));
     private static final ProductId ID = ProductId.of(UUID.fromString("01900000-0000-7000-8000-000000000001"));
 
     private static Product product() {
@@ -50,11 +51,11 @@ class ProductTest {
     void changePrice_returnsChangeWithOldAndNewPrice() {
         Product p = product();
 
-        PriceChange change = p.changePrice(Money.of(35_000), UserId.of(1000), T1).orElseThrow();
+        PriceChange change = p.changePrice(Money.of(35_000), ADMIN, T1).orElseThrow();
 
         assertThat(change.oldPrice()).isEqualTo(Money.of(39_000));
         assertThat(change.newPrice()).isEqualTo(Money.of(35_000));
-        assertThat(change.changedBy()).isEqualTo(UserId.of(1000));
+        assertThat(change.changedBy()).isEqualTo(ADMIN);
         assertThat(change.changedAt()).isEqualTo(T1);
         assertThat(p.price()).isEqualTo(Money.of(35_000));
         assertThat(p.updatedAt()).isEqualTo(T1);
@@ -64,13 +65,13 @@ class ProductTest {
     void changePrice_samePrice_noChange() {
         Product p = product();
 
-        assertThat(p.changePrice(Money.of(39_000), UserId.of(1000), T1)).isEmpty();
+        assertThat(p.changePrice(Money.of(39_000), ADMIN, T1)).isEmpty();
         assertThat(p.updatedAt()).isEqualTo(T0);
     }
 
     @Test
     void changePrice_rejectsZero() {
-        assertThatThrownBy(() -> product().changePrice(Money.of(0), UserId.of(1000), T1))
+        assertThatThrownBy(() -> product().changePrice(Money.of(0), ADMIN, T1))
                 .isInstanceOf(DomainValidationException.class);
     }
 

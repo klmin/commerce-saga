@@ -17,6 +17,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -40,6 +42,8 @@ class ProductControllerTest {
 
     private static final UUID ID = UUID.fromString("01900000-0000-7000-8000-000000000001");
     private static final UUID ID2 = UUID.fromString("01900000-0000-7000-8000-000000000002");
+    private static final UUID ADMIN = UUID.fromString("01900000-0000-7000-8001-000000000100");
+    private static final UUID USER = UUID.fromString("01900000-0000-7000-8001-000000000001");
 
     private static final ProductResult KEYBOARD =
             new ProductResult(ID, "무선 키보드", "", 39_000, true, Instant.parse("2026-11-25T00:00:00Z"));
@@ -52,6 +56,10 @@ class ProductControllerTest {
 
     @MockitoBean
     ManageProductUseCase manageProductUseCase;
+
+    // 실제 Bearer 토큰 경로(디코드 → converter)를 태우려고 디코더만 바꾼다
+    @MockitoBean
+    JwtDecoder jwtDecoder;
 
     @Test
     void list_isPublic() throws Exception {
@@ -98,7 +106,7 @@ class ProductControllerTest {
     @Test
     void admin_requiresAdminRole() throws Exception {
         mvc.perform(get("/admin/products")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/admin/products").with(jwt().jwt(j -> j.subject("7"))))
+        mvc.perform(get("/admin/products").with(jwt().jwt(j -> j.subject(USER.toString()))))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(manageProductUseCase);
     }
@@ -108,12 +116,12 @@ class ProductControllerTest {
         given(manageProductUseCase.changePrice(any())).willReturn(KEYBOARD);
 
         mvc.perform(put("/admin/products/" + ID + "/price")
-                        .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"price\":35000}"))
                 .andExpect(status().isOk());
 
-        verify(manageProductUseCase).changePrice(new ChangePriceCommand(ID, 35_000, 1000));
+        verify(manageProductUseCase).changePrice(new ChangePriceCommand(ID, 35_000, ADMIN));
     }
 
     @Test
@@ -121,12 +129,12 @@ class ProductControllerTest {
         given(manageProductUseCase.changeSaleStatus(any())).willReturn(KEYBOARD);
 
         mvc.perform(put("/admin/products/" + ID + "/sale")
-                        .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"onSale\":false}"))
                 .andExpect(status().isOk());
 
-        verify(manageProductUseCase).changeSaleStatus(new ChangeSaleStatusCommand(ID, false, 1000));
+        verify(manageProductUseCase).changeSaleStatus(new ChangeSaleStatusCommand(ID, false, ADMIN));
     }
 
     @Test
@@ -135,20 +143,20 @@ class ProductControllerTest {
                 new ProductAuditResult("PRICE_CHANGED",
                         new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
                         new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true),
-                        1000, Instant.parse("2026-11-25T00:00:00Z")),
+                        ADMIN, Instant.parse("2026-11-25T00:00:00Z")),
                 new ProductAuditResult("REGISTERED", null,
                         new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
-                        1000, Instant.parse("2026-11-24T00:00:00Z"))), false));
+                        ADMIN, Instant.parse("2026-11-24T00:00:00Z"))), false));
 
-        mvc.perform(get("/admin/products/" + ID + "/audit-log").with(jwt().jwt(j -> j.subject("7"))))
+        mvc.perform(get("/admin/products/" + ID + "/audit-log").with(jwt().jwt(j -> j.subject(USER.toString()))))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/admin/products/" + ID + "/audit-log")
-                        .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].action").value("PRICE_CHANGED"))
                 .andExpect(jsonPath("$.items[0].before.price").value(39_000))
                 .andExpect(jsonPath("$.items[0].after.price").value(35_000))
-                .andExpect(jsonPath("$.items[0].changedBy").value(1000))
+                .andExpect(jsonPath("$.items[0].changedBy").value(ADMIN.toString()))
                 .andExpect(jsonPath("$.items[1].before").isEmpty())
                 .andExpect(jsonPath("$.hasNext").value(false));
     }
@@ -156,10 +164,38 @@ class ProductControllerTest {
     @Test
     void changePrice_invalidBody_400() throws Exception {
         mvc.perform(put("/admin/products/" + ID + "/price")
-                        .with(jwt().jwt(j -> j.subject("1000")).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"price\":0}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(manageProductUseCase);
+    }
+
+    // roles 클레임 → ROLE_* 는 Boot 가 설정(authorities-claim-name·authority-prefix)으로 만든 기본 converter 가 한다
+    @Test
+    void bearerToken_rolesClaim_becomesRole() throws Exception {
+        given(jwtDecoder.decode("user")).willReturn(token(USER.toString(), "USER"));
+        given(jwtDecoder.decode("admin")).willReturn(token(ADMIN.toString(), "ADMIN"));
+        given(manageProductUseCase.changePrice(any())).willReturn(KEYBOARD);
+
+        mvc.perform(put("/admin/products/" + ID + "/price")
+                        .header("Authorization", "Bearer user")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"price\":35000}"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(manageProductUseCase);
+
+        mvc.perform(put("/admin/products/" + ID + "/price")
+                        .header("Authorization", "Bearer admin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"price\":35000}"))
+                .andExpect(status().isOk());
+        verify(manageProductUseCase).changePrice(new ChangePriceCommand(ID, 35_000, ADMIN));
+    }
+
+    private static Jwt token(String subject, String role) {
+        return Jwt.withTokenValue("t").header("alg", "RS256").subject(subject).claim("roles", List.of(role))
+                .issuedAt(Instant.parse("2026-11-25T00:00:00Z")).expiresAt(Instant.parse("2099-01-01T00:00:00Z"))
+                .build();
     }
 }

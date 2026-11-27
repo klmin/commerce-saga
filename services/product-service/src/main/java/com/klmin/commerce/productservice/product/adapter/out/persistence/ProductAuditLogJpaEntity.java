@@ -50,7 +50,7 @@ class ProductAuditLogJpaEntity {
     private Boolean afterOnSale;
 
     @Column(name = "changed_by", nullable = false, updatable = false)
-    private long changedBy;
+    private UUID changedBy;
 
     @Column(name = "changed_at", nullable = false, updatable = false)
     private Instant changedAt;
@@ -60,7 +60,7 @@ class ProductAuditLogJpaEntity {
 
     ProductAuditLogJpaEntity(UUID productId, String action, String beforeName, String beforeDescription,
                              Long beforePrice, Boolean beforeOnSale, String afterName, String afterDescription,
-                             Long afterPrice, Boolean afterOnSale, long changedBy, Instant changedAt) {
+                             Long afterPrice, Boolean afterOnSale, UUID changedBy, Instant changedAt) {
         this.productId = productId;
         this.action = action;
         this.beforeName = beforeName;
@@ -111,7 +111,7 @@ class ProductAuditLogJpaEntity {
         return afterOnSale;
     }
 
-    long getChangedBy() {
+    UUID getChangedBy() {
         return changedBy;
     }
 

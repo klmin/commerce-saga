@@ -29,7 +29,7 @@ record PlaceOrderRequest(
             @NotNull @PositiveOrZero @Max(OrderLine.MAX_UNIT_PRICE) Long unitPrice) {
     }
 
-    PlaceOrderCommand toCommand(long userId, String idempotencyKey) {
+    PlaceOrderCommand toCommand(UUID userId, String idempotencyKey) {
         return new PlaceOrderCommand(userId, lines.stream()
                 .map(l -> new PlaceOrderCommand.Line(l.productId(), l.quantity(), l.unitPrice()))
                 .toList(),

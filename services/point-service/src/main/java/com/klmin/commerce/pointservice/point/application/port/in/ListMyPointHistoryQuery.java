@@ -10,7 +10,7 @@ import java.util.UUID;
  * @param before 이 항목보다 오래된 것만 (null 이면 처음부터). 항목 id(주문 id·지급 id)가 UUIDv7 이라 id 순서 = 생성 순서
  * @param size   1 ~ {@link #MAX_SIZE}
  */
-public record ListMyPointHistoryQuery(long userId, UUID before, int size) {
+public record ListMyPointHistoryQuery(UUID userId, UUID before, int size) {
 
     public static final int MAX_SIZE = 50;
 

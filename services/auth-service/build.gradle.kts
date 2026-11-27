@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation(project(":libs:messaging-contract"))
     implementation(project(":libs:outbox"))
+    implementation("com.github.f4b6a3:uuid-creator:6.1.1") // 사용자 id UUIDv7 (ADR 0018)
 
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")

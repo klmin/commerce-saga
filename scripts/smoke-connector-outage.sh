@@ -13,7 +13,7 @@
 #      포인트·재고는 주문 수만큼 정확히 한 번 반영된다 (재개 때 다시 나간 메시지는 컨슈머가 걸러낸다)
 #   3. heartbeat 로 적체가 다시 줄어든다
 set -euo pipefail
-# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+# access token (ADR 0008). 개발용 시드 사용자 USER1~USER4, 관리자 ADMIN (고정 UUID, lib/users.sh)
 source "$(dirname "$0")/lib/auth.sh"
 # 시드 상품 고정 UUID·가격 (product_id, seed_price)
 source "$(dirname "$0")/lib/products.sh"
@@ -26,7 +26,7 @@ CONNECT_URL=${CONNECT_URL:-http://localhost:8088}
 CONNECTORS=${CONNECTORS:-"order-outbox inventory-outbox point-outbox payment-outbox"}
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose.yml}
 ORDERS=${ORDERS:-5}
-USER_ID=${USER_ID:-3}
+USER_ID=$(user_id "${USER_ID:-3}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
 # 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
 PRODUCT_ID=$(product_id "${PRODUCT_ID:-2}")
 # 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
@@ -37,8 +37,8 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 stock() { curl -sf "$INVENTORY_URL/stocks/$1"; }
-points() { curl -sf "$POINT_URL/points/me" -H "$(auth $1)" | field balance; }
-order_status() { curl -sf "$ORDER_URL/orders/$2" -H "$(auth $1)" | field status; }
+points() { curl -sf "$POINT_URL/points/me" -H "$(auth "$1")" | field balance; }
+order_status() { curl -sf "$ORDER_URL/orders/$2" -H "$(auth "$1")" | field status; }
 psql_q() { # db sql
   docker compose -f "$COMPOSE_FILE" exec -T -e PGPASSWORD=postgres postgres psql -U postgres -d "$1" -tAc "$2"
 }
@@ -82,7 +82,7 @@ resume_all() {
 # 실패해도 커넥터는 다시 돌려 둔다
 trap resume_all EXIT
 
-curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
+curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' \
   -d '{"mode":"APPROVE","delayMillis":0}' > /dev/null
 
 echo "== 5. 커넥터 중단 → 주문 → 재개 후 유실 0"
@@ -100,7 +100,7 @@ echo "  ok  커넥터 STOPPED, order_outbox_slot active=f"
 order_ids=""
 for i in $(seq 1 "$ORDERS"); do
   body="{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
-  id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" | field orderId)
+  id=$(curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth "$USER_ID")" -d "$body" | field orderId)
   order_ids="$order_ids $id"
 done
 echo "  주문 $ORDERS건 생성, ${OUTAGE_SECONDS}초 동안 커넥터 중단 유지"

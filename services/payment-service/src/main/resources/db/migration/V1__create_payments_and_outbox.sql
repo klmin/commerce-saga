@@ -2,7 +2,7 @@
 create table payments (
     id             uuid primary key,
     order_id       uuid         not null unique,
-    user_id        bigint       not null,
+    user_id        uuid         not null,
     amount         bigint       not null,
     status         varchar(20)  not null,
     transaction_id varchar(100),

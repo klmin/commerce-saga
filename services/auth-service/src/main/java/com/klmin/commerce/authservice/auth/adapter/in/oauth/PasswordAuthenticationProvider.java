@@ -20,8 +20,8 @@ import java.util.List;
 
 /**
  * 로그인 폼({@code POST /login})의 아이디·비밀번호를 확인한다 (ADR 0017).
- * 인증된 principal 이름은 <b>userId 문자열</b>이다. SAS 가 이 이름을 토큰의 {@code sub} 와 인가 기록의 principal 로 쓴다
- * (서비스의 {@code @CurrentUserId long} 이 그대로 동작하게, ADR 0008).
+ * 인증된 principal 이름은 <b>userId 의 UUID 문자열</b>이다. SAS 가 이 이름을 토큰의 {@code sub} 와 인가 기록의 principal 로 쓴다
+ * (서비스의 {@code @CurrentUserId UUID} 가 그대로 동작하게, ADR 0008·0018).
  */
 @Component
 public class PasswordAuthenticationProvider implements AuthenticationProvider {
@@ -55,7 +55,7 @@ public class PasswordAuthenticationProvider implements AuthenticationProvider {
         List<GrantedAuthority> authorities = new ArrayList<>();
         user.roles().stream().sorted().map(role -> new SimpleGrantedAuthority("ROLE_" + role)).forEach(authorities::add);
         authorities.add(FactorGrantedAuthority.fromAuthority(FactorGrantedAuthority.PASSWORD_AUTHORITY));
-        return UsernamePasswordAuthenticationToken.authenticated(Long.toString(user.userId()), null, authorities);
+        return UsernamePasswordAuthenticationToken.authenticated(UserPrincipal.name(user.userId()), null, authorities);
     }
 
     @Override

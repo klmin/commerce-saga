@@ -44,11 +44,11 @@ public final class PointUsage {
     }
 
     /**
-     * 거절 기록. 커맨드 값을 그대로 받되, 잘못된 값(userId 0 이하, 음수 금액)은 남기지 않는다(사용자 없음·0).
+     * 거절 기록. 커맨드 값을 그대로 받되, 잘못된 값(음수 금액)은 남기지 않는다(0). userId 가 없으면 사용자 없음.
      * 거절 기록은 차감·환불에 쓰이지 않고 사유(reason)로 남는다.
      */
-    public static PointUsage rejected(UUID orderId, long userId, long amount, String reason, Instant now) {
-        return new PointUsage(orderId, userId > 0 ? UserId.of(userId) : null, Points.of(Math.max(amount, 0L)),
+    public static PointUsage rejected(UUID orderId, UUID userId, long amount, String reason, Instant now) {
+        return new PointUsage(orderId, userId != null ? UserId.of(userId) : null, Points.of(Math.max(amount, 0L)),
                 PointUsageStatus.REJECTED, reason, now, now);
     }
 

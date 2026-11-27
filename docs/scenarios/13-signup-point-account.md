@@ -1,6 +1,6 @@
 # 시나리오 13. 가입 → 포인트 계정 (auth.events 코레오그래피)
 
-새로 가입한 사용자에게 포인트 계정이 생기고(가입 축하 1,000P), 그 포인트로 주문할 수 있는지 확인한다. 전에는 포인트 시드(사용자 1~4)만 계정이 있어서 가입한 사용자가 포인트를 쓰는 주문은 포인트 단계에서 실패하고 보상으로 끝났다.
+새로 가입한 사용자에게 포인트 계정이 생기고(가입 축하 1,000P), 그 포인트로 주문할 수 있는지 확인한다. 전에는 포인트 시드(user1~user4)만 계정이 있어서 가입한 사용자가 포인트를 쓰는 주문은 포인트 단계에서 실패하고 보상으로 끝났다.
 
 서비스 사이 직접 호출 없이 이벤트로 잇는다. auth-service는 누가 듣는지 모르고 "가입했다"는 사실만 알린다.
 
@@ -17,10 +17,10 @@ point-service AuthEventsListener
 
 | 항목 | 결정 |
 |---|---|
-| 메시지 | `UserRegistered(userId, registeredAt)`, 토픽 `auth.events`(auth-service 소유), 키 `userId`. 아이디·비밀번호 같은 개인정보는 싣지 않는다 |
+| 메시지 | `UserRegistered(userId, registeredAt)`, 토픽 `auth.events`(auth-service 소유), 키 `userId`(UUID 문자열). `userId` 는 auth-service 가 가입 때 만드는 UUIDv7 (ADR 0018). 아이디·비밀번호 같은 개인정보는 싣지 않는다 |
 | 원자성 | 사용자 저장과 outbox INSERT가 같은 `@Transactional`. 가입이 롤백(아이디 중복 등)되면 이벤트도 없다 |
 | 멱등 | 같은 메시지 재전달은 `processed_message`, 내용이 같은 다른 메시지는 `point_accounts` PK(`user_id`)로 거른다. 몇 번 와도 계정 하나, 축하 포인트 한 번. 이미 쓴 잔액을 되돌리지 않는다 |
-| 이미 있는 계정 | 시드 사용자(1~4) 등 계정이 있으면 그대로 둔다 |
+| 이미 있는 계정 | 시드 사용자(user1~user4) 등 계정이 있으면 그대로 둔다 |
 | 오류 | 이벤트 토픽이라 관심 없는 타입은 건너뛴다. `type` 헤더가 없거나 본문·`id` 헤더·`userId`가 이상하면 `auth.events.DLT` |
 | 가입 축하 포인트 | `point.account.signup-bonus`(`POINT_SIGNUP_BONUS`, 기본 1,000) |
 | relay | 다른 서비스와 같다. 스케줄러(기본) 또는 Debezium `infra/connect/auth-outbox.json`(slot `auth_outbox_slot`, `auth_svc`에 replication 권한) |
@@ -37,9 +37,9 @@ CI `e2e`가 두 relay 모드에서 시나리오 10 다음에 돈다. 시나리�
 
 | 단계 | 기대 |
 |---|---|
-| 13a | 새로 가입한 사용자 `GET /api/points/me` → 몇 초 안에 404에서 200, 잔액 1,000P |
+| 13a | 새로 가입한 사용자(토큰 `sub` = auth-service 가 만든 UUIDv7) `GET /api/points/me` → 몇 초 안에 404에서 200, 잔액 1,000P |
 | 13b | 그 사용자가 300P를 써서 주문 → `COMPLETED`, 잔액 700P |
-| 13c | `point_accounts`에 그 사용자 행 1개, 시드 계정 1~4 그대로 |
+| 13c | `point_accounts`에 그 사용자 행 1개, 시드 계정 user1~user4(고정 UUID, `scripts/lib/users.sh`) 그대로 |
 | 13d (F-2a) | `GET /api/points/me/history` → 최신순으로 주문 사용(−300P, `USED`), 가입 축하 지급(+1,000P, `SIGNUP_BONUS`). `point_grants`에 그 사용자 행 1개 |
 
 테스트로도 확인한다: `AuthServiceTest`(가입 성공 때만 이벤트 1번), `AuthIntegrationTest`(가입하면 outbox에 `auth.events`/`UserRegistered` 1행, 중복 가입은 409이고 행 없음), `PointAccountServiceTest`(재전달·중복·시드 계정·잔액 보존), `AuthEventsListenerTest`(타입 분기, DLT 대상), `PointIntegrationTest`(Kafka로 같은 이벤트 재전달·중복 → 계정 1개·1,000P, 포인트를 쓴 뒤 늦게 온 같은 이벤트가 잔액을 되돌리지 않음).
@@ -60,7 +60,7 @@ CI `e2e` 실행 로그 ([PR #34 첫 실행, 2026-11-23](https://github.com/klmin
 PASS: 시나리오 13 (가입 → 포인트 계정)
 ```
 
-가입부터 계정 확인까지 scheduler 53ms, Debezium 94ms. 이 실행은 시나리오 3(오프셋 되감기)이 메시지가 없던 `auth.events` 파티션 때문에 실패했고, 고친 뒤 재실행([run 45194339865](https://github.com/klmin/commerce-saga/actions/runs/45194339865))에서 시나리오 3·13 모두 두 모드 통과.
+가입부터 계정 확인까지 scheduler 53ms, Debezium 94ms (그때는 사용자 id 가 숫자였다. 후속 6-2 부터 userId 는 UUIDv7 이고 시드는 고정 UUID, ADR 0018). 이 실행은 시나리오 3(오프셋 되감기)이 메시지가 없던 `auth.events` 파티션 때문에 실패했고, 고친 뒤 재실행([run 45194339865](https://github.com/klmin/commerce-saga/actions/runs/45194339865))에서 시나리오 3·13 모두 두 모드 통과.
 
 Next 화면으로도 확인했다(F-1, 로컬): 회원가입 → 바로 로그인 → "포인트 계정을 만드는 중" → 새로고침하면 1,000P (`frontend/e2e/auth.spec.ts`).
 

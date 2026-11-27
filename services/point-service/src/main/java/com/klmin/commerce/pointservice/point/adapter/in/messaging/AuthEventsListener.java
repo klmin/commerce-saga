@@ -40,8 +40,8 @@ class AuthEventsListener {
             return;
         }
         UserRegistered event = Messages.read(json, record, UserRegistered.class);
-        if (event.userId() <= 0) {
-            throw new NonRetryableMessageException("invalid userId " + event.userId() + ": " + Messages.describe(record));
+        if (event.userId() == null) {
+            throw new NonRetryableMessageException("userId missing: " + Messages.describe(record));
         }
         openPointAccountUseCase.open(Messages.messageId(record),
                 new OpenPointAccountCommand(event.userId(), event.registeredAt()));

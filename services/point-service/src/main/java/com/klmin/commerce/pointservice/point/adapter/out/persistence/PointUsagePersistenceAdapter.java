@@ -39,10 +39,10 @@ class PointUsagePersistenceAdapter implements PointUsagePort {
     }
 
     private static PointUsage toDomain(PointUsageJpaEntity e) {
-        // 값 객체 도입 전에는 잘못된 커맨드의 거절 기록에 userId 0 이하·음수 금액이 그대로 남았다. 그런 값은 비워서
+        // 값 객체 도입 전에는 잘못된 커맨드의 거절 기록에 음수 금액이 그대로 남았다. 그런 값은 0 으로
         // 읽는다(거절 기록은 차감·환불에 쓰지 않음). 복원이 실패하면 같은 주문의 RefundPoint(보상)가 계속 재시도된다
-        Long userId = e.getUserId();
-        return PointUsage.restore(e.getOrderId(), userId != null && userId > 0 ? UserId.of(userId) : null,
+        UUID userId = e.getUserId();
+        return PointUsage.restore(e.getOrderId(), userId != null ? UserId.of(userId) : null,
                 Points.of(Math.max(e.getAmount(), 0L)), e.getStatus(), e.getReason(),
                 e.getCreatedAt(), e.getUpdatedAt());
     }

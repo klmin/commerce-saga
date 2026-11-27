@@ -13,7 +13,7 @@
 #       복구되면 밀린 UsePoint 가 먼저 처리되고 RefundPoint 가 뒤따라 포인트가 되돌아오며, 재고도 풀려 CANCELLED.
 #       포기한 뒤 늦게 온 PointUsed 응답은 Saga 를 되돌리지 않는다
 set -euo pipefail
-# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+# access token (ADR 0008). 개발용 시드 사용자 USER1~USER4, 관리자 ADMIN (고정 UUID, lib/users.sh)
 source "$(dirname "$0")/lib/auth.sh"
 # 시드 상품 고정 UUID·가격 (product_id, seed_price)
 source "$(dirname "$0")/lib/products.sh"
@@ -22,7 +22,7 @@ ORDER_URL=${ORDER_URL:-http://localhost:8081}
 INVENTORY_URL=${INVENTORY_URL:-http://localhost:8082}
 POINT_URL=${POINT_URL:-http://localhost:8083}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
-USER_ID=${USER_ID:-2}
+USER_ID=$(user_id "${USER_ID:-2}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
 # 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
 PRODUCT_ID=$(product_id "${PRODUCT_ID:-3}")
 # 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
@@ -38,9 +38,9 @@ TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-60}
 
 field() { sed -nE "s/.*\"$1\":\"?([^\",}]*)\"?.*/\1/p" | head -1; }
 stock() { curl -sf "$INVENTORY_URL/stocks/$1"; }
-points() { curl -sf "$POINT_URL/points/me" -H "$(auth $1)" | field balance; }
-order_json() { curl -sf "$ORDER_URL/orders/$1" -H "$(auth $USER_ID)"; }
-saga_json() { curl -sf "$ORDER_URL/orders/$1/saga" -H "$(auth $USER_ID)"; }
+points() { curl -sf "$POINT_URL/points/me" -H "$(auth "$1")" | field balance; }
+order_json() { curl -sf "$ORDER_URL/orders/$1" -H "$(auth "$USER_ID")"; }
+saga_json() { curl -sf "$ORDER_URL/orders/$1/saga" -H "$(auth "$USER_ID")"; }
 
 expect_eq() {
   if [ "$2" != "$3" ]; then
@@ -89,7 +89,7 @@ trap cleanup EXIT
 
 place_order() {
   local body="{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":$POINT_AMOUNT}"
-  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" -d "$body" \
+  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth "$USER_ID")" -d "$body" \
     | field orderId
 }
 
@@ -98,7 +98,7 @@ saga_state_is() { [ "$(saga_json "$1" | field state)" = "$2" ]; }
 order_status_is() { [ "$(order_json "$1" | field status)" = "$2" ]; }
 stock_reserved_is() { [ "$(stock "$PRODUCT_ID" | field reserved)" = "$1" ]; }
 
-curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
+curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' \
   -d '{"mode":"APPROVE","delayMillis":0}' > /dev/null
 
 echo "== 4a. point-service 짧은 장애 → 재전송 → 복구 후 COMPLETED"

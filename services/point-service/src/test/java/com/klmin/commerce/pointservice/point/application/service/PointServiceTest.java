@@ -29,6 +29,11 @@ class PointServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-11-22T00:00:00Z");
 
+    /** 테스트 사용자 id: 숫자 n 을 끝자리로 갖는 고정 UUID (시드 user1~4 와 같은 표기) */
+    static UUID uid(long n) {
+        return UUID.fromString(String.format("01900000-0000-7000-8001-%012x", n));
+    }
+
     private final InMemoryAccounts accounts = new InMemoryAccounts();
     private final InMemoryUsages usages = new InMemoryUsages();
     private final RecordingReplies replies = new RecordingReplies();
@@ -41,7 +46,7 @@ class PointServiceTest {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
 
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(700L);
         assertThat(usages.store.get(orderId).status()).isEqualTo(PointUsageStatus.USED);
@@ -53,10 +58,10 @@ class PointServiceTest {
         accounts.put(1L, 100L);
         UUID orderId = UUID.randomUUID();
 
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(100L);
-        assertThat(replies.log).containsExactly("failed:" + orderId + ":insufficient points: userId=1");
+        assertThat(replies.log).containsExactly("failed:" + orderId + ":insufficient points: userId=" + uid(1L));
     }
 
     @Test
@@ -66,15 +71,15 @@ class PointServiceTest {
         UUID c = UUID.randomUUID();
         accounts.put(1L, 100L);
 
-        service.use(UUID.randomUUID(), new UsePointCommand(a, 99L, 10L));
-        service.use(UUID.randomUUID(), new UsePointCommand(b, 1L, 0L));
-        service.use(UUID.randomUUID(), new UsePointCommand(c, 0L, 10L));
+        service.use(UUID.randomUUID(), new UsePointCommand(a, uid(99L), 10L));
+        service.use(UUID.randomUUID(), new UsePointCommand(b, uid(1L), 0L));
+        service.use(UUID.randomUUID(), new UsePointCommand(c, null, 10L));
 
         assertThat(accounts.balance(1L)).isEqualTo(100L);
         assertThat(replies.log).containsExactly(
-                "failed:" + a + ":point account not found: userId=99",
+                "failed:" + a + ":point account not found: userId=" + uid(99L),
                 "failed:" + b + ":invalid command: amount must be positive",
-                "failed:" + c + ":invalid command: userId must be positive");
+                "failed:" + c + ":invalid command: userId missing");
     }
 
     @Test
@@ -82,8 +87,8 @@ class PointServiceTest {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
 
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(700L);
         assertThat(replies.log).containsExactly("used:" + orderId, "used:" + orderId);
@@ -96,11 +101,11 @@ class PointServiceTest {
         UUID useId = UUID.randomUUID();
         UUID refundId = UUID.randomUUID();
 
-        service.use(useId, new UsePointCommand(orderId, 1L, 300L));
-        service.use(useId, new UsePointCommand(orderId, 1L, 300L));
+        service.use(useId, new UsePointCommand(orderId, uid(1L), 300L));
+        service.use(useId, new UsePointCommand(orderId, uid(1L), 300L));
         service.refund(refundId, orderId);
         service.refund(refundId, orderId);
-        service.use(useId, new UsePointCommand(orderId, 1L, 300L));   // 보상 뒤 늦게 다시 온 원래 메시지
+        service.use(useId, new UsePointCommand(orderId, uid(1L), 300L));   // 보상 뒤 늦게 다시 온 원래 메시지
 
         assertThat(accounts.balance(1L)).isEqualTo(1_000L);
         assertThat(replies.log).containsExactly("used:" + orderId, "refunded:" + orderId);
@@ -111,7 +116,7 @@ class PointServiceTest {
     void refund_returnsPoints_once_andRepliesEveryTime() {
         accounts.put(1L, 1_000L);
         UUID orderId = UUID.randomUUID();
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
 
         service.refund(UUID.randomUUID(), orderId);
         service.refund(UUID.randomUUID(), orderId);
@@ -125,7 +130,7 @@ class PointServiceTest {
     void refund_ofRejectedUsage_changesNothing() {
         accounts.put(1L, 100L);
         UUID orderId = UUID.randomUUID();
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
 
         service.refund(UUID.randomUUID(), orderId);
 
@@ -139,7 +144,7 @@ class PointServiceTest {
         UUID orderId = UUID.randomUUID();
 
         service.refund(UUID.randomUUID(), orderId);
-        service.use(UUID.randomUUID(), new UsePointCommand(orderId, 1L, 300L));
+        service.use(UUID.randomUUID(), new UsePointCommand(orderId, uid(1L), 300L));
 
         assertThat(accounts.balance(1L)).isEqualTo(1_000L);
         assertThat(replies.log).containsExactly("refunded:" + orderId,
@@ -150,8 +155,8 @@ class PointServiceTest {
     void getBalance() {
         accounts.put(1L, 500L);
 
-        assertThat(service.getBalance(1L).balance()).isEqualTo(Points.of(500L));
-        assertThatThrownBy(() -> service.getBalance(2L)).isInstanceOf(PointAccountNotFoundException.class);
+        assertThat(service.getBalance(uid(1L)).balance()).isEqualTo(Points.of(500L));
+        assertThatThrownBy(() -> service.getBalance(uid(2L))).isInstanceOf(PointAccountNotFoundException.class);
     }
 
     static class InMemoryAccounts implements PointAccountPort {
@@ -159,11 +164,11 @@ class PointServiceTest {
         final Map<UserId, PointAccount> store = new HashMap<>();
 
         void put(long userId, long balance) {
-            store.put(UserId.of(userId), PointAccount.restore(UserId.of(userId), Points.of(balance), NOW));
+            store.put(UserId.of(uid(userId)), PointAccount.restore(UserId.of(uid(userId)), Points.of(balance), NOW));
         }
 
         long balance(long userId) {
-            return store.get(UserId.of(userId)).balance().value();
+            return store.get(UserId.of(uid(userId))).balance().value();
         }
 
         @Override

@@ -12,7 +12,7 @@
 #        (서비스 → OTLP → Alloy → Loki. Grafana 의 span → 로그, 로그 → trace 링크가 이것을 쓴다)
 # 메시지는 outbox 를 거치므로 trace 문맥은 outbox.traceparent → Kafka 헤더 traceparent → 리스너 observation 으로 넘어간다 (ADR 0013)
 set -euo pipefail
-# access token (ADR 0008). 개발용 시드 사용자 1~4, 관리자 100
+# access token (ADR 0008). 개발용 시드 사용자 USER1~USER4, 관리자 ADMIN (고정 UUID, lib/users.sh)
 source "$(dirname "$0")/lib/auth.sh"
 # 시드 상품 고정 UUID·가격 (product_id, seed_price)
 source "$(dirname "$0")/lib/products.sh"
@@ -21,7 +21,7 @@ ORDER_URL=${ORDER_URL:-http://localhost:8081}
 PAYMENT_URL=${PAYMENT_URL:-http://localhost:8084}
 TEMPO_URL=${TEMPO_URL:-http://localhost:3210}
 LOKI_URL=${LOKI_URL:-http://localhost:3110}
-USER_ID=${USER_ID:-1}
+USER_ID=$(user_id "${USER_ID:-1}")   # 시드 번호(1~4)나 UUID (lib/users.sh)
 # 상품 id (UUID). 시드 번호 1~5 로 줘도 된다
 PRODUCT_ID=$(product_id "${PRODUCT_ID:-1}")
 # 상품 시드 가격 (product-service V2). 화면 가격(unitPrice)이 서버 가격과 다르면 주문이 409 (ADR 0016)
@@ -43,20 +43,20 @@ wait_until() { # description timeout-seconds command...
 }
 
 fault() { # mode
-  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth 100)" -H 'Content-Type: application/json' \
+  curl -sf -X PUT "$PAYMENT_URL/admin/payment-faults" -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' \
     -d "{\"mode\":\"$1\",\"delayMillis\":0}" > /dev/null
 }
 trap 'fault APPROVE || true' EXIT
 
 # 요청에 traceparent 를 직접 넣어 trace id 를 알고 시작한다 (W3C: 00-<trace 32hex>-<span 16hex>-01)
 place_order() { # trace-id
-  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth $USER_ID)" \
+  curl -sf -X POST "$ORDER_URL/orders" -H 'Content-Type: application/json' -H "$(auth "$USER_ID")" \
     -H "traceparent: 00-$1-$(hex 8)-01" \
     -d "{\"lines\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":$UNIT_PRICE}],\"pointAmount\":100}" \
     | field orderId
 }
 
-order_status_is() { [ "$(curl -sf "$ORDER_URL/orders/$1" -H "$(auth $USER_ID)" | field status)" = "$2" ]; }
+order_status_is() { [ "$(curl -sf "$ORDER_URL/orders/$1" -H "$(auth "$USER_ID")" | field status)" = "$2" ]; }
 
 trace_json() { curl -sf "$TEMPO_URL/api/traces/$1" || true; }
 services_in() { grep -oE '"service.name","value":\{"stringValue":"[^"]+"' | sed -E 's/.*"stringValue":"//; s/"$//' | sort -u | tr '\n' ' '; }

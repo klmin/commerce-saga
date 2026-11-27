@@ -7,8 +7,9 @@ import com.klmin.commerce.outbox.OutboxWriter;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.UUID;
 
-/** 회원 이벤트를 outbox 에 저장한다. 메시지 키 = userId */
+/** 회원 이벤트를 outbox 에 저장한다. 메시지 키 = userId (UUID 문자열) */
 @Component
 class UserEventOutboxAdapter implements UserEventPort {
 
@@ -19,8 +20,8 @@ class UserEventOutboxAdapter implements UserEventPort {
     }
 
     @Override
-    public void userRegistered(long userId, Instant registeredAt) {
-        outboxWriter.append(Topics.AUTH_EVENTS, Long.toString(userId), UserRegistered.TYPE,
+    public void userRegistered(UUID userId, Instant registeredAt) {
+        outboxWriter.append(Topics.AUTH_EVENTS, userId.toString(), UserRegistered.TYPE,
                 new UserRegistered(userId, registeredAt));
     }
 }

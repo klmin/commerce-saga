@@ -7,7 +7,7 @@ drop index idx_orders_user_id;
 -- 주문 Idempotency-Key. 같은 사용자·같은 키는 주문 하나 (결제 버튼 두 번, 새로고침, 응답 유실 후 재시도)
 -- 키를 먼저 선점하고 주문을 나중에 넣으므로 FK 는 커밋 때 검사한다
 create table order_idempotency_keys (
-    user_id         bigint       not null,
+    user_id         uuid         not null,
     idempotency_key varchar(100) not null,
     request_hash    char(64)     not null,
     order_id        uuid         not null unique references orders (id) deferrable initially deferred,
