@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-26 (후속 5-6 로그인 기기·시나리오 19: 4-7절)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. 다음 작업은 **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 설계 확정 2026-11-25, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)). 5-0 ADR 0017 부터**. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-27 (후속 5 완료·태그 `v0.7-sso-bff`: 3절 PR 표, 4-7절)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)): 5-0 ADR 0017(PR #106) → 5-1 SAS(PR #107) → 5-2 Gateway BFF(PR #108) → 5-3a 사용자 화면 SPA(PR #110) → 5-5 관리자 화면 SPA(PR #114) → 5-3b Helm·Next 제거(PR #115) → 5-3d compose 전체 실행(PR #117) → 5-3c 기존 `/auth` API 제거(PR #118) → 5-4 인증 화면 SPA(PR #119) → 5-6 로그인 기기·시나리오 19(PR #120)로 **후속 5 완료, 태그 `v0.7-sso-bff`**. 다음 작업은 미정(사용자와 정한다). 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -90,6 +90,16 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| #120 | 후속 5-6 로그인 기기: 기기 = SSO 세션(브라우저). 로그인 때 기기 기록(Redis `auth:device:<userId>`, 세션 속성에 기기 id), SAS 인가 기록에 `device_id` 를 붙여 기기별로 refresh token 회수. 인증 화면 `/devices`(목록·기기 하나·다른 기기 모두 로그아웃, `GET/DELETE /sessions`, CSRF), 남의 기기 404·지금 기기 400·미로그인 401. OIDC 로그아웃은 이 기기만. 삭제 순서 인가 기록 → SSO 세션 → 기기 기록(실패해도 다시 지울 수 있게). `/api/me` 에 `devicesUrl`, 사용자 화면 "로그인 기기" 링크. 시나리오 19 |
+| #98 | 대시보드에 Saga 완료·HTTP·JVM·컨테이너·디스크 패널 추가, 음수 consumer lag 수정 |
+| #119 | 후속 5-4 인증 화면 SPA(`frontend/apps/auth`, 로그인·가입, 로컬 5175 가 SAS 경로를 프록시): auth-service 임시 화면 제거, 로컬 `AUTH_ISSUER` 기본값 5175, Helm·Caddy·compose 에 인증 화면, 스크립트는 `<base>/csrf` JSON 으로 CSRF 토큰 |
+| #118 | 후속 5-3c 기존 `/auth` API 제거, 시나리오 스크립트는 SAS 스크립트용 클라이언트로 토큰을 받는다. compose 의 `AUTH_SERVICE_URL` 제거 |
+| #117 | 후속 5-3d compose 전체 실행: 앱 compose·Caddy 호스트/경로 방식·OAuth 클라이언트 시크릿 init·커넥터 등록 init(`connectors-init`, Caddy 가 완료를 기다림), CI compose 잡이 CDC·검색까지 확인 (#116 은 base 브랜치 삭제로 닫혀 다시 열었다) |
+| #115 | 후속 5-3b 화면 SPA 이미지·Helm edge 호스트/경로 방식(SAS 경로는 auth-service, 나머지는 화면), Next 화면 제거 |
+| #114 | 후속 5-5 관리자 화면 SPA(Vite + React, `gateway-admin` 클라이언트, 관리자 호스트) |
+| #113 | CI: k8s argocd 잡이 이미지와 차트를 같은 커밋(PR head)으로 쓰게 |
+| #110 | 후속 5-3a 사용자 화면 SPA(`frontend/apps/web`, Vite + React 19, BFF 세션 쿠키로 같은 출처 `/api`, 토큰 모름), pnpm workspace·`packages/ui` |
+| #109 | ArgoCD sync 결과(배포 완료·sync 실패·Degraded)를 Discord 로 알림 |
 | #108 | 후속 5-2 Gateway BFF: `oauth2Login`(코드 등록, 공개 `AUTH_ISSUER`·내부 `AUTH_INTERNAL_URL`, PKCE), `/oauth2/authorization/auto` 클라이언트 자동 선택(`ADMIN_CLIENT_HOST`)·`return_to`(같은 출처 경로만), 토큰은 Redis 세션(`GW_SESSION`)·`TokenRelay`·refresh 갱신, 세션 없는 API 401, 쿠키 CSRF(`XSRF-TOKEN`), `POST /logout` → SAS OIDC 로그아웃, 서비스로 쿠키 안 넘김. issuer 통일(기존 토큰도 `AUTH_ISSUER`, 서비스 9개 `AUTH_INTERNAL_URL/oauth2/jwks`). SCG 는 Spring 기본 전달 헤더 처리 대신 믿는 프록시의 Proto/Host/Port 만 반영(rate limit IP 보호), userinfo 미사용. Bearer 요청은 그대로 |
 | #107 | 후속 5-1 auth-service → SAS: 표준 엔드포인트(issuer `AUTH_ISSUER`, 서명 키·JWKS 그대로), Flyway V4 SAS 스키마(PostgreSQL 맞춤·hash 인덱스), SSO 세션 Redis(`AUTH_SESSION`), 임시 로그인 화면 `/signin`·처리 `POST /login`(실패 제한 그대로)·가입 폼 `POST /signup`·`GET /csrf`(세션 CSRF), 토큰 `sub`=userId·`roles` 를 토큰마다 DB 에서, 고정 클라이언트 upsert(시크릿: 외부 → 개발용 파일 → 기동 실패), SSO 로그아웃 때 인가 기록 삭제·끝난 기록 정리, 경로 방식(`use-prefix`), k8s hook Job 이 `oauth-client-secrets` 생성. 기존 `/auth/*` API 는 5-3 까지 유지 |
 | #106 | 후속 5-0 [ADR 0017](adr/0017-auth-sas-gateway-bff-spa.md): auth-service → SAS(OIDC IdP), Gateway → BFF, 화면 → Vite SPA 3개, 고정 클라이언트 등록·시크릿 출처, 두 배치 방식. 고려한 안(자체 SSO·SAS·Keycloak / PKCE SPA·SCG BFF·Next BFF / 화면 2·3개 / Next CSR·Vite / DCR)과 대체 범위 표. ADR 0008(일부)·0011(전체)은 상태 줄만 대체 표시 |
@@ -557,7 +567,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 
 **부담·한계로 적을 것**: ES 메모리(로컬 compose 전체가 약 1GB 늘어남, CI 러너는 여유 있음), 검색 결과는 최종 일관성(수 초 늦을 수 있음), ngram 이라 형태소 검색 아님, 단일 노드라 ES 고가용성 없음.
 
-## 4-7. 후속 5 인증 재구성 설계 메모 (2026-11-25 사용자 결정)
+## 4-7. 후속 5 인증 재구성 설계 메모 (2026-11-25 사용자 결정, 완료: 태그 `v0.7-sso-bff`)
 
 화면을 **사용자·관리자·인증 3개 SPA** 로 나누고, auth-service 를 **Spring Authorization Server(OIDC IdP)** 로, Spring Cloud Gateway 를 **BFF(OAuth2 클라이언트 + 토큰 릴레이)** 로 바꾼다. 서비스(리소스 서버)의 JWT 검증은 그대로다. 흐름·저장소·시크릿·라우팅·PR 나누기는 **[인증 재구성 설계](auth-sas-bff-design.md)** 에 모았다. 시작 전에 그 문서를 읽는다.
 
