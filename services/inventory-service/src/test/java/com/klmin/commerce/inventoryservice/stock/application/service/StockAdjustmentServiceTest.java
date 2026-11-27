@@ -143,6 +143,15 @@ class StockAdjustmentServiceTest {
         assertThat(service.adjustments(UUID.randomUUID(), 0, 20).items()).isEmpty();
     }
 
+    @Test
+    void adjustments_outOfRangePaging_isRejected() {
+        assertThatThrownBy(() -> service.adjustments(P1, -1, 20)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> service.adjustments(P1, Integer.MAX_VALUE, 100))
+                .isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> service.adjustments(P1, 0, 0)).isInstanceOf(DomainValidationException.class);
+        assertThatThrownBy(() -> service.adjustments(P1, 0, 101)).isInstanceOf(DomainValidationException.class);
+    }
+
     static class InMemoryAdjustments implements StockAdjustmentPort {
 
         final List<StockAdjustment> rows = new ArrayList<>();

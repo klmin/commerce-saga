@@ -6,6 +6,7 @@ import java.util.UUID;
 public interface AdjustStockUseCase {
 
     int MAX_PAGE_SIZE = 100;
+    int MAX_PAGE = 10_000;
 
     /**
      * 재고 행이 없으면(새로 등록한 상품) 0 으로 만든 뒤 조정한다. 같은 관리자가 같은 키로 다시 보내면 처음 결과를 돌려준다.

@@ -1,5 +1,6 @@
 package com.klmin.commerce.inventoryservice.stock.application.service;
 
+import com.klmin.commerce.inventoryservice.common.error.DomainValidationException;
 import com.klmin.commerce.inventoryservice.stock.application.IdempotencyKeyReusedException;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.AdjustStockCommand;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.AdjustStockResult;
@@ -68,6 +69,10 @@ class StockAdjustmentService implements AdjustStockUseCase {
     @Override
     @Transactional(readOnly = true)
     public StockAdjustmentPageResult adjustments(UUID productId, int page, int size) {
+        // 컨트롤러도 막지만, 곱셈이 넘치지 않게 여기서도 범위를 확인한다 (page ≤ MAX_PAGE, size ≤ MAX_PAGE_SIZE)
+        if (page < 0 || page > MAX_PAGE || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new DomainValidationException("page 는 0~" + MAX_PAGE + ", size 는 1~" + MAX_PAGE_SIZE + " 입니다.");
+        }
         List<StockAdjustment> rows = adjustmentPort.findByProduct(ProductId.of(productId), page * size, size + 1);
         boolean hasNext = rows.size() > size;
         return new StockAdjustmentPageResult(

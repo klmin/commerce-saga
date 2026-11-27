@@ -91,12 +91,25 @@ class StockTest {
     }
 
     @Test
-    void adjust_zeroOrOverflow_isRejected() {
-        Stock stock = Stock.restore(P1, Integer.MAX_VALUE - 1, 0, T0);
+    void adjust_zeroOrOverTotal_isRejected() {
+        Stock stock = Stock.restore(P1, Stock.MAX_TOTAL - 2, 0, T0);
 
         assertThatThrownBy(() -> stock.adjust(0, T0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> stock.adjust(3, T0)).isInstanceOf(ConflictException.class);
+        stock.adjust(2, T0);
+        assertThat(stock.available()).isEqualTo(Stock.MAX_TOTAL);
+    }
+
+    // 예약분은 보상 때 가용으로 돌아온다. 입고가 그 합계를 넘기면 release 가 overflow 로 끝없이 재시도된다
+    @Test
+    void adjust_countsReservedInTotal_soReleaseNeverOverflows() {
+        Stock stock = Stock.restore(P1, Stock.MAX_TOTAL - 2, 1, T0);
+
         assertThatThrownBy(() -> stock.adjust(2, T0)).isInstanceOf(ConflictException.class);
-        assertThat(stock.available()).isEqualTo(Integer.MAX_VALUE - 1);
+        stock.adjust(1, T0);
+        stock.release(Quantity.of(1), T0);
+        assertThat(stock.available()).isEqualTo(Stock.MAX_TOTAL);
+        assertThat(stock.reserved()).isZero();
     }
 
     @Test

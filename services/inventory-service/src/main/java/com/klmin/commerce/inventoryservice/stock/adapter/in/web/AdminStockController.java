@@ -62,7 +62,7 @@ class AdminStockController {
     @GetMapping("/{productId}/adjustments")
     AdjustmentPageResponse adjustments(
             @PathVariable UUID productId,
-            @RequestParam(defaultValue = "0") @Min(0) @Max(10_000) int page,
+            @RequestParam(defaultValue = "0") @Min(0) @Max(AdjustStockUseCase.MAX_PAGE) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(AdjustStockUseCase.MAX_PAGE_SIZE) int size) {
         return AdjustmentPageResponse.from(adjustStockUseCase.adjustments(productId, page, size));
     }
