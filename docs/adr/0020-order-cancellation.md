@@ -58,7 +58,7 @@
 ### 4. 주문 상태와 이벤트
 
 - 주문 상태는 그대로 `PENDING`/`COMPLETED`/`CANCELLED` 다. 취소가 끝나면 `CANCELLED`(완료됐던 주문도). 진행 중에는 응답에 `cancelRequested: true` 를 더한다
-- 취소가 끝나면 지금처럼 `OrderCancelled` 를 낸다. 완료 후 취소인지 알 수 있게 필드 `afterCompletion`(boolean)을 **추가**한다(필드 추가만, ADR 0005). 알림은 "주문이 취소되었습니다"로 같다
+- 취소가 끝나면 지금처럼 `OrderCancelled` 를 낸다. 완료 후 취소인지 알 수 있게 필드 `afterCompletion` 을 **추가**한다(필드 추가만, ADR 0005). 옛 메시지에는 없으므로 `Boolean` 으로 받고 없으면 false 다(원시 boolean 이면 Jackson 3 기본 설정에서 옛 메시지를 읽지 못한다). 알림은 "주문이 취소되었습니다"로 같다
 
 ### 5. API·권한
 
