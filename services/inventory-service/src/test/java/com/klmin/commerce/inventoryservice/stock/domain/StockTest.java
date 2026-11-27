@@ -124,6 +124,17 @@ class StockTest {
     }
 
     // 반환은 판매 확정분(입고 상한에 세지 않음)이 쌓여 들어온다. 옛 int 범위를 넘어도 보상이 실패하지 않는다 (V7 bigint)
+    // 반환으로 상한을 넘은 재고도 관리자가 줄일 수 있다 (늘리는 조정만 상한을 본다)
+    @Test
+    void adjust_overTotalAfterReturns_allowsDecreaseOnly() {
+        Stock stock = Stock.restore(P1, Stock.MAX_TOTAL + 2_000_000L, 0, T0);
+
+        assertThatThrownBy(() -> stock.adjust(1, T0)).isInstanceOf(ConflictException.class);
+        stock.adjust(-1_000_000, T0);
+
+        assertThat(stock.available()).isEqualTo(Stock.MAX_TOTAL + 1_000_000L);
+    }
+
     @Test
     void restock_beyondIntRange_doesNotOverflow() {
         Stock stock = Stock.restore(P1, Integer.MAX_VALUE - 1L, 0, T0);

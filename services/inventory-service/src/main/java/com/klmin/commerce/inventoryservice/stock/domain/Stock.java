@@ -89,7 +89,8 @@ public final class Stock {
             throw new ConflictException("가용 재고(" + available + "개)보다 많이 차감할 수 없습니다.");
         }
         // 관리자가 한 번에 넣을 수 있는 규모를 정한다(입력 실수 방지). 저장은 long 이라 보상(해제·반환)이 넘치지 않는다
-        if (after + reserved > MAX_TOTAL) {
+        // 줄이는 조정은 막지 않는다: 반환(보상)은 상한을 넘겨도 들어오므로, 넘은 재고도 차감으로 줄일 수 있어야 한다
+        if (delta > 0 && after + reserved > MAX_TOTAL) {
             throw new ConflictException("재고는 예약분까지 합해 " + MAX_TOTAL + "개까지입니다.");
         }
         available = after;
