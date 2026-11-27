@@ -25,7 +25,7 @@ class StockAdjustmentPersistenceAdapter implements StockAdjustmentPort {
     private static final String COLUMNS =
             "id, product_id, delta, available_after, reason, adjusted_by, idempotency_key, adjusted_at";
 
-    private static final RowMapper<StockAdjustment> MAPPER = (rs, n) -> new StockAdjustment(
+    private static final RowMapper<StockAdjustment> MAPPER = (rs, _) -> new StockAdjustment(
             rs.getLong("id"),
             ProductId.of(rs.getObject("product_id", UUID.class)),
             rs.getInt("delta"),
