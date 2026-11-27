@@ -1,5 +1,6 @@
 package com.klmin.commerce.inventoryservice.stock.domain;
 
+import com.klmin.commerce.inventoryservice.common.error.ConflictException;
 import com.klmin.commerce.inventoryservice.common.error.InvariantViolationException;
 
 import java.time.Instant;
@@ -11,6 +12,9 @@ import java.util.Objects;
  * 주문이 완료되면 reserved 에서 빠지고(판매 확정), 보상이면 available 로 돌아간다.
  */
 public final class Stock {
+
+    /** 관리자 입고로 만들 수 있는 재고 합계(가용 + 예약) 상한. 보상으로 예약분이 가용에 돌아와도 int 에 들어가게 */
+    public static final int MAX_TOTAL = 1_000_000_000;
 
     private final ProductId productId;
     private int available;
@@ -58,6 +62,28 @@ public final class Stock {
     public void confirm(Quantity quantity, Instant now) {
         requireReserved(quantity);
         reserved -= quantity.value();
+        updatedAt = now;
+    }
+
+    /**
+     * 관리자 조정 (ADR 0019): 입고(+)·차감(-)을 가용 재고에 더한다. 예약 중인 수량(reserved)은 건드리지 않는다.
+     * 수량을 덮어쓰지 않고 더하므로, 같은 행을 잠근 예약과 순서대로 반영돼 서로의 변경을 지우지 않는다.
+     *
+     * @throws ConflictException 가용 재고보다 많이 차감하려 할 때, 예약분까지 합한 재고가 {@link #MAX_TOTAL} 을 넘을 때
+     */
+    public void adjust(int delta, Instant now) {
+        if (delta == 0) {
+            throw new IllegalArgumentException("delta must not be zero");
+        }
+        long after = (long) available + delta;
+        if (after < 0) {
+            throw new ConflictException("가용 재고(" + available + "개)보다 많이 차감할 수 없습니다.");
+        }
+        // 예약분은 보상(release)으로 가용에 돌아온다. 그때 int 를 넘으면 보상이 계속 실패하므로 합계로 막는다
+        if (after + reserved > MAX_TOTAL) {
+            throw new ConflictException("재고는 예약분까지 합해 " + MAX_TOTAL + "개까지입니다.");
+        }
+        available = (int) after;
         updatedAt = now;
     }
 

@@ -20,7 +20,7 @@ libs/messaging-contract/   커맨드·이벤트 메시지 스키마(record)와 �
 libs/outbox/               outbox 저장 + relay (서비스는 adapter.out 에서만 사용)
 tools/dlt-replay/           운영 CLI: DLT 조회·재처리 (scripts/dlt.sh)
 frontend/apps/web/         사용자 화면 SPA (Vite + React). 토큰을 모르고 같은 출처 /api 를 BFF 세션 쿠키로 부른다 (ADR 0017)
-frontend/apps/admin/       관리자 화면 SPA (상품 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
+frontend/apps/admin/       관리자 화면 SPA (상품·재고 관리·결제 장애 주입, 로그인 클라이언트 gateway-admin)
 frontend/apps/auth/        인증 화면 SPA (SAS 로그인·가입). 폼은 auth-service 로 그대로 POST, CSRF 는 GET csrf 본문 (설계 문서 4절)
 frontend/packages/ui/      화면 SPA 공용 shadcn/ui 컴포넌트·테마
 frontend/packages/bff/     화면 SPA 공용 Gateway(BFF) 호출·로그인 확인·로그아웃
@@ -34,7 +34,7 @@ docs/scenarios/            시나리오별 재현 방법·결과
 | 서비스 | 역할 |
 |---|---|
 | order-service | 주문 애그리거트 + 주문 Saga 오케스트레이터 (Saga 상태를 DB에 저장) |
-| inventory-service | 재고 예약 / 해제 |
+| inventory-service | 재고 예약 / 해제, 관리자 입고·차감(ADR 0019) |
 | point-service | 포인트 차감 / 환불 |
 | payment-service | 가짜 PG (지연·실패·타임아웃 주입) |
 | notification-service | `order.events` 순수 소비자 (코레오그래피) |
@@ -81,7 +81,6 @@ docker compose -f infra/docker-compose.yml up -d
   - 같은 메시지의 재전달: 유스케이스가 `(messageId, 커맨드)`를 받아 트랜잭션 첫 줄에서 `ProcessedMessagePort.markProcessed`(`processed_message` INSERT). 이미 있으면 상태도 응답도 바꾸지 않고 skip. `messageId`는 Kafka 헤더 `id`(= 보낸 쪽 outbox `id`), 없으면 DLT
   - 내용이 같은 다른 메시지(재요청): 주문별 기록(`order_id` 유니크)으로 걸러 상태는 그대로, 처음 결과를 다시 응답
 - 메시지 스키마(`libs/messaging-contract`)는 필드 추가만 한다. 삭제·이름·타입·의미 변경은 새 타입으로 (ADR 0005)
-  - **일시 예외 (ADR 0018, 후속 6 동안만)**: id UUIDv7 전환은 출시 전 일괄 변경이라 메시지 계약의 id 타입(`long userId`·`long productId` → `UUID`)을 제자리에서 바꾸고, 머지된 Flyway 마이그레이션도 직접 고친다(환경은 새로 만든다). 이 전환에 속한 변경은 리뷰에서 지적하지 않는다. 6-3 에서 이 줄을 지운다
 - 처리 불가 메시지는 DLT로 보존하고 `scripts/dlt.sh`로 재처리한다. 지연 retry 토픽은 같은 주문의 순서를 깨므로 쓰지 않는다 (ADR 0012). 예외를 삼키고 오프셋만 커밋하지 않는다
   - 일시 오류(DB 장애 등)는 복구될 때까지 재시도, 재시도해도 같은 오류(본문·헤더 이상, 데이터 불일치)는 `<토픽>.DLT`로 원본 보존 (각 서비스 `KafkaErrorHandlingConfig`)
   - 커맨드·응답 토픽은 계약에 없는 타입이 오면 DLT로 보낸다. 이벤트 토픽(`*.events`)은 소비자가 여럿이라 관심 없는 타입은 건너뛴다. 단 `type` 헤더 자체가 없거나 비면 어느 토픽이든 DLT
@@ -109,7 +108,7 @@ common/error, common/web, common/config
 - 값 객체(`Money`·`Points`·`Quantity`·`UserId` 등)는 도메인 안에서만 쓰고 서비스마다 따로 둔다(`libs/` 로 공유 금지). DB 컬럼·메시지 계약·port.in Command·조회 DTO 는 원시 타입, 메시지 값은 값 객체로 바꾸기 전에 검사해 실패 응답·DLT. 컨텍스트 관계·용어·쓰지 않는 패턴(도메인 이벤트 객체, 이벤트 소싱, JPA Auditing)은 ADR 0015
 - 영속성은 도메인 모델과 JPA 엔티티를 분리하고 어댑터에서 매핑한다 (ADR 0002). 엔티티를 어댑터 밖으로 내보내지 않는다
 - 도메인 규칙 위반은 `DomainValidationException`(400), 없는 리소스는 `NotFoundException` 상속(404). 오류 응답은 Problem Details
-- 스키마 변경은 Flyway `V{n}__설명.sql`로만. 머지된 마이그레이션은 고치지 않는다 (일시 예외: ADR 0018 id 전환, 위 메시지 스키마 항목)
+- 스키마 변경은 Flyway `V{n}__설명.sql`로만. 머지된 마이그레이션은 고치지 않는다
 - 현재 시각은 `Clock` Bean 주입 (`Instant.now()` 직접 호출 X)
 - 사용자 식별: access token(JWT)의 `sub`. 컨트롤러는 `@CurrentUserId UUID userId` 로 받는다(`sub` = userId 의 UUID 문자열, ADR 0018)(서비스마다 `common/web/CurrentUserId`, `common/config/SecurityConfig`). 경로·본문·헤더(`X-User-Id`)로 사용자 id 를 받지 않는다. Gateway 가 1차 검증하지만 서비스도 다시 검증한다. **리소스 조회·변경 시 소유권을 서비스 내부에서 검사한다** (ADR 0008)
 - id: 서비스 밖으로 나가는 id(주문·사용자·상품·결제·알림·메시지)는 UUIDv7 을 앱이 저장 전에 만든다(`UuidCreator.getTimeOrderedEpoch()`). 서비스 안에서만 쓰는 추가 전용 로그(가격 이력·관리 이력)는 bigint IDENTITY (ADR 0018)

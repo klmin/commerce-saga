@@ -125,6 +125,13 @@ class GatewayRoutingTest {
         assertThat(get("/api/admin/products/01900000-0000-7000-8000-000000000001/price-history", token(KEY, "01900000-0000-7000-8001-000000000100", List.of("ADMIN", "USER"), 300))
                 .statusCode()).isEqualTo(200);
         assertThat(LAST_REQUEST.get()).contains("path=/admin/products/01900000-0000-7000-8000-000000000001/price-history");
+
+        // 재고 조정 (ADR 0019) → inventory-service
+        String adjustments = "/api/admin/stocks/01900000-0000-7000-8000-000000000001/adjustments";
+        assertThat(get(adjustments, token(KEY, "01900000-0000-7000-8001-000000000009", List.of("USER"), 300)).statusCode()).isEqualTo(403);
+        assertThat(get(adjustments, token(KEY, "01900000-0000-7000-8001-000000000100", List.of("ADMIN", "USER"), 300))
+                .statusCode()).isEqualTo(200);
+        assertThat(LAST_REQUEST.get()).contains("path=/admin/stocks/01900000-0000-7000-8000-000000000001/adjustments");
     }
 
     @Test

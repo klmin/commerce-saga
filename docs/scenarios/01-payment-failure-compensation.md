@@ -35,7 +35,7 @@ docker compose -f infra/docker-compose.yml up -d --wait
 source scripts/lib/auth.sh
 curl -X PUT localhost:8084/admin/payment-faults -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' -d '{"mode":"DECLINE","delayMillis":0}'
 curl -X POST localhost:8081/orders -H "$(auth "$USER2")" -H 'Content-Type: application/json' \
-  -d '{"lines":[{"productId":"01900000-0000-7000-8000-000000000003","quantity":1,"unitPrice":2000}],"pointAmount":300}'
+  -d '{"lines":[{"productId":"01900000-0000-7000-8000-000000000003","quantity":1,"unitPrice":18000}],"pointAmount":300}'
 curl localhost:8081/orders/<orderId>/saga -H "$(auth "$USER2")"   # 단계 타임라인
 curl -X PUT localhost:8084/admin/payment-faults -H "$(auth "$ADMIN")" -H 'Content-Type: application/json' -d '{"mode":"APPROVE","delayMillis":0}'
 ```

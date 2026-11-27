@@ -1,8 +1,9 @@
-import { api } from "@commerce/bff/api";
+import { api, ApiError } from "@commerce/bff/api";
 import { shortId } from "@commerce/bff/short-id";
 import { z } from "zod";
 
 import { FAULT_MODES, type FaultSettings } from "@/lib/fault-input";
+import type { StockAdjustInput } from "@/lib/stock-input";
 import {
   AUDIT_ACTIONS,
   type AuditEntry,
@@ -154,5 +155,75 @@ export async function changeProductSaleStatus(
       method: "PUT",
       body: JSON.stringify({ onSale }),
     }),
+  );
+}
+
+// --- 재고 조정 (inventory-service /admin/stocks, ADR 0019) ---
+
+const stock = z.object({
+  productId: z.uuid(),
+  available: z.number().int(),
+  reserved: z.number().int(),
+});
+
+export type Stock = z.infer<typeof stock>;
+
+const adjustment = z.object({
+  id: z.number().int(),
+  delta: z.number().int(),
+  availableAfter: z.number().int(),
+  reason: z.string().nullable(),
+  // 조정한 관리자 userId: UUID 문자열 (ADR 0018)
+  adjustedBy: z.string(),
+  adjustedAt: z.string(),
+});
+
+export type StockAdjustment = z.infer<typeof adjustment>;
+
+const adjustResult = stock.extend({ adjustment });
+
+const adjustmentPage = z.object({ items: z.array(adjustment), hasNext: z.boolean() });
+
+/** 한 화면에 보여 줄 재고 조정 이력 수 (최근부터) */
+export const STOCK_HISTORY_SIZE = 20;
+
+/** 지금 재고. 재고 행이 없으면(아직 입고하지 않은 새 상품) null */
+export async function getStock(productId: ProductId): Promise<Stock | null> {
+  try {
+    return stock.parse(await api<unknown>(`/api/stocks/${idPath(productId)}`));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      return null;
+    }
+    throw e;
+  }
+}
+
+/**
+ * 입고(+)·차감(-). idempotencyKey 는 화면이 조정 한 번마다 만든다: 응답을 못 받고 다시 보내도 한 번만 반영된다.
+ * 가용 재고보다 많이 빼면 ApiError(409), 같은 키로 다른 내용을 보내면 ApiError(422)
+ */
+export async function adjustStock(
+  productId: ProductId,
+  input: StockAdjustInput,
+  idempotencyKey: string,
+): Promise<z.infer<typeof adjustResult>> {
+  return adjustResult.parse(
+    await api<unknown>(`/api/admin/stocks/${idPath(productId)}/adjustments`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** 재고 조정 이력 (최근부터). 재고 행이 없으면 빈 목록 */
+export async function stockAdjustments(
+  productId: ProductId,
+): Promise<{ items: StockAdjustment[]; hasNext: boolean }> {
+  return adjustmentPage.parse(
+    await api<unknown>(
+      `/api/admin/stocks/${idPath(productId)}/adjustments?size=${STOCK_HISTORY_SIZE}`,
+    ),
   );
 }

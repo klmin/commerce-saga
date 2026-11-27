@@ -67,6 +67,55 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
   await expect(row).toContainText("60,000원 · 판매 중지");
 });
 
+// 재고 조정 (ADR 0019): 새로 등록한 상품은 재고가 없고(입고 전), 입고해야 주문할 수 있다
+test("관리자가 새 상품에 입고하고 차감하면 재고와 조정 이력이 바뀌고, 가용보다 많이 뺄 수는 없다", async ({
+  page,
+}) => {
+  await login(page, "admin");
+  await page.getByRole("link", { name: "상품 관리로 가기" }).click();
+
+  const register = page.getByRole("form", { name: "상품 등록" });
+  await register.getByLabel("상품 이름").fill(`e2e 재고 상품 ${Date.now().toString(36)}`);
+  await register.getByLabel("가격 (원)").fill("50000");
+  await register.getByRole("button", { name: "등록" }).click();
+  await expect(page).toHaveURL(/\/products\/[0-9a-f-]{36}$/);
+
+  const current = page.getByLabel("현재 재고");
+  const adjust = page.getByRole("form", { name: "재고 조정" });
+  const history = page.getByRole("list", { name: "재고 조정 이력" }).locator("> li");
+  await expect(current).toContainText("입고 전");
+
+  await adjust.getByLabel("조정 수량").fill("10");
+  await adjust.getByLabel("사유 (선택)").fill("e2e 첫 입고");
+  await adjust.getByRole("button", { name: "재고 조정" }).click();
+  await expect(adjust.getByRole("status")).toHaveText(
+    "재고를 10개 늘렸습니다. 지금 주문 가능 10개.",
+  );
+  await expect(current).toContainText("주문 가능 10개");
+  // 성공하면 입력을 비운다 (같은 값을 다시 눌러 두 번 입고하지 않게)
+  await expect(adjust.getByLabel("조정 수량")).toHaveValue("");
+  await expect(history).toHaveCount(1);
+  await expect(history.first()).toContainText("+10개");
+  await expect(history.first()).toContainText("e2e 첫 입고");
+  await expect(history.first()).toContainText(/관리자 #[0-9a-f]{8}/);
+
+  // 가용보다 많이 빼면 409, 재고·이력은 그대로
+  await adjust.getByLabel("조정 수량").fill("-11");
+  await adjust.getByRole("button", { name: "재고 조정" }).click();
+  await expect(adjust.getByRole("alert")).toContainText(
+    "가용 재고(10개)보다 많이 차감할 수 없습니다.",
+  );
+  await expect(adjust.getByLabel("조정 수량")).toHaveValue("-11");
+  await expect(current).toContainText("주문 가능 10개");
+
+  await adjust.getByLabel("조정 수량").fill("-4");
+  await adjust.getByRole("button", { name: "재고 조정" }).click();
+  await expect(adjust.getByRole("status")).toHaveText("재고를 4개 줄였습니다. 지금 주문 가능 6개.");
+  await expect(history).toHaveCount(2);
+  await expect(history.first()).toContainText("-4개");
+  await expect(history.first()).toContainText("→ 6개");
+});
+
 test("관리자가 아니면 상품 관리 화면을 볼 수 없다", async ({ page }) => {
   await login(page, "user1", `/products/${SEED_PRODUCT.keyboard}`);
   await expect(page.getByRole("heading", { name: "관리자만 볼 수 있는 화면입니다" })).toBeVisible();

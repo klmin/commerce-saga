@@ -304,6 +304,11 @@ class StockServiceTest {
             stocks.forEach(s -> store.put(s.productId(), copy(s)));
         }
 
+        @Override
+        public void createIfAbsent(ProductId productId, Instant now) {
+            store.putIfAbsent(productId, Stock.restore(productId, 0, 0, now));
+        }
+
         private static Stock copy(Stock s) {
             return Stock.restore(s.productId(), s.available(), s.reserved(), s.updatedAt());
         }

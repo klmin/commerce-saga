@@ -7,9 +7,15 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.SecurityFilterChain;
 
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * access token(JWT) 검증 (ADR 0008). Gateway 가 이미 검증했어도 내부망을 무조건 믿지 않고 여기서 다시 검증한다.
@@ -40,6 +46,30 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(Customizer.withDefaults()))
                 .build();
+    }
+
+    /**
+     * {@code sub} 는 사용자 id 의 UUID 표준 표기(소문자)여야 한다. 아니면 잘못된 토큰으로 보고 401 (ADR 0018).
+     * 자동 구성된 JwtDecoder 가 기본 검증(서명·만료)에 더해 이 검증기도 건다 (Spring Boot additional validators)
+     */
+    @Bean
+    OAuth2TokenValidator<Jwt> userIdSubjectValidator() {
+        return SecurityConfig::validateSubject;
+    }
+
+    static OAuth2TokenValidatorResult validateSubject(Jwt jwt) {
+        String subject = jwt.getSubject();
+        if (subject != null) {
+            try {
+                if (UUID.fromString(subject).toString().equals(subject)) {
+                    return OAuth2TokenValidatorResult.success();
+                }
+            } catch (IllegalArgumentException e) {
+                // 아래에서 실패로 응답
+            }
+        }
+        return OAuth2TokenValidatorResult.failure(
+                new OAuth2Error(OAuth2ErrorCodes.INVALID_TOKEN, "sub must be a user id (UUID)", null));
     }
 
     private static boolean stateChangeWithCookie(HttpServletRequest request) {
