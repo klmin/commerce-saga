@@ -5,7 +5,8 @@ import { Label } from "@commerce/ui/label";
 import { LoadError } from "@commerce/ui/page";
 import { FormSkeleton } from "@commerce/ui/skeletons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useRef } from "react";
+import { ApiError } from "@commerce/bff/api";
+import { useId, useState } from "react";
 
 import {
   adjustStock,
@@ -20,18 +21,35 @@ import {
   MAX_REASON_LENGTH,
   parseStockAdjustInput,
   signedDelta,
+  type StockAdjustInput,
 } from "@/lib/stock-input";
 
 import { ActionForm, type SubmitResult } from "./product-forms";
 
+/** 보냈지만 결과를 모르는 조정 (요청 키와 그때 보낸 내용) */
+type Unsettled = { key: string; input: StockAdjustInput };
+
+/** 서버가 받아들이지 않았다고 확정할 수 있는 응답 (아무것도 반영되지 않았다). 408·429 는 다시 보내 볼 수 있어 뺀다 */
+function rejected(e: unknown): boolean {
+  return (
+    e instanceof ApiError &&
+    e.status >= 400 &&
+    e.status < 500 &&
+    e.status !== 408 &&
+    e.status !== 429
+  );
+}
+
 /**
  * 재고 (inventory-service, ADR 0019). 상품 등록과 별개로 입고해야 주문할 수 있다.
- * 조정 한 번마다 요청 키를 하나 쓴다: 응답을 못 받아 다시 눌러도 같은 키라 한 번만 반영되고, 성공하면 새 키로 바꾼다
+ * 조정 한 번마다 요청 키를 하나 쓴다. 응답을 받지 못하면(시간 초과·연결 끊김·5xx) 반영됐는지 모르므로, 그 키와 내용을
+ * 기억해 두고 다음 제출은 폼 값 대신 같은 키·같은 내용으로 다시 보내 확정한다(서버가 처음 결과를 돌려주거나 지금 반영한다).
+ * 확정되거나 서버가 거절하면(4xx) 잊고 새 조정을 받는다
  */
 export function StockSection({ productId }: { productId: ProductId }) {
   const queryClient = useQueryClient();
   const id = useId();
-  const idempotencyKey = useRef(crypto.randomUUID());
+  const [unsettled, setUnsettled] = useState<Unsettled | null>(null);
   const stock = useQuery({
     queryKey: ["admin-stock", productId],
     queryFn: () => getStock(productId),
@@ -42,14 +60,30 @@ export function StockSection({ productId }: { productId: ProductId }) {
   });
 
   async function onAdjust(formData: FormData): Promise<SubmitResult> {
-    const input = parseStockAdjustInput(formData);
-    if (!input.ok) {
-      return { error: input.error };
+    let request = unsettled;
+    if (!request) {
+      const input = parseStockAdjustInput(formData);
+      if (!input.ok) {
+        return { error: input.error };
+      }
+      request = { key: crypto.randomUUID(), input: input.value };
     }
-    const result = await adjustStock(productId, input.value, idempotencyKey.current);
-    idempotencyKey.current = crypto.randomUUID();
-    await queryClient.invalidateQueries({ queryKey: ["admin-stock", productId] });
-    return { saved: adjustedMessage(result.adjustment.delta, result.available) };
+    try {
+      const result = await adjustStock(productId, request.input, request.key);
+      setUnsettled(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin-stock", productId] });
+      const message = adjustedMessage(result.adjustment.delta, result.available);
+      return { saved: unsettled ? `이전 조정을 확인했습니다. ${message}` : message };
+    } catch (e) {
+      if (rejected(e)) {
+        setUnsettled(null);
+        throw e;
+      }
+      setUnsettled(request);
+      return {
+        error: `응답을 받지 못해 반영됐는지 모릅니다. 다시 누르면 같은 내용(${signedDelta(request.input.delta)}개)으로 확인합니다.`,
+      };
+    }
   }
 
   const error = stock.error ?? history.error;
@@ -100,8 +134,21 @@ export function StockSection({ productId }: { productId: ProductId }) {
             </>
           )}
         </p>
-        <ActionForm onSubmit={onAdjust} submitLabel="재고 조정" label="재고 조정" resetOnSuccess>
-          <div className="flex flex-wrap gap-3">
+        <ActionForm
+          onSubmit={onAdjust}
+          submitLabel={unsettled ? "이전 조정 확인" : "재고 조정"}
+          label="재고 조정"
+          resetOnSuccess
+        >
+          {unsettled && (
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              결과를 모르는 조정이 있습니다: {signedDelta(unsettled.input.delta)}개
+              {unsettled.input.reason && ` (${unsettled.input.reason})`}. 이것을 확인한 뒤 새로
+              조정할 수 있습니다.
+            </p>
+          )}
+          {/* 결과를 모르는 조정이 있는 동안에는 입력을 막는다 (같은 키로 다른 내용을 보내면 422) */}
+          <fieldset disabled={unsettled !== null} className="flex flex-wrap gap-3">
             <div className="flex flex-col gap-1">
               <Label htmlFor={`${id}-delta`}>조정 수량</Label>
               <Input
@@ -117,7 +164,7 @@ export function StockSection({ productId }: { productId: ProductId }) {
               <Label htmlFor={`${id}-reason`}>사유 (선택)</Label>
               <Input id={`${id}-reason`} name="reason" maxLength={MAX_REASON_LENGTH} />
             </div>
-          </div>
+          </fieldset>
           <p className="text-xs text-muted-foreground">
             주문에 잡힌 수량은 뺄 수 없습니다. 주문 가능 수량까지만 차감됩니다.
           </p>
