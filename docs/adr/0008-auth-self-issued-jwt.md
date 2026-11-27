@@ -115,7 +115,7 @@ family 와 목록을 함께 바꾸는 일(로그인, 회전, 삭제, 전체 삭�
 
 ### 개발용 사용자
 
-- auth-service 에 개발용 시드(`db/dev-seed/R__dev_seed_users.sql`): `user1`~`user4` = id 1~4(다른 서비스의 포인트 시드와 같은 id), `admin` = 100(`ADMIN`). 비밀번호는 로컬 개발용 값 `local-dev-pass`. 가입하면 id 는 1000 부터
+- auth-service 에 개발용 시드(`db/dev-seed/R__dev_seed_users.sql`): `user1`~`user4` = id 1~4(다른 서비스의 포인트 시드와 같은 id), `admin` = 100(`ADMIN`). 비밀번호는 로컬 개발용 값 `local-dev-pass`. 가입하면 id 는 1000 부터 (ADR 0018 이후: 시드 id 는 고정 UUID `01900000-0000-7000-8001-…`, 가입 id 는 UUIDv7)
 - 기본 Flyway 위치에 포함되고, **운영은 `AUTH_FLYWAY_LOCATIONS=classpath:db/migration` 으로 뺀다**
 - 시나리오 스크립트는 `scripts/lib/auth.sh` 로 이 사용자로 로그인해 `Authorization` 헤더를 붙인다(토큰은 10분 캐시)
 
