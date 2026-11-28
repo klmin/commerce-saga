@@ -25,6 +25,24 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # 상품 이미지 업로드 (ADR 0021). 형식·2MB 상한은 서비스가 다시 본다. 본문이 크면 여기서 413
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
+
+# 상품 이미지 저장소 RustFS (S3 API, ADR 0021). 계정 기본값은 infra/docker-compose.yml 의 로컬 개발용 값
+product:
+  images:
+    endpoint: ${PRODUCT_IMAGES_ENDPOINT:http://localhost:9100}
+    region: ${PRODUCT_IMAGES_REGION:us-east-1}
+    bucket: ${PRODUCT_IMAGES_BUCKET:product-images}
+    access-key: ${PRODUCT_IMAGES_ACCESS_KEY:rustfs-local}
+    secret-key: ${PRODUCT_IMAGES_SECRET_KEY:rustfs-local-secret}
+    connect-timeout: 2s
+    read-timeout: 5s
+    # 시작할 때 시드 상품 이미지를 저장소에 넣는다 (없을 때만)
+    seed: ${PRODUCT_IMAGES_SEED:true}
 
 management:
   endpoints:

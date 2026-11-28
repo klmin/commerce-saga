@@ -9,6 +9,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("com.github.f4b6a3:uuid-creator:6.1.1") // 상품 id UUIDv7 (ADR 0018)
+    // 상품 이미지 저장소 RustFS (S3 API, ADR 0021). HTTP 클라이언트는 JDK URLConnection (Netty·Apache 를 들이지 않는다)
+    implementation(platform("software.amazon.awssdk:bom:2.59.0"))
+    implementation("software.amazon.awssdk:s3") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+    }
+    implementation("software.amazon.awssdk:url-connection-client")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.testcontainers:testcontainers-postgresql")

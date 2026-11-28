@@ -4,6 +4,7 @@ import com.klmin.commerce.productservice.product.application.port.out.PriceHisto
 import com.klmin.commerce.productservice.product.application.port.out.ProductAuditPort;
 import com.klmin.commerce.productservice.product.application.port.out.ProductPort;
 import com.klmin.commerce.productservice.product.domain.CategoryCode;
+import com.klmin.commerce.productservice.product.domain.ImageKey;
 import com.klmin.commerce.productservice.product.domain.Money;
 import com.klmin.commerce.productservice.product.domain.PriceChange;
 import com.klmin.commerce.productservice.product.domain.Product;
@@ -33,7 +34,7 @@ class ProductPersistenceAdapter implements ProductPort, PriceHistoryPort, Produc
     public Product insert(Product product) {
         ProductJpaEntity entity = productRepository.save(new ProductJpaEntity(product.id().value(), product.name(),
                 product.description(), product.price().value(), product.onSale(), product.category().value(),
-                product.createdAt(), product.updatedAt()));
+                key(product.image()), product.createdAt(), product.updatedAt()));
         return toDomain(entity);
     }
 
@@ -42,7 +43,7 @@ class ProductPersistenceAdapter implements ProductPort, PriceHistoryPort, Produc
         // findByIdForUpdate 로 읽은 같은 트랜잭션 안이라 영속성 컨텍스트에 있다
         ProductJpaEntity entity = productRepository.findById(product.id().value()).orElseThrow();
         entity.update(product.name(), product.description(), product.price().value(), product.onSale(),
-                product.category().value(), product.updatedAt());
+                product.category().value(), key(product.image()), product.updatedAt());
         return toDomain(entity);
     }
 
@@ -67,12 +68,19 @@ class ProductPersistenceAdapter implements ProductPort, PriceHistoryPort, Produc
                 before == null ? null : before.price().value(),
                 before == null ? null : before.onSale(),
                 before == null ? null : before.category().value(),
+                before == null ? null : key(before.image()),
                 after.name(), after.description(), after.price().value(), after.onSale(), after.category().value(),
+                key(after.image()),
                 change.changedBy().value(), change.changedAt()));
     }
 
     static Product toDomain(ProductJpaEntity e) {
         return Product.restore(ProductId.of(e.getId()), e.getName(), e.getDescription(), Money.of(e.getPrice()),
-                e.isOnSale(), CategoryCode.of(e.getCategoryCode()), e.getCreatedAt(), e.getUpdatedAt());
+                e.isOnSale(), CategoryCode.of(e.getCategoryCode()),
+                e.getImageKey() == null ? null : ImageKey.of(e.getImageKey()), e.getCreatedAt(), e.getUpdatedAt());
+    }
+
+    private static String key(ImageKey image) {
+        return image == null ? null : image.value();
     }
 }

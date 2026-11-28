@@ -2,16 +2,22 @@ package com.klmin.commerce.productservice.product.adapter.in.web;
 
 import com.klmin.commerce.productservice.product.application.port.in.GetProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
+import com.klmin.commerce.productservice.product.application.port.in.ProductImageResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductImageUseCase;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,9 +30,11 @@ import java.util.UUID;
 class ProductController {
 
     private final GetProductUseCase getProductUseCase;
+    private final ProductImageUseCase productImageUseCase;
 
-    ProductController(GetProductUseCase getProductUseCase) {
+    ProductController(GetProductUseCase getProductUseCase, ProductImageUseCase productImageUseCase) {
         this.getProductUseCase = getProductUseCase;
+        this.productImageUseCase = productImageUseCase;
     }
 
     /** 판매 중인 상품 목록 (id 순, 페이지) */
@@ -48,6 +56,21 @@ class ProductController {
     @GetMapping("/categories")
     List<CategoryResponse> categories() {
         return getProductUseCase.categories().stream().map(CategoryResponse::from).toList();
+    }
+
+    /**
+     * 상품 이미지 (공개). key 마다 내용이 바뀌지 않아 길게 캐시한다. 이 출처에서 열려도 스크립트가 돌지 않게
+     * 응답을 sandbox 로 두고(시드 SVG), 형식 추측(nosniff)을 막는다
+     */
+    @GetMapping("/{productId}/images/{fileName}")
+    ResponseEntity<byte[]> image(@PathVariable String productId, @PathVariable String fileName) {
+        ProductImageResult image = productImageUseCase.image(productId, fileName);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable())
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+                .body(image.data());
     }
 
     @GetMapping("/{productId}")

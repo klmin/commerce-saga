@@ -56,6 +56,13 @@ class ProductAuditLogJpaEntity {
     @Column(name = "after_category_code", updatable = false)
     private String afterCategoryCode;
 
+    // 이미지(9-2, V5) 전의 이력은 null
+    @Column(name = "before_image_key", updatable = false)
+    private String beforeImageKey;
+
+    @Column(name = "after_image_key", updatable = false)
+    private String afterImageKey;
+
     @Column(name = "changed_by", nullable = false, updatable = false)
     private UUID changedBy;
 
@@ -66,9 +73,11 @@ class ProductAuditLogJpaEntity {
     }
 
     ProductAuditLogJpaEntity(UUID productId, String action, String beforeName, String beforeDescription,
-                             Long beforePrice, Boolean beforeOnSale, String beforeCategoryCode,
+                             Long beforePrice, Boolean beforeOnSale, String beforeCategoryCode, String beforeImageKey,
                              String afterName, String afterDescription, Long afterPrice, Boolean afterOnSale,
-                             String afterCategoryCode, UUID changedBy, Instant changedAt) {
+                             String afterCategoryCode, String afterImageKey, UUID changedBy, Instant changedAt) {
+        this.beforeImageKey = beforeImageKey;
+        this.afterImageKey = afterImageKey;
         this.beforeCategoryCode = beforeCategoryCode;
         this.afterCategoryCode = afterCategoryCode;
         this.productId = productId;
@@ -127,6 +136,14 @@ class ProductAuditLogJpaEntity {
 
     String getAfterCategoryCode() {
         return afterCategoryCode;
+    }
+
+    String getBeforeImageKey() {
+        return beforeImageKey;
+    }
+
+    String getAfterImageKey() {
+        return afterImageKey;
     }
 
     UUID getChangedBy() {
