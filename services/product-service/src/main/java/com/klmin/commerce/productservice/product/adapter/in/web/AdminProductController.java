@@ -2,16 +2,19 @@ package com.klmin.commerce.productservice.product.adapter.in.web;
 
 import com.klmin.commerce.productservice.common.web.CurrentUserId;
 import com.klmin.commerce.productservice.product.application.port.in.ChangePriceCommand;
+import com.klmin.commerce.productservice.product.application.port.in.ChangeProductImageCommand;
 import com.klmin.commerce.productservice.product.application.port.in.ChangeSaleStatusCommand;
 import com.klmin.commerce.productservice.product.application.port.in.DescribeProductCommand;
 import com.klmin.commerce.productservice.product.application.port.in.GetProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import com.klmin.commerce.productservice.product.application.port.in.ManageProductUseCase;
+import com.klmin.commerce.productservice.product.application.port.in.ProductImageUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
 import com.klmin.commerce.productservice.product.application.port.in.RegisterProductCommand;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,8 +23,11 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -36,10 +42,13 @@ class AdminProductController {
 
     private final ManageProductUseCase manageProductUseCase;
     private final GetProductUseCase getProductUseCase;
+    private final ProductImageUseCase productImageUseCase;
 
-    AdminProductController(ManageProductUseCase manageProductUseCase, GetProductUseCase getProductUseCase) {
+    AdminProductController(ManageProductUseCase manageProductUseCase, GetProductUseCase getProductUseCase,
+                           ProductImageUseCase productImageUseCase) {
         this.manageProductUseCase = manageProductUseCase;
         this.getProductUseCase = getProductUseCase;
+        this.productImageUseCase = productImageUseCase;
     }
 
     /** 판매 중지 상품까지 모두 (id 순) */
@@ -79,6 +88,17 @@ class AdminProductController {
                                      @Valid @RequestBody ProductRequests.ChangeSaleStatus request) {
         return ProductResponse.from(manageProductUseCase.changeSaleStatus(
                 new ChangeSaleStatusCommand(productId, request.onSale(), adminId)));
+    }
+
+    /**
+     * 대표 이미지 올리기 (multipart, 필드 file). jpg·png·webp, 2MB 이하 (ADR 0021).
+     * 저장소에 올린 뒤 상품을 바꾼다. 저장소가 멈췄으면 503, 상품은 그대로
+     */
+    @PostMapping(path = "/{productId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    ProductResponse changeImage(@CurrentUserId UUID adminId, @PathVariable UUID productId,
+                                @RequestPart("file") MultipartFile file) throws IOException {
+        return ProductResponse.from(productImageUseCase.changeImage(
+                new ChangeProductImageCommand(productId, file.getBytes(), adminId)));
     }
 
     /** 관리 이력: 등록·정보 수정·가격·판매 상태, 누가·언제·전후 값 (최근부터) */

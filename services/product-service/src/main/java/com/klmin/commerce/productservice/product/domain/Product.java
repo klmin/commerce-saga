@@ -21,17 +21,20 @@ public final class Product {
     private Money price;
     private boolean onSale;
     private CategoryCode category;
+    /** 대표 이미지 (없으면 null, ADR 0021) */
+    private ImageKey image;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private Product(ProductId id, String name, String description, Money price, boolean onSale,
-                    CategoryCode category, Instant createdAt, Instant updatedAt) {
+                    CategoryCode category, ImageKey image, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.price = price;
         this.onSale = onSale;
         this.category = Objects.requireNonNull(category, "category");
+        this.image = image;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -41,13 +44,29 @@ public final class Product {
                                    CategoryCode category, Instant now) {
         Objects.requireNonNull(id, "id");
         requirePositive(price);
-        return new Product(id, validName(name), validDescription(description), price, true, category, now, now);
+        return new Product(id, validName(name), validDescription(description), price, true, category, null, now,
+                now);
     }
 
     public static Product restore(ProductId id, String name, String description, Money price, boolean onSale,
-                                  CategoryCode category, Instant createdAt, Instant updatedAt) {
-        return new Product(Objects.requireNonNull(id, "id"), name, description, price, onSale, category, createdAt,
-                updatedAt);
+                                  CategoryCode category, ImageKey image, Instant createdAt, Instant updatedAt) {
+        return new Product(Objects.requireNonNull(id, "id"), name, description, price, onSale, category, image,
+                createdAt, updatedAt);
+    }
+
+    /**
+     * 대표 이미지를 바꾼다. 파일은 이미 저장소에 올라가 있다(올린 뒤 이 상품 행을 바꾼다, ADR 0021).
+     * 다른 상품의 key 는 받지 않는다
+     */
+    public void changeImage(ImageKey newImage, Instant now) {
+        Objects.requireNonNull(newImage, "newImage");
+        if (!newImage.productId().equals(id)) {
+            throw new IllegalArgumentException("image key belongs to another product");
+        }
+        if (!newImage.equals(image)) {
+            this.image = newImage;
+            this.updatedAt = now;
+        }
     }
 
     /**
@@ -69,7 +88,7 @@ public final class Product {
 
     /** 관리 이력에 남길 지금 값 */
     public ProductSnapshot snapshot() {
-        return new ProductSnapshot(name, description, price, onSale, category);
+        return new ProductSnapshot(name, description, price, onSale, category, image);
     }
 
     /** 가격 변경. 같은 가격이면 아무것도 바꾸지 않고 이력도 남기지 않는다 */
@@ -140,6 +159,10 @@ public final class Product {
 
     public CategoryCode category() {
         return category;
+    }
+
+    public ImageKey image() {
+        return image;
     }
 
     public Instant createdAt() {

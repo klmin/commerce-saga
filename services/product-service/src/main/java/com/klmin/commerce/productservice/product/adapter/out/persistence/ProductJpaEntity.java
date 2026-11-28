@@ -30,6 +30,9 @@ class ProductJpaEntity {
     @Column(name = "category_code", nullable = false, length = 30)
     private String categoryCode;
 
+    @Column(name = "image_key", length = 200)
+    private String imageKey;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -40,24 +43,26 @@ class ProductJpaEntity {
     }
 
     ProductJpaEntity(UUID id, String name, String description, long price, boolean onSale, String categoryCode,
-                     Instant createdAt, Instant updatedAt) {
+                     String imageKey, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.price = price;
         this.onSale = onSale;
         this.categoryCode = categoryCode;
+        this.imageKey = imageKey;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
     void update(String name, String description, long price, boolean onSale, String categoryCode,
-                Instant updatedAt) {
+                String imageKey, Instant updatedAt) {
         this.name = name;
         this.description = description;
         this.price = price;
         this.onSale = onSale;
         this.categoryCode = categoryCode;
+        this.imageKey = imageKey;
         this.updatedAt = updatedAt;
     }
 
@@ -83,6 +88,10 @@ class ProductJpaEntity {
 
     String getCategoryCode() {
         return categoryCode;
+    }
+
+    String getImageKey() {
+        return imageKey;
     }
 
     Instant getCreatedAt() {

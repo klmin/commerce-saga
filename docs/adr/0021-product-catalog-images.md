@@ -34,11 +34,15 @@
 - key 는 `products/{productId}/{UUIDv7}.{확장자}`. 매번 새 key 라 덮어쓰지 않고, 브라우저·프록시가 길게 캐시해도 된다(`Cache-Control: public, max-age=31536000, immutable`). 바꾸기 전 파일은 지우지 않는다(정리 작업은 나중에, 지금은 쓰는 양이 작다)
 - 이미지가 없는 상품은 화면이 카테고리별 기본 그림을 보인다
 
-### 3. 이미지 제공: Gateway `/api/images/**` → RustFS (읽기 전용)
+### 3. 이미지 제공: product-service 가 읽어 준다 (`GET /products/{id}/images/{파일}`)
 
-- 화면은 같은 출처 `/api/images/<key>` 로 읽는다. 앞단(Caddy)은 이미 `/api/*` 를 Gateway 로 보내므로 앞단 설정은 바꾸지 않는다
-- Gateway 는 GET 만 열고(로그인 불필요), 버킷 경로로 바꿔 RustFS 에 보낸다. 버킷은 익명 읽기만 허용, 쓰기는 product-service 계정만
-- 응답의 `imageUrl` 은 product-service 가 key 로 만든다(`/api/images/products/...`). 저장소 주소는 응답에 나가지 않는다
+- 9-2 에서 바꿨다. 처음에는 Gateway 가 RustFS 버킷을 익명 읽기로 바로 부르려 했다(`/api/images/**`).
+  그러면 버킷 정책(익명 읽기)·Gateway 경로·초기화 컨테이너가 필요하다. 대신 product-service 가 계정으로 읽어 돌려주면
+  버킷을 완전히 비공개로 두고, 읽기 경로도 `ImageKey` 모양 검사(다른 경로로 새지 않게)를 한 곳에서 한다
+- 화면은 같은 출처 `/api/products/{id}/images/{파일}` 로 읽는다. Gateway 의 기존 `/api/products/**`(GET 공개) 경로를 그대로 쓴다(Gateway·앞단 변경 없음)
+- 응답: `Cache-Control: public, max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: …; sandbox`(시드 SVG 를 이 출처에서 열어도 스크립트가 돌지 않게)
+- 상품 응답의 `imagePath` = 이 읽기 경로(서비스 기준, 화면이 `/api` 를 붙인다). 저장소 주소·key 는 응답에 나가지 않는다
+- 이미지가 서비스를 거치는 비용: 이미지가 작고(2MB 이하) key 마다 내용이 바뀌지 않아 브라우저·앞단 캐시에 오래 남는다. 많아지면 앞단 캐시나 CDN 을 둔다
 
 ### 4. 검색: CDC 계약에 열을 추가하고 색인에 반영
 
@@ -49,8 +53,10 @@
 
 ### 5. 인프라
 
-- compose: `rustfs` 와 버킷·정책·시드 이미지를 만드는 일회성 `rustfs-init`(공식 클라이언트 이미지). 시드 이미지는 저장소의 직접 만든 SVG(저작권 문제 없음)
-- k8s: Helm 차트에 RustFS StatefulSet + PVC, 초기화 Job. 계정은 Secret(로컬·CI 는 개발용 값만)
+- compose: `rustfs` 하나(호스트 포트 9100). 초기화 컨테이너는 두지 않는다: product-service 가 시작할 때 버킷과 시드 이미지(classpath `seed-images/`, 직접 만든 SVG)를 없을 때만 넣는다.
+  저장소가 늦게 떠도 서비스 시작을 막지 않고 백그라운드로 다시 해 본다(여러 인스턴스가 같이 해도 같은 key·같은 내용)
+- k8s: Helm 차트에 RustFS StatefulSet + PVC. 계정은 Secret(로컬·CI 는 개발용 값만, 운영은 외부 비밀 저장소)
+- 시드 상품을 카테고리마다 늘린다(product V5·inventory V8, 고정 UUID 6~12). 가격·이름은 기존 검색 시나리오와 겹치지 않게
 - CI: compose 전체 실행(stack)·kind 검증에 포함. product-service 저장소 어댑터는 Testcontainers 로 RustFS 를 띄워 테스트한다
 
 ### 6. 화면
@@ -65,7 +71,7 @@
 |---|---|
 | 9-0 | 이 ADR, PROGRESS |
 | 9-1 | product: 카테고리 테이블·시드, `products.category_code`·`image_key`, 등록·수정 API 의 카테고리, `GET /products/categories`, 관리 이력 열 |
-| 9-2 | RustFS(compose·Helm·CI), product 이미지 업로드 API·저장소 어댑터, Gateway `/api/images/**`, 시드 이미지 |
+| 9-2 | RustFS(compose·Helm·CI), product 이미지 업로드·읽기 API·저장소 어댑터, 시드 이미지·시드 상품 |
 | 9-3 | 커넥터 열 추가, search 색인 매핑·카테고리 필터, 기존 행 다시 보내기, 시나리오 16 문서 |
 | 9-4 | 관리자 화면: 카테고리·이미지 업로드·썸네일 |
 | 9-5a | 사용자 화면 공통 틀: 테마·헤더·카테고리 메뉴·레이아웃 |

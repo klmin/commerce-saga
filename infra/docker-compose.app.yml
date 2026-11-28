@@ -133,6 +133,7 @@ services:
       <<: *env
       SERVER_PORT: 8087
       PRODUCT_DB_URL: jdbc:postgresql://postgres:5432/product_db
+      PRODUCT_IMAGES_ENDPOINT: http://rustfs:9000
 
   search-service:
     <<: *service

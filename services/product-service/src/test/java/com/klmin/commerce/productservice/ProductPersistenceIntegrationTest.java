@@ -111,7 +111,7 @@ class ProductPersistenceIntegrationTest {
                         org.assertj.core.groups.Tuple.tuple("PRICE_CHANGED", admin(2)),
                         org.assertj.core.groups.Tuple.tuple("DESCRIBED", admin(1)));
         ProductAuditResult price = page.items().get(1);
-        assertThat(price.before()).isEqualTo(new ProductAuditResult.Snapshot("이력 상품 2", "설명", 7_000L, true, "etc"));
+        assertThat(price.before()).isEqualTo(new ProductAuditResult.Snapshot("이력 상품 2", "설명", 7_000L, true, "etc", null));
         assertThat(price.after().price()).isEqualTo(8_000L);
 
         var last = query.auditLog(created.id(), 1, 3);

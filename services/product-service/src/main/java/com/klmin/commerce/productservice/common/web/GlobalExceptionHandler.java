@@ -2,6 +2,7 @@ package com.klmin.commerce.productservice.common.web;
 
 import com.klmin.commerce.productservice.common.error.DomainValidationException;
 import com.klmin.commerce.productservice.common.error.NotFoundException;
+import com.klmin.commerce.productservice.common.error.ServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +38,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     ProblemDetail handleNotFound(NotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    // 외부 시스템(이미지 저장소)이 멈춤. 원인은 로그로만
+    @ExceptionHandler(ServiceUnavailableException.class)
+    ProblemDetail handleUnavailable(ServiceUnavailableException ex) {
+        log.warn("{}: {}", ex.getMessage(), String.valueOf(ex.getCause()));
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     // 처리하지 못한 예외도 Problem Details 로 응답한다. 내부 메시지는 응답에 넣지 않고 로그로만 남긴다

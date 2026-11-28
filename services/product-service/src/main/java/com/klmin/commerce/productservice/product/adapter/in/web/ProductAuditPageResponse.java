@@ -13,12 +13,14 @@ record ProductAuditPageResponse(List<Item> items, boolean hasNext) {
     record Item(String action, Snapshot before, Snapshot after, UUID changedBy, Instant changedAt) {
     }
 
-    // categoryCode 는 카테고리(ADR 0021) 전의 이력이면 null
-    record Snapshot(String name, String description, Long price, Boolean onSale, String categoryCode) {
+    // categoryCode·imagePath 는 그 열(ADR 0021) 전의 이력이면 null
+    record Snapshot(String name, String description, Long price, Boolean onSale, String categoryCode,
+                    String imagePath) {
 
         static Snapshot from(ProductAuditResult.Snapshot s) {
             return s == null ? null
-                    : new Snapshot(s.name(), s.description(), s.price(), s.onSale(), s.categoryCode());
+                    : new Snapshot(s.name(), s.description(), s.price(), s.onSale(), s.categoryCode(),
+                    ProductImagePaths.of(s.imageKey()));
         }
     }
 
