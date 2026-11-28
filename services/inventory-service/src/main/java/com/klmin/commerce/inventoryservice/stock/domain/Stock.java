@@ -17,11 +17,11 @@ public final class Stock {
     public static final int MAX_TOTAL = 1_000_000_000;
 
     private final ProductId productId;
-    private int available;
-    private int reserved;
+    private long available;
+    private long reserved;
     private Instant updatedAt;
 
-    private Stock(ProductId productId, int available, int reserved, Instant updatedAt) {
+    private Stock(ProductId productId, long available, long reserved, Instant updatedAt) {
         if (available < 0 || reserved < 0) {
             throw new IllegalArgumentException("stock quantity must not be negative");
         }
@@ -31,7 +31,7 @@ public final class Stock {
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
-    public static Stock restore(ProductId productId, int available, int reserved, Instant updatedAt) {
+    public static Stock restore(ProductId productId, long available, long reserved, Instant updatedAt) {
         return new Stock(productId, available, reserved, updatedAt);
     }
 
@@ -66,8 +66,8 @@ public final class Stock {
     }
 
     /**
-     * 완료 후 취소로 판매 확정된 수량을 가용으로 다시 들인다 (ADR 0020). 보상이라 거절하지 않는다:
-     * 관리자 입고는 합계를 {@link #MAX_TOTAL} 로 막으므로 반환분을 더해도 int 를 넘지 않는다
+     * 완료 후 취소로 판매 확정된 수량을 가용으로 다시 들인다 (ADR 0020). 보상이라 거절하지 않는다.
+     * 반환은 판매 확정분(입고 상한에 세지 않는 수량)이 쌓여 들어오므로 수량은 long(DB bigint, V7)이다: 실제로 넘칠 수 없다
      */
     public void restock(Quantity quantity, Instant now) {
         available = Math.addExact(available, quantity.value());
@@ -84,15 +84,16 @@ public final class Stock {
         if (delta == 0) {
             throw new IllegalArgumentException("delta must not be zero");
         }
-        long after = (long) available + delta;
+        long after = available + delta;
         if (after < 0) {
             throw new ConflictException("가용 재고(" + available + "개)보다 많이 차감할 수 없습니다.");
         }
-        // 예약분은 보상(release)으로 가용에 돌아온다. 그때 int 를 넘으면 보상이 계속 실패하므로 합계로 막는다
-        if (after + reserved > MAX_TOTAL) {
+        // 관리자가 한 번에 넣을 수 있는 규모를 정한다(입력 실수 방지). 저장은 long 이라 보상(해제·반환)이 넘치지 않는다
+        // 줄이는 조정은 막지 않는다: 반환(보상)은 상한을 넘겨도 들어오므로, 넘은 재고도 차감으로 줄일 수 있어야 한다
+        if (delta > 0 && after + reserved > MAX_TOTAL) {
             throw new ConflictException("재고는 예약분까지 합해 " + MAX_TOTAL + "개까지입니다.");
         }
-        available = (int) after;
+        available = after;
         updatedAt = now;
     }
 
@@ -108,11 +109,11 @@ public final class Stock {
         return productId;
     }
 
-    public int available() {
+    public long available() {
         return available;
     }
 
-    public int reserved() {
+    public long reserved() {
         return reserved;
     }
 

@@ -109,7 +109,7 @@ class ReserveStockIntegrationTest {
 
     @Test
     void reserveStock_repliesStockReserved_andDuplicateDoesNotReserveTwice() {
-        int before = getStockUseCase.getStock(P1).available();
+        long before = getStockUseCase.getStock(P1).available();
         UUID orderId = UUID.randomUUID();
         ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(P1, 2)));
 
@@ -129,7 +129,7 @@ class ReserveStockIntegrationTest {
 
     @Test
     void insufficientStock_repliesFailed_andReservesNothing() {
-        int before = getStockUseCase.getStock(P2).available();
+        long before = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
 
         // 상품 P5 는 재고 0
@@ -177,7 +177,7 @@ class ReserveStockIntegrationTest {
                 + "values (?, 'REJECTED', 'invalid command', now(), now(), 0)", orderId);
         jdbc.update("insert into stock_reservation_lines (order_id, line_no, product_id, quantity) values (?, 0, ?, 0)",
                 orderId, P1);
-        int before = getStockUseCase.getStock(P1).available();
+        long before = getStockUseCase.getStock(P1).available();
 
         releaseStockUseCase.release(UUID.randomUUID(), orderId);
         reserveStockUseCase.reserve(UUID.randomUUID(),
@@ -188,7 +188,7 @@ class ReserveStockIntegrationTest {
 
     @Test
     void redeliveredMessage_isSkipped_withoutSecondReply() {
-        int before = getStockUseCase.getStock(P1).available();
+        long before = getStockUseCase.getStock(P1).available();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
         ReserveStock command = new ReserveStock(orderId, List.of(new ReserveStock.Line(P1, 1)));
@@ -223,7 +223,7 @@ class ReserveStockIntegrationTest {
 
     @Test
     void releaseStock_returnsReservedStock_andRepliesStockReleased() {
-        int before = getStockUseCase.getStock(P2).available();
+        long before = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
         sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P2, 4))));
         awaitReplies(orderId, 1);
@@ -239,8 +239,8 @@ class ReserveStockIntegrationTest {
 
     @Test
     void orderCompletedEvent_confirmsReservedStock() {
-        int reservedBefore = getStockUseCase.getStock(P3).reserved();
-        int availableBefore = getStockUseCase.getStock(P3).available();
+        long reservedBefore = getStockUseCase.getStock(P3).reserved();
+        long availableBefore = getStockUseCase.getStock(P3).available();
         UUID orderId = UUID.randomUUID();
         sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 2))));
         awaitReplies(orderId, 1);
@@ -255,14 +255,21 @@ class ReserveStockIntegrationTest {
     // 완료 후 취소 (ADR 0020): 판매 확정된 재고를 ReturnStock 으로 다시 들이고, 중복 반환에도 한 번만 늘고 매번 응답한다
     @Test
     void returnStock_afterOrderCompleted_restocksOnce_andRepliesStockReturned() {
-        int availableBefore = getStockUseCase.getStock(P3).available();
+        long availableBefore = getStockUseCase.getStock(P3).available();
+        long reservedBefore = getStockUseCase.getStock(P3).reserved();
         UUID orderId = UUID.randomUUID();
         sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P3, 2))));
         awaitReplies(orderId, 1);
         send(Topics.ORDER_EVENTS, orderId, OrderCompleted.TYPE, new OrderCompleted(orderId,
                 UUID.fromString("01900000-0000-7000-8001-000000000001"), 2000L, 0L, 2000L));
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
-                assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2));
+        // 판매 확정(OrderCompleted)이 처리될 때까지 기다린다: 예약분이 reserved 에서 빠지고 예약 기록이 CONFIRMED.
+        // 그래야 아래 반환이 확정분을 다시 들이는 경로(RESTOCK)를 탄다 (확정 전이면 예약 해제 경로)
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore);
+            assertThat(jdbc.queryForObject("select status from stock_reservations where order_id = ?",
+                    String.class, orderId)).isEqualTo("CONFIRMED");
+        });
+        assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore - 2);
 
         send(Topics.INVENTORY_COMMAND, orderId, ReturnStock.TYPE, new ReturnStock(orderId));
         send(Topics.INVENTORY_COMMAND, orderId, ReturnStock.TYPE, new ReturnStock(orderId)); // 중복 반환
@@ -270,6 +277,9 @@ class ReserveStockIntegrationTest {
         List<ConsumerRecord<String, String>> replies = awaitReplies(orderId, 3);
         assertThat(replies.subList(1, 3)).allMatch(r -> StockReturned.TYPE.equals(header(r, MessageHeaders.TYPE)));
         assertThat(getStockUseCase.getStock(P3).available()).isEqualTo(availableBefore);
+        assertThat(getStockUseCase.getStock(P3).reserved()).isEqualTo(reservedBefore);
+        assertThat(jdbc.queryForObject("select status from stock_reservations where order_id = ?",
+                String.class, orderId)).isEqualTo("RETURNED");
     }
 
     // 해제(inventory.command)와 확정(order.events)이 같은 주문에 동시에 와도 하나만 반영되고 둘 다 실패하지 않는다
@@ -278,8 +288,8 @@ class ReserveStockIntegrationTest {
         UUID orderId = UUID.randomUUID();
         sendCommand(new ReserveStock(orderId, List.of(new ReserveStock.Line(P1, 1))));
         awaitReplies(orderId, 1);
-        int availableAfterReserve = getStockUseCase.getStock(P1).available();
-        int reservedAfterReserve = getStockUseCase.getStock(P1).reserved();
+        long availableAfterReserve = getStockUseCase.getStock(P1).available();
+        long reservedAfterReserve = getStockUseCase.getStock(P1).reserved();
 
         CountDownLatch start = new CountDownLatch(1);
         CompletableFuture<Void> release = CompletableFuture.runAsync(() -> {
@@ -293,7 +303,7 @@ class ReserveStockIntegrationTest {
         start.countDown();
         CompletableFuture.allOf(release, confirm).get(30, TimeUnit.SECONDS);
 
-        int available = getStockUseCase.getStock(P1).available();
+        long available = getStockUseCase.getStock(P1).available();
         assertThat(getStockUseCase.getStock(P1).reserved()).isEqualTo(reservedAfterReserve - 1);
         // 해제가 이기면 available 이 1 돌아오고, 확정이 이기면 그대로다
         assertThat(available).isIn(availableAfterReserve, availableAfterReserve + 1);
@@ -303,7 +313,7 @@ class ReserveStockIntegrationTest {
     // 먼저 들어온 A 가 커밋하면 늦은 B 는 processed_message PK 에서 기다렸다가 0건이 되어 건너뛴다
     @Test
     void sameMessageConcurrently_firstCommits_laterWaitsThenSkips() throws Exception {
-        int availableBefore = getStockUseCase.getStock(P2).available();
+        long availableBefore = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
         ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(P2, 1)));
@@ -317,7 +327,7 @@ class ReserveStockIntegrationTest {
     // 먼저 들어온 A 가 처리 중 실패해 롤백하면, 기다리던 B 가 기록에 성공해 이어받아 처리한다 (유실 없음)
     @Test
     void sameMessageConcurrently_firstRollsBack_laterTakesOver() throws Exception {
-        int availableBefore = getStockUseCase.getStock(P2).available();
+        long availableBefore = getStockUseCase.getStock(P2).available();
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
         ReserveStockCommand command = new ReserveStockCommand(orderId, List.of(new ReserveStockCommand.Line(P2, 1)));

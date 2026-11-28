@@ -29,7 +29,7 @@ class StockAdjustmentPersistenceAdapter implements StockAdjustmentPort {
             rs.getLong("id"),
             ProductId.of(rs.getObject("product_id", UUID.class)),
             rs.getInt("delta"),
-            rs.getInt("available_after"),
+            rs.getLong("available_after"),
             rs.getString("reason"),
             rs.getObject("adjusted_by", UUID.class),
             rs.getString("idempotency_key"),

@@ -10,11 +10,11 @@ import java.util.UUID;
  *
  * @param replayed 같은 키로 다시 와서 새로 반영하지 않고 처음 기록을 돌려준 경우 true
  */
-public record AdjustStockResult(UUID productId, int available, int reserved, Adjustment adjustment,
+public record AdjustStockResult(UUID productId, long available, long reserved, Adjustment adjustment,
                                 boolean replayed) {
 
     /** 조정 기록 한 줄 (응답·이력 목록 공용) */
-    public record Adjustment(long id, int delta, int availableAfter, String reason, UUID adjustedBy,
+    public record Adjustment(long id, int delta, long availableAfter, String reason, UUID adjustedBy,
                              Instant adjustedAt) {
 
         public static Adjustment from(StockAdjustment a) {

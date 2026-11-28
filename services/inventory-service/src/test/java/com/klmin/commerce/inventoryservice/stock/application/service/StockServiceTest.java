@@ -365,11 +365,11 @@ class StockServiceTest {
             store.put(ProductId.of(productId), Stock.restore(ProductId.of(productId), available, 0, NOW));
         }
 
-        int available(UUID productId) {
+        long available(UUID productId) {
             return store.get(ProductId.of(productId)).available();
         }
 
-        int reserved(UUID productId) {
+        long reserved(UUID productId) {
             return store.get(ProductId.of(productId)).reserved();
         }
 
