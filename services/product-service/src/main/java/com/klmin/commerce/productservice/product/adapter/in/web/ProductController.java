@@ -44,6 +44,12 @@ class ProductController {
         return new ProductListResponse(getProductUseCase.findByIds(ids).stream().map(ProductResponse::from).toList());
     }
 
+    /** 카테고리 고정 목록 (정해 둔 순서, ADR 0021) */
+    @GetMapping("/categories")
+    List<CategoryResponse> categories() {
+        return getProductUseCase.categories().stream().map(CategoryResponse::from).toList();
+    }
+
     @GetMapping("/{productId}")
     ProductResponse get(@PathVariable UUID productId) {
         return ProductResponse.from(getProductUseCase.get(productId));

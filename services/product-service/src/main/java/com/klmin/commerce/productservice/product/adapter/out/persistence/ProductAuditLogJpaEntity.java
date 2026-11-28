@@ -49,6 +49,13 @@ class ProductAuditLogJpaEntity {
     @Column(name = "after_on_sale", updatable = false)
     private Boolean afterOnSale;
 
+    // 카테고리(ADR 0021, V4) 전의 이력은 null
+    @Column(name = "before_category_code", updatable = false)
+    private String beforeCategoryCode;
+
+    @Column(name = "after_category_code", updatable = false)
+    private String afterCategoryCode;
+
     @Column(name = "changed_by", nullable = false, updatable = false)
     private UUID changedBy;
 
@@ -59,8 +66,11 @@ class ProductAuditLogJpaEntity {
     }
 
     ProductAuditLogJpaEntity(UUID productId, String action, String beforeName, String beforeDescription,
-                             Long beforePrice, Boolean beforeOnSale, String afterName, String afterDescription,
-                             Long afterPrice, Boolean afterOnSale, UUID changedBy, Instant changedAt) {
+                             Long beforePrice, Boolean beforeOnSale, String beforeCategoryCode,
+                             String afterName, String afterDescription, Long afterPrice, Boolean afterOnSale,
+                             String afterCategoryCode, UUID changedBy, Instant changedAt) {
+        this.beforeCategoryCode = beforeCategoryCode;
+        this.afterCategoryCode = afterCategoryCode;
         this.productId = productId;
         this.action = action;
         this.beforeName = beforeName;
@@ -109,6 +119,14 @@ class ProductAuditLogJpaEntity {
 
     Boolean getAfterOnSale() {
         return afterOnSale;
+    }
+
+    String getBeforeCategoryCode() {
+        return beforeCategoryCode;
+    }
+
+    String getAfterCategoryCode() {
+        return afterCategoryCode;
     }
 
     UUID getChangedBy() {

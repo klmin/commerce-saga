@@ -13,10 +13,12 @@ record ProductAuditPageResponse(List<Item> items, boolean hasNext) {
     record Item(String action, Snapshot before, Snapshot after, UUID changedBy, Instant changedAt) {
     }
 
-    record Snapshot(String name, String description, Long price, Boolean onSale) {
+    // categoryCode 는 카테고리(ADR 0021) 전의 이력이면 null
+    record Snapshot(String name, String description, Long price, Boolean onSale, String categoryCode) {
 
         static Snapshot from(ProductAuditResult.Snapshot s) {
-            return s == null ? null : new Snapshot(s.name(), s.description(), s.price(), s.onSale());
+            return s == null ? null
+                    : new Snapshot(s.name(), s.description(), s.price(), s.onSale(), s.categoryCode());
         }
     }
 

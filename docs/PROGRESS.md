@@ -2,8 +2,8 @@
 
 이어서 작업할 때 이 문서부터 본다. 설계 배경은 [브리프](commerce-msa-portfolio-brief.md), 결정 이유는 [ADR](adr/), 시나리오별 재현·결과는 [scenarios](scenarios/), 작업·리뷰 규칙은 [AGENTS.md](../AGENTS.md).
 
-- 마지막 갱신: 2026-11-28 (후속 8 주문 취소 시작, ADR 0020)
-- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)): 5-0 ADR 0017(PR #106) → 5-1 SAS(PR #107) → 5-2 Gateway BFF(PR #108) → 5-3a 사용자 화면 SPA(PR #110) → 5-5 관리자 화면 SPA(PR #114) → 5-3b Helm·Next 제거(PR #115) → 5-3d compose 전체 실행(PR #117) → 5-3c 기존 `/auth` API 제거(PR #118) → 5-4 인증 화면 SPA(PR #119) → 5-6 로그인 기기·시나리오 19(PR #120)로 **후속 5 완료, 태그 `v0.7-sso-bff`**. **후속 6 id UUIDv7 전환**([ADR 0018](adr/0018-uuidv7-ids.md), 2026-11-27 사용자 결정, 출시 전 일괄 변경): 6-0 ADR(PR #123) → 6-1 productId(PR #124) → 6-2 userId·알림 id(PR #125) → 6-3 AGENTS 예외 제거·정리로 **후속 6 완료, 태그 `v0.8-uuidv7`**. 기존 환경은 DB·Kafka·Redis·Elasticsearch 를 지우고 새로 만든다. **후속 7 관리자 재고 조정**([ADR 0019](adr/0019-admin-stock-adjustment.md), 2026-11-27 사용자 결정: 새로 등록한 상품도 입고해야 주문 가능): inventory 관리자 API(증감·이력·Idempotency-Key 필수) + Gateway `/api/admin/stocks/**` + 관리자 상품 화면 재고 카드. 후속 7 완료(PR #127). **후속 8 주문 취소**([ADR 0020](adr/0020-order-cancellation.md), 2026-11-28 사용자 결정: 진행 중이면 다음 응답에서 보상, 완료 후면 같은 Saga 의 결제 환불 → 포인트 환불 → 재고 반환, 기한 없음·부분 취소 없음): 8-0 ADR → 8-1 계약·inventory `ReturnStock` → 8-2 order Saga·취소 API·시나리오 → 8-3 화면·e2e 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
+- 마지막 갱신: 2026-11-28 (후속 9 상품 카탈로그·화면 개편 시작, ADR 0021)
+- 현재 위치: **3단계(신뢰성) 완료 = 완성 기준, 태그 `v0.3-reliability`. 후속 1(관측성) 완료(PR #27·#28). 후속 2(인증 + 프론트엔드): Boot 4.2(PR #29), A-1 auth-service(PR #30), A-2 Gateway·서비스 JWT 검증(PR #31) 완료, A-3-1 내 주문·결제 목록·주문 Idempotency-Key(PR #33), A-3-2 가입 → 포인트 계정(PR #34) 완료, F-1a Next.js 기본 구성·로그인·회원가입(ADR 0011, PR #35) 완료, F-1b 주문 화면(상품·주문·내 주문·Saga 타임라인, PR #36) 완료, F-2a 포인트 내역 API·포인트·결제 내역·알림 화면(PR #38), F-2b 로그인 기기 관리·관리자 화면·CI 브라우저 e2e(PR #39)로 **후속 2 완료, 태그 `v0.4-auth-frontend`**. **후속 3(k8s): K-1 이미지·Helm·Strimzi·kind CI(PR #40), K-2 Debezium(PR #41), K-3 ArgoCD·edge(PR #42)로 **후속 3 완료, 태그 `v0.5-k8s`**. 후속 1 보강 O-3 로그·수집기(Alloy·Loki, PR #45·#46). DDD 보강(값 객체 PR #56~#59, ADR 0015 PR #61) 완료. 다음은 0절 2번 순서의 ① 후속 4-1(4-1a product-service(PR #65) → 4-1b 서버 가격(PR #68) → 4-1c 장바구니(PR #72), 설계는 4-5절·ADR 0016) → ② 멱등 기록 정리(PR #74) → ③ 결제 서킷 브레이커(PR #76) 완료. ④ 후속 4 나머지(4-6절·ADR 0010) 완료: 4-2a 상품 테이블 CDC(PR #82) → 4-2b search-service(PR #89) → 4-2c 검색 화면(PR #90) → 4-3a 관리 이력 저장·API(PR #91) → 4-3b 관리자 상품 화면(PR #94)으로 **후속 4 완료, 태그 `v0.6-search-audit`**. **후속 5 인증 재구성**(SAS IdP + Gateway BFF + SPA 3개, 4-7절·[인증 재구성 설계](auth-sas-bff-design.md)): 5-0 ADR 0017(PR #106) → 5-1 SAS(PR #107) → 5-2 Gateway BFF(PR #108) → 5-3a 사용자 화면 SPA(PR #110) → 5-5 관리자 화면 SPA(PR #114) → 5-3b Helm·Next 제거(PR #115) → 5-3d compose 전체 실행(PR #117) → 5-3c 기존 `/auth` API 제거(PR #118) → 5-4 인증 화면 SPA(PR #119) → 5-6 로그인 기기·시나리오 19(PR #120)로 **후속 5 완료, 태그 `v0.7-sso-bff`**. **후속 6 id UUIDv7 전환**([ADR 0018](adr/0018-uuidv7-ids.md), 2026-11-27 사용자 결정, 출시 전 일괄 변경): 6-0 ADR(PR #123) → 6-1 productId(PR #124) → 6-2 userId·알림 id(PR #125) → 6-3 AGENTS 예외 제거·정리로 **후속 6 완료, 태그 `v0.8-uuidv7`**. 기존 환경은 DB·Kafka·Redis·Elasticsearch 를 지우고 새로 만든다. **후속 7 관리자 재고 조정**([ADR 0019](adr/0019-admin-stock-adjustment.md), 2026-11-27 사용자 결정: 새로 등록한 상품도 입고해야 주문 가능): inventory 관리자 API(증감·이력·Idempotency-Key 필수) + Gateway `/api/admin/stocks/**` + 관리자 상품 화면 재고 카드. 후속 7 완료(PR #127). **후속 8 주문 취소**([ADR 0020](adr/0020-order-cancellation.md), 2026-11-28 사용자 결정: 진행 중이면 다음 응답에서 보상, 완료 후면 같은 Saga 의 결제 환불 → 포인트 환불 → 재고 반환, 기한 없음·부분 취소 없음): 8-0 ADR(PR #128) → 8-1 계약·inventory `ReturnStock`(PR #129) → 8-2 order Saga·취소 API·시나리오 20(PR #130) → 8-3 화면·e2e(PR #131)로 **후속 8 완료, 태그 `v0.9-order-cancel`**. **후속 9 상품 카탈로그·화면 개편**([ADR 0021](adr/0021-product-catalog-images.md), 2026-11-28 사용자 결정: 카테고리 고정 목록, 대표 이미지 한 장을 RustFS 에 업로드, 상품 상세, 화면 개편은 데이터 뒤에): 9-0 ADR → 9-1 product 카테고리 → 9-2 RustFS·이미지 업로드 → 9-3 검색 색인 → 9-4 관리자 화면 → 9-5a·9-5b 사용자 화면 → 9-6 관리자·인증 화면 톤. 후속 2 안의 선택은 추천안대로 진행(사용자 위임)**
 
 ## 0. 새 세션(다른 PC·클라우드)에서 이어받을 때
 
@@ -50,7 +50,11 @@
 | DDD 보강 | 값 객체(서비스마다), 컨텍스트 맵·용어집. 설계는 ADR 0015 | 완료 (값 객체 PR #56~#59, ADR 0015 PR #61) |
 | 후속 4 | 상품 검색 (product-service + 가격 스냅샷 + 테이블 CDC + Elasticsearch). 상품 관리 기능의 변경 이력(audit)도 여기서 | 완료, 태그 `v0.6-search-audit` (4-1 PR #65·#68·#72, 4-2 PR #82·#89·#90, 4-3 PR #91·#94, 설계 4-5·4-6절, ADR 0010·0016) |
 | 운영 보강 | 멱등 기록(`processed_message`·`Idempotency-Key`) 정리 작업, 결제 서킷 브레이커 | 완료 (PR #74·#76, 4-4절) |
-| 후속 5 | 인증 재구성: auth-service → SAS(OIDC IdP), Gateway → BFF(토큰 릴레이), 화면 → SPA 3개(사용자·관리자·인증). 설계는 4-7절·[인증 재구성 설계](auth-sas-bff-design.md) | 설계 확정(2026-11-25), 구현 전 |
+| 후속 5 | 인증 재구성: auth-service → SAS(OIDC IdP), Gateway → BFF(토큰 릴레이), 화면 → SPA 3개(사용자·관리자·인증). 설계는 4-7절·[인증 재구성 설계](auth-sas-bff-design.md) | 완료, 태그 `v0.7-sso-bff` (5-0 PR #106 ~ 5-6 PR #120) |
+| 후속 6 | 밖으로 나가는 id 를 UUIDv7 로 (사용자·상품·알림). [ADR 0018](adr/0018-uuidv7-ids.md) | 완료, 태그 `v0.8-uuidv7` (PR #123~#126) |
+| 후속 7 | 관리자 재고 조정 (입고·차감·이력). [ADR 0019](adr/0019-admin-stock-adjustment.md) | 완료 (PR #127) |
+| 후속 8 | 주문 취소 (진행 중·완료 후, 같은 Saga 의 취소 단계). [ADR 0020](adr/0020-order-cancellation.md) | 완료, 태그 `v0.9-order-cancel` (PR #128~#131) |
+| 후속 9 | 상품 카탈로그(카테고리·RustFS 이미지·상품 상세) + 화면 개편. [ADR 0021](adr/0021-product-catalog-images.md) | 진행 중 (9-0) |
 
 후속 순서는 2026-11-22에 사용자와 합의했다. 2026-11-23에 후속 2에 프론트엔드(로그인 포함 화면 전체)를 정식 범위로 넣었다 (전에는 선택). 브리프 5절도 이 순서로 고쳤다(3-E).
 
@@ -90,6 +94,10 @@ flowchart LR
 
 | PR | 내용 |
 |---|---|
+| #131 | 후속 8-3 주문 취소 화면: 주문 상세 "주문 취소"(한 번 더 확인), 배지 "취소 요청됨", Saga 단계 "재고 반환"·마지막 "주문 취소", 취소가 끝날 때까지 다시 갱신(다른 탭에서 취소해도). e2e 완료된 주문 취소 |
+| #130 | 후속 8-2 주문 취소 Saga·API: `POST /orders/{id}/cancel`(접수 202, 이미 취소 200, 남의 주문 404, 멱등). 진행 중이면 요청만 기록하고 다음 정방향 성공 응답에서 보상, 완료 후면 `COMPLETED → CANCELLING_PAYMENT → REFUNDING_POINT → RETURNING_STOCK → CANCELLED`(없던 단계는 건너뜀). order V9 `cancel_requested_at`, `OrderCancelled.afterCompletion`. 완료 후 취소는 Saga 처리 시간 지표에 다시 세지 않음. 시나리오 20(20a 완료 후·20b 결제 중·20c 남의 주문) |
+| #129 | 후속 8-1 계약 `ReturnStock`/`StockReturned`, `OrderCancelled.afterCompletion`(Boolean, 옛 메시지 호환). inventory 예약 `RETURNED`(확정분은 재입고, 예약 중이면 해제, 늦은 `OrderCompleted` 는 무시), 재고 수량 bigint(V7), 관리자 입고 상한은 늘릴 때만 |
+| #128 | 후속 8-0 [ADR 0020](adr/0020-order-cancellation.md) 주문 취소: 진행 중이면 다음 응답에서 보상, 완료 후면 같은 Saga 의 결제 환불 → 포인트 환불 → 재고 반환, 기한·부분 취소 없음 |
 | #127 | 후속 7 관리자 재고 조정 ([ADR 0019](adr/0019-admin-stock-adjustment.md)): inventory `POST/GET /admin/stocks/{id}/adjustments`(증감·행 락·`stock_adjustments` 이력·`Idempotency-Key` 필수, 가용보다 많이 빼면 409, 예약분 합계 상한), Gateway `/api/admin/stocks/**`, 관리자 상품 화면 재고 카드(결과 모르는 조정은 같은 키로 확인, 관리자별 sessionStorage) |
 | #126 | 후속 6-3 AGENTS 일시 예외 제거, ADR 0018 완료, PROGRESS·옛 id 설명 정리, 태그 `v0.8-uuidv7` |
 | #125 | 후속 6-2 사용자·알림 id UUIDv7: auth 가 가입 때 UUIDv7, 토큰 `sub` = userId UUID(소문자 표준 표기), 메시지 계약 6종의 `userId`, order·point·payment·notification `user_id`, product `changed_by`, 기기 기록 `auth:device:<uuid>`, 알림 id·커서 `before` UUID. 서비스는 `sub` 가 UUID 가 아니면 401(`OAuth2TokenValidator`, 전에는 500). 시드 사용자 고정 UUID(`…8001-…`), auth V3(id 1000 부터) 삭제. 화면 id 표시는 UUID 끝 8자 |
@@ -515,7 +523,7 @@ A-3 은 두 PR: A-3-1(1·3·4, order·payment 조회와 멱등 주문) → A-3-2
 
 **정하고 미룬 것 (지금은 하지 않음)**
 - 재고: 비관적 락(`SELECT … FOR UPDATE`, productId 순서)을 유지한다. 측정(시나리오 18, 2026-11-25): 인기 상품 하나는 약 150건/s 에서 막히고 인스턴스를 3개로 늘려도 그대로(락 대기 83~88%), 상품이 나뉘면 158 → 258건/s. 이 규모에는 충분해 바꾸지 않는다. 더 필요해지면 먼저 조건부 UPDATE 를 트랜잭션 끝으로 옮겨 락 쥐는 시간을 줄이고 같은 스크립트로 다시 잰다. 재고 버킷·Redis 선점은 하지 않음
-- 주문 취소 API(내 주문·주문 상세 화면): Saga 진행 중 취소는 취소 요청을 기록하고 다음 응답에서 보상으로 돌린다. 완료된 주문 취소는 결제 환불 → 포인트 환불 → 재고 복구의 별도 취소 Saga. 순서는 ④ 뒤에 정한다
+- 주문 취소 API(내 주문·주문 상세 화면): Saga 진행 중 취소는 취소 요청을 기록하고 다음 응답에서 보상으로 돌린다. 완료된 주문 취소는 결제 환불 → 포인트 환불 → 재고 복구의 별도 취소 Saga. → 후속 8 에서 했다(ADR 0020: 별도 Saga 가 아니라 같은 Saga 의 취소 단계, PR #128~#131)
 - PG 장애 대처 중 PG 이중화(다른 PG 로 우회)·결제 컨슈머 일시정지는 설명만 한다(가짜 PG 하나로는 보여 주기 어렵고, 결제는 빨리 실패시키는 쪽이 흔하다)
 - 주문 진행 표시는 폴링(1초) 유지. SSE·웹소켓은 연결 관리 비용에 비해 이득이 작다
 
@@ -683,7 +691,7 @@ product-service ─ products 테이블 ─ Debezium(테이블 CDC) ─▶ produc
 - ~~주문 가격을 클라이언트가 보낸다~~ → 4-1b 에서 서버가 product-service 가격과 비교(다르면 409)하고 서버 가격을 스냅샷한다 (ADR 0016, 시나리오 14). 확인과 주문 트랜잭션 사이에 가격이 또 바뀌면 주문은 확인한 가격으로 들어간다(시나리오 14 설계 표)
 - product-service 가 멈추면 새 주문이 503 (진행 중인 Saga 는 영향 없음, ADR 0016)
 - PG 장애 동안 회로가 열리기 전(최소 10건)의 결제는 지금처럼 타임아웃 → UNKNOWN → 보정. 회로 상태는 인스턴스마다 따로(③, 시나리오 15)
-- 주문 취소 API 없음 (Saga 가 끝나야 결과가 난다) → 후속 8 에서 추가 중 (ADR 0020)
+- ~~주문 취소 API 없음~~ → 후속 8 에서 추가(ADR 0020, 시나리오 20). 진행 중 취소는 지금 단계 응답을 기다렸다가 보상하므로 바로 끝나지 않는다. 부분 취소·취소 기한은 없다. 완료 후 취소는 Saga 처리 시간 지표에 다시 세지 않는다
 - 관리자가 새로 등록한 상품은 관리자 화면에서 입고하기 전까지 재고 행이 없어, 주문하면 재고 예약 실패 → 주문 취소. 재고는 inventory 관리자 API 로 입고·차감한다(증감 방식, 이력, 요청 키 필수, ADR 0019). 상품이 있는지는 inventory 가 확인하지 않는다
 - 스케줄러 relay를 여러 인스턴스로 띄우면 같은 키의 순서가 바뀔 수 있음 → Debezium 모드에서는 WAL 커밋 순서로 나가 해소 (ADR 0005)
 - Debezium 모드에서 커넥터가 멈추면(또는 없는 토픽으로 라우팅되어 막히면) replication slot이 WAL을 붙잡아 디스크가 찬다. 관찰·heartbeat는 시나리오 5에서 끝냈고, slot 적체 경보는 `ReplicationSlotLag`. `max_slot_wal_keep_size` 상한은 유실 위험 때문에 두지 않음 (ADR 0004)

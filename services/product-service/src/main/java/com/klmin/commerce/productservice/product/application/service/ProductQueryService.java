@@ -1,12 +1,14 @@
 package com.klmin.commerce.productservice.product.application.service;
 
 import com.klmin.commerce.productservice.product.application.ProductNotFoundException;
+import com.klmin.commerce.productservice.product.application.port.in.CategoryResult;
 import com.klmin.commerce.productservice.product.application.port.in.GetProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ListProductsQuery;
 import com.klmin.commerce.productservice.product.application.port.in.PriceChangeResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductAuditPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
+import com.klmin.commerce.productservice.product.application.port.out.CategoryPort;
 import com.klmin.commerce.productservice.product.application.port.out.LoadProductPort;
 import com.klmin.commerce.productservice.common.error.DomainValidationException;
 import org.springframework.stereotype.Service;
@@ -23,9 +25,16 @@ import java.util.UUID;
 class ProductQueryService implements GetProductUseCase {
 
     private final LoadProductPort loadProductPort;
+    private final CategoryPort categoryPort;
 
-    ProductQueryService(LoadProductPort loadProductPort) {
+    ProductQueryService(LoadProductPort loadProductPort, CategoryPort categoryPort) {
         this.loadProductPort = loadProductPort;
+        this.categoryPort = categoryPort;
+    }
+
+    @Override
+    public List<CategoryResult> categories() {
+        return categoryPort.findAll();
     }
 
     @Override
