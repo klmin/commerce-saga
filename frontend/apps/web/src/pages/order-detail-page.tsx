@@ -147,15 +147,24 @@ function OrderDetail({ orderId }: { orderId: string }) {
 
   // 주문과 Saga 는 따로 읽어 같은 순간이 아닐 수 있다(그 사이 Saga 가 끝나면 주문은 아직 PENDING).
   // 둘 다 끝난 상태일 때만 갱신을 멈춘다. 렌더 중에 한 번만 바꾼다(끝난 뒤에는 다시 읽지 않아 값이 그대로다)
+  // 완료된 주문에 취소를 요청했으면 취소가 끝날 때까지 계속 읽는다 (ADR 0020)
+  const cancelling =
+    order.data !== undefined &&
+    Boolean(order.data.cancelRequestedAt) &&
+    order.data.status !== "CANCELLED";
   const finished =
     saga.data !== undefined &&
     order.data !== undefined &&
     isFinished(saga.data.state) &&
     order.data.status !== "PENDING" &&
-    // 완료된 주문에 취소를 요청했으면 취소가 끝날 때까지 계속 읽는다 (ADR 0020)
-    !(order.data.cancelRequestedAt && order.data.status !== "CANCELLED");
+    !cancelling;
   if (finished && !done) {
     setDone(true);
+  }
+  // 캐시된 완료 주문으로 멈춘 뒤 다시 읽어 보니 (다른 탭 등에서) 취소가 진행 중이면 갱신을 다시 시작한다
+  if (cancelling && done) {
+    setDone(false);
+    polling.restart();
   }
 
   const error = order.error ?? saga.error;
