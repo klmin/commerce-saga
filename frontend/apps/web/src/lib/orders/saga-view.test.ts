@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { historyKind, sagaSteps } from "./saga-view";
+import { canCancel, historyKind, orderBadge, sagaSteps } from "./saga-view";
 
 const h = (...events: string[]) => events.map((event) => ({ event }));
 const statuses = (steps: ReturnType<typeof sagaSteps>) =>
@@ -119,6 +119,65 @@ describe("sagaSteps", () => {
       payment: "undone:결제 취소",
       done: "failed",
     });
+  });
+});
+
+describe("사용자 취소 (ADR 0020)", () => {
+  it("완료 후 취소: 결제 취소 → 포인트 환불 → 재고 반환, 마지막은 주문 취소", () => {
+    const done = h("STARTED", "STOCK_RESERVED", "POINT_USED", "PAYMENT_APPROVED");
+    const cancelling = sagaSteps(
+      { state: "CANCELLING_PAYMENT", history: [...done, ...h("CANCEL_REQUESTED")] },
+      withPointAndPay,
+    );
+    expect(statuses(cancelling)).toEqual({
+      stock: "done",
+      point: "done",
+      payment: "current:결제 취소 중",
+      done: "pending",
+    });
+    expect(cancelling.at(-1)?.label).toBe("주문 취소");
+
+    const returning = sagaSteps(
+      {
+        state: "RETURNING_STOCK",
+        history: [...done, ...h("CANCEL_REQUESTED", "PAYMENT_CANCELLED", "POINT_REFUNDED")],
+      },
+      withPointAndPay,
+    );
+    expect(statuses(returning).stock).toBe("current:재고 반환 중");
+
+    const cancelled = sagaSteps(
+      {
+        state: "CANCELLED",
+        history: [
+          ...done,
+          ...h("CANCEL_REQUESTED", "PAYMENT_CANCELLED", "POINT_REFUNDED", "STOCK_RETURNED"),
+        ],
+      },
+      withPointAndPay,
+    );
+    expect(statuses(cancelled)).toEqual({
+      stock: "undone:재고 반환",
+      point: "undone:포인트 환불",
+      payment: "undone:결제 취소",
+      done: "failed",
+    });
+  });
+
+  it("배지와 취소 버튼: 요청 뒤에는 취소 요청됨, 취소된 주문은 취소 불가", () => {
+    expect(orderBadge({ status: "COMPLETED", cancelRequestedAt: null }).label).toBe("주문 완료");
+    expect(
+      orderBadge({ status: "COMPLETED", cancelRequestedAt: "2026-11-28T00:00:00Z" }).label,
+    ).toBe("취소 요청됨");
+    expect(
+      orderBadge({ status: "CANCELLED", cancelRequestedAt: "2026-11-28T00:00:00Z" }).label,
+    ).toBe("취소됨");
+    expect(canCancel({ status: "PENDING" })).toBe(true);
+    expect(canCancel({ status: "COMPLETED", cancelRequestedAt: null })).toBe(true);
+    expect(canCancel({ status: "COMPLETED", cancelRequestedAt: "2026-11-28T00:00:00Z" })).toBe(
+      false,
+    );
+    expect(canCancel({ status: "CANCELLED" })).toBe(false);
   });
 });
 
