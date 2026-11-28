@@ -40,6 +40,9 @@ const product = z.object({
   description: z.string(),
   price: z.number().int(),
   onSale: z.boolean(),
+  // ADR 0021. 카테고리 코드(이름은 listCategories), 대표 이미지 읽기 경로(서비스 기준, 없으면 null)
+  categoryCode: z.string(),
+  imagePath: z.string().nullable(),
 });
 
 export type Product = z.infer<typeof product>;
@@ -51,6 +54,15 @@ const snapshot = z.object({
   description: z.string().nullable(),
   price: z.number().int().nullable(),
   onSale: z.boolean().nullable(),
+  // 그 열(ADR 0021) 전의 이력이면 null
+  categoryCode: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? null),
+  imagePath: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? null),
 });
 
 const auditPage = z.object({
@@ -91,6 +103,15 @@ function idPath(productId: ProductId): string {
     throw new Error(`invalid product id: ${String(productId)}`);
   }
   return encodeURIComponent(productId);
+}
+
+const category = z.object({ code: z.string(), name: z.string() });
+
+export type Category = z.infer<typeof category>;
+
+/** 카테고리 고정 목록 (정해 둔 순서, ADR 0021). 공개 GET */
+export async function listCategories(): Promise<Category[]> {
+  return z.array(category).parse(await api<unknown>("/api/products/categories"));
 }
 
 /** 판매 중지 포함 전체 (id 순) */
@@ -155,6 +176,18 @@ export async function changeProductSaleStatus(
       method: "PUT",
       body: JSON.stringify({ onSale }),
     }),
+  );
+}
+
+/**
+ * 대표 이미지 올리기 (multipart, 필드 file, ADR 0021). 서비스가 내용으로 형식(jpg·png·webp)·크기(2MB)를 다시 본다.
+ * 형식이 아니면 ApiError(400), 저장소가 멈췄으면 ApiError(503) (상품은 그대로)
+ */
+export async function uploadProductImage(productId: ProductId, file: File): Promise<Product> {
+  const body = new FormData();
+  body.set("file", file);
+  return product.parse(
+    await api<unknown>(`/api/admin/products/${idPath(productId)}/image`, { method: "POST", body }),
   );
 }
 

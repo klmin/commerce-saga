@@ -13,21 +13,24 @@ import {
   describeProduct,
   getProduct,
   isProductId,
+  listCategories,
   productAuditLog,
   type ProductId,
   shortProductId,
+  uploadProductImage,
 } from "@/api/admin";
 import { formatTime, pageNumber } from "@/lib/format";
 import {
   AUDIT_ACTION_LABEL,
   auditChanges,
+  checkImageFile,
   parseDescribeInput,
   parsePriceInput,
   parseSaleInput,
 } from "@/lib/product-input";
 
 import { NotFoundPage } from "./not-found-page";
-import { ProductEditForms, type SubmitResult } from "./product-forms";
+import { ProductEditForms, ProductThumb, type SubmitResult } from "./product-forms";
 import { StockSection } from "./stock-section";
 
 function ProductManagement({ productId }: { productId: ProductId }) {
@@ -42,6 +45,12 @@ function ProductManagement({ productId }: { productId: ProductId }) {
     queryKey: ["admin-product", productId, "audit", page],
     queryFn: () => productAuditLog(productId, page),
   });
+  const categories = useQuery({
+    queryKey: ["categories"],
+    queryFn: listCategories,
+    staleTime: Infinity,
+  });
+  const categoryNames = new Map((categories.data ?? []).map((c) => [c.code, c.name]));
 
   /** 바꾼 뒤 상품·이력·목록을 다시 읽는다 */
   async function after(saved: string): Promise<SubmitResult> {
@@ -56,7 +65,26 @@ function ProductManagement({ productId }: { productId: ProductId }) {
       return { error: input.error };
     }
     await describeProduct(productId, input.value);
-    return after("이름·설명을 저장했습니다.");
+    return after("정보를 저장했습니다.");
+  }
+
+  async function onImage(formData: FormData): Promise<SubmitResult> {
+    const file = formData.get("file");
+    const input = checkImageFile(file instanceof File ? file : null);
+    if (!input.ok) {
+      return { error: input.error };
+    }
+    try {
+      await uploadProductImage(productId, input.value);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        return {
+          error: "이미지 저장소가 응답하지 않습니다. 상품은 그대로이니 잠시 뒤 다시 올려 주세요.",
+        };
+      }
+      throw e;
+    }
+    return after("이미지를 바꿨습니다.");
   }
 
   async function onPrice(formData: FormData): Promise<SubmitResult> {
@@ -77,14 +105,14 @@ function ProductManagement({ productId }: { productId: ProductId }) {
     return after(input.value ? "판매를 다시 시작했습니다." : "판매를 중지했습니다.");
   }
 
-  const error = product.error ?? audit.error;
+  const error = product.error ?? audit.error ?? categories.error;
   if (error instanceof ApiError && error.status === 404) {
     return <NotFoundPage embedded />;
   }
-  if (error && !(product.data && audit.data)) {
+  if (error && !(product.data && audit.data && categories.data)) {
     return <LoadError error={error} retry={() => void queryClient.invalidateQueries()} />;
   }
-  if (!product.data || !audit.data) {
+  if (!product.data || !audit.data || !categories.data) {
     return <FormSkeleton fields={3} />;
   }
 
@@ -92,17 +120,22 @@ function ProductManagement({ productId }: { productId: ProductId }) {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>
-            <span className="text-muted-foreground" title={product.data.id}>
-              #{shortProductId(product.data.id)}
-            </span>{" "}
-            {product.data.name}
+          <CardTitle className="flex items-center gap-3">
+            <ProductThumb product={product.data} />
+            <span>
+              <span className="text-muted-foreground" title={product.data.id}>
+                #{shortProductId(product.data.id)}
+              </span>{" "}
+              {product.data.name}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <ProductEditForms
             product={product.data}
+            categories={categories.data}
             onDescribe={onDescribe}
+            onImage={onImage}
             onPrice={onPrice}
             onSale={onSale}
           />
@@ -131,7 +164,7 @@ function ProductManagement({ productId }: { productId: ProductId }) {
                     </span>
                   </span>
                   <ul className="flex flex-col gap-0.5 pl-2">
-                    {auditChanges(entry).map((c) => (
+                    {auditChanges(entry, categoryNames).map((c) => (
                       <li key={c.label}>
                         {c.label}:{" "}
                         {c.before === null ? (

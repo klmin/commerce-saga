@@ -16,6 +16,7 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
   const name = `e2e 이력 상품 ${Date.now().toString(36)}`;
   const register = page.getByRole("form", { name: "상품 등록" });
   await register.getByLabel("상품 이름").fill(name);
+  await register.getByLabel("카테고리").selectOption({ label: "디지털" });
   // 저장이 실패해도 입력한 값은 남는다 (가격만 고쳐 다시 등록)
   await register.getByLabel("가격 (원)").fill("0");
   await register.getByRole("button", { name: "등록" }).click();
@@ -37,7 +38,8 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
 
   const describe = page.getByRole("form", { name: "정보 수정" });
   await describe.getByLabel("설명").fill("관리 이력 시연");
-  await describe.getByRole("button", { name: "이름·설명 저장" }).click();
+  await describe.getByLabel("카테고리").selectOption({ label: "주방" });
+  await describe.getByRole("button", { name: "정보 저장" }).click();
   await expect(describe.getByRole("status")).toBeVisible();
 
   await page.getByRole("button", { name: "판매 중지" }).click();
@@ -52,6 +54,7 @@ test("관리자가 상품을 등록하고 바꾸면 누가·무엇을 바꿨는�
   await expect(history(page).nth(0)).toContainText("판매 중 → 판매 중지");
   await expect(history(page).nth(1)).toContainText("정보 수정");
   await expect(history(page).nth(1)).toContainText("관리 이력 시연");
+  await expect(history(page).nth(1)).toContainText("디지털 → 주방");
   await expect(history(page).nth(2)).toContainText("가격 변경");
   await expect(history(page).nth(2)).toContainText("50,000원 → 60,000원");
   await expect(history(page).nth(3)).toContainText("등록");
@@ -76,6 +79,7 @@ test("관리자가 새 상품에 입고하고 차감하면 재고와 조정 이�
 
   const register = page.getByRole("form", { name: "상품 등록" });
   await register.getByLabel("상품 이름").fill(`e2e 재고 상품 ${Date.now().toString(36)}`);
+  await register.getByLabel("카테고리").selectOption({ label: "기타" });
   await register.getByLabel("가격 (원)").fill("50000");
   await register.getByRole("button", { name: "등록" }).click();
   await expect(page).toHaveURL(/\/products\/[0-9a-f-]{36}$/);
@@ -119,4 +123,66 @@ test("관리자가 새 상품에 입고하고 차감하면 재고와 조정 이�
 test("관리자가 아니면 상품 관리 화면을 볼 수 없다", async ({ page }) => {
   await login(page, "user1", `/products/${SEED_PRODUCT.keyboard}`);
   await expect(page.getByRole("heading", { name: "관리자만 볼 수 있는 화면입니다" })).toBeVisible();
+});
+
+// 대표 이미지 (ADR 0021): 올리기 전에 미리 보고, 올리면 관리 화면·목록 썸네일에 보이고 관리 이력에 남는다
+// 1x1 PNG (서비스는 내용의 앞 바이트로 형식을 본다)
+const PNG_1X1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+test("관리자가 대표 이미지를 미리 보고 올리면 썸네일로 보이고, 형식이 아닌 파일은 올리지 않는다", async ({
+  page,
+}) => {
+  await login(page, "admin");
+  await page.getByRole("link", { name: "상품 관리로 가기" }).click();
+
+  const name = `e2e 이미지 상품 ${Date.now().toString(36)}`;
+  const register = page.getByRole("form", { name: "상품 등록" });
+  await register.getByLabel("상품 이름").fill(name);
+  await register.getByLabel("카테고리").selectOption({ label: "생활" });
+  await register.getByLabel("가격 (원)").fill("50000");
+  await register.getByRole("button", { name: "등록" }).click();
+  await expect(page).toHaveURL(/\/products\/[0-9a-f-]{36}$/);
+
+  const image = page.getByRole("form", { name: "대표 이미지" });
+  await expect(image.getByLabel("이미지 없음")).toBeVisible();
+
+  // 형식이 아니면 화면에서 막는다 (요청하지 않음)
+  await image.getByLabel("이미지 파일").setInputFiles({
+    name: "a.gif",
+    mimeType: "image/gif",
+    buffer: Buffer.from("GIF89a"),
+  });
+  await image.getByRole("button", { name: "이미지 올리기" }).click();
+  await expect(image.getByRole("alert")).toHaveText("jpg·png·webp 이미지만 올릴 수 있습니다.");
+
+  await image.getByLabel("이미지 파일").setInputFiles({
+    name: "dot.png",
+    mimeType: "image/png",
+    buffer: PNG_1X1,
+  });
+  await expect(image.getByAltText("올릴 이미지 미리보기")).toBeVisible();
+  await image.getByRole("button", { name: "이미지 올리기" }).click();
+  await expect(image.getByRole("status")).toHaveText("이미지를 바꿨습니다.");
+
+  // 새 이미지는 Gateway /api 로 product-service 가 읽어 준다 (실제로 그려졌는지 = 너비가 있다)
+  const current = image.getByAltText(`${name} 이미지`);
+  await expect(current).toHaveAttribute(
+    "src",
+    /^\/api\/products\/[0-9a-f-]{36}\/images\/[0-9a-z-]+\.png$/,
+  );
+  await expect.poll(() => current.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+  await expect(image.getByAltText("올릴 이미지 미리보기")).toHaveCount(0);
+  await expect(history(page).first()).toContainText("이미지 변경");
+  await expect(history(page).first()).toContainText(/\(없음\) → [0-9a-z-]+\.png/);
+
+  await page.getByRole("link", { name: "← 상품 관리" }).click();
+  const row = page
+    .getByRole("list", { name: "관리 상품 목록" })
+    .getByRole("listitem")
+    .filter({ hasText: name });
+  await expect(row).toContainText("생활 · 50,000원");
+  await expect(row.getByAltText(`${name} 이미지`)).toBeVisible();
 });
