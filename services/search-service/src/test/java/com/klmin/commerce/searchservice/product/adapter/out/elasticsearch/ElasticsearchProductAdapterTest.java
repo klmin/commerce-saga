@@ -59,10 +59,12 @@ class ElasticsearchProductAdapterTest {
     @BeforeAll
     void seed() {
         adapter = adapter("http://" + ES.getHttpHostAddress(), "products");
-        adapter.save(product(1, "무선 키보드", "", 39_000, true, "2026-11-25T01:00:00Z"), 10);
+        adapter.save(new SearchableProduct(id(1), "무선 키보드", "", 39_000, true, Instant.parse("2026-11-25T01:00:00Z"),
+                "digital", "products/" + id(1) + "/seed.svg"), 10);
         adapter.save(product(2, "무선 마우스", "", 25_000, true, "2026-11-25T02:00:00Z"), 10);
         adapter.save(product(3, "USB-C 허브", "", 18_000, true, "2026-11-25T03:00:00Z"), 10);
-        adapter.save(product(4, "한정판 키캡", "재고 1개로 시작", 12_000, true, "2026-11-25T04:00:00Z"), 10);
+        adapter.save(new SearchableProduct(id(4), "한정판 키캡", "재고 1개로 시작", 12_000, true,
+                Instant.parse("2026-11-25T04:00:00Z"), "kitchen", null), 10);
         adapter.save(product(5, "단종 모니터암", "", 45_000, false, "2026-11-25T05:00:00Z"), 10);
         refresh("products");
     }
@@ -118,6 +120,41 @@ class ElasticsearchProductAdapterTest {
                 .extracting(SearchableProduct::id).startsWith(id(1), id(2));
         assertThat(search(null, null, null, true, SearchSort.NEWEST).items())
                 .extracting(SearchableProduct::id).startsWith(id(4), id(3));
+    }
+
+    @Test
+    void categoryFilter_andImageKey() {
+        assertThat(adapter.search(new SearchCriteria(null, null, null, true, null, 0, 20, "digital")).items())
+                .singleElement().satisfies(p -> {
+                    assertThat(p.id()).isEqualTo(id(1));
+                    assertThat(p.category()).isEqualTo("digital");
+                    assertThat(p.imagePath()).isEqualTo("/products/" + id(1) + "/images/seed.svg");
+                });
+        assertThat(adapter.search(new SearchCriteria("키", null, null, true, null, 0, 20, "kitchen")).items())
+                .extracting(SearchableProduct::id).containsExactly(id(4));
+        assertThat(adapter.search(new SearchCriteria(null, null, null, true, null, 0, 20, "beauty")).items()).isEmpty();
+        // 카테고리 열 전에 색인된 문서(카테고리 없음)는 전체 검색에만 나온다
+        assertThat(search("마우스", null, null, true, null).items()).singleElement()
+                .satisfies(p -> assertThat(p.category()).isNull());
+    }
+
+    /** 9-3 전에 만든 색인(새 필드 없음, strict)도 시작할 때 필드를 더해 새 행을 받는다 */
+    @Test
+    void legacyIndex_getsAddedFields() {
+        RestClient es = RestClient.create("http://" + ES.getHttpHostAddress());
+        es.put().uri("/legacy-v1").contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("""
+                {"aliases": {"legacy": {}}, "mappings": {"dynamic": "strict", "properties": {
+                  "id": {"type": "keyword"}, "name": {"type": "text"}, "description": {"type": "text"},
+                  "price": {"type": "long"}, "onSale": {"type": "boolean"}, "updatedAt": {"type": "date"},
+                  "deleted": {"type": "boolean"}}}}
+                """).retrieve().toBodilessEntity();
+        ElasticsearchProductAdapter legacy = adapter("http://" + ES.getHttpHostAddress(), "legacy");
+
+        assertThat(legacy.save(new SearchableProduct(id(6), "전기포트", "", 32_000, true,
+                Instant.parse("2026-11-28T00:00:00Z"), "kitchen", "products/" + id(6) + "/seed.svg"), 1)).isTrue();
+        refresh("legacy");
+        assertThat(legacy.search(new SearchCriteria(null, null, null, true, null, 0, 20, "kitchen")).items())
+                .extracting(SearchableProduct::id).containsExactly(id(6));
     }
 
     @Test

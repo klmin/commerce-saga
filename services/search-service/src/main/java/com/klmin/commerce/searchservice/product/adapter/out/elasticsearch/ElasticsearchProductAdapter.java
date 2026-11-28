@@ -70,8 +70,23 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
                   "price": { "type": "long" },
                   "onSale": { "type": "boolean" },
                   "updatedAt": { "type": "date" },
+                  "category": { "type": "keyword" },
+                  "imageKey": { "type": "keyword", "index": false },
                   "deleted": { "type": "boolean" }
                 }
+              }
+            }
+            """;
+
+    /**
+     * 후속 9-3 에 더한 필드 (ADR 0021). 필드 추가는 기존 색인에 바로 된다({@code PUT _mapping}, 같은 정의면 그대로 성공).
+     * 이 필드 전에 만든 색인도 시작할 때 한 번 더한다
+     */
+    private static final String ADDED_FIELDS = """
+            {
+              "properties": {
+                "category": { "type": "keyword" },
+                "imageKey": { "type": "keyword", "index": false }
               }
             }
             """;
@@ -103,6 +118,8 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
         doc.put("price", product.price());
         doc.put("onSale", product.onSale());
         doc.put("updatedAt", product.updatedAt().toString());
+        doc.put("category", product.category());
+        doc.put("imageKey", product.imageKey());
         Response response = call(HttpMethod.PUT,
                 "/" + alias + "/_doc/" + product.id() + "?version=" + version + "&version_type=external", doc);
         if (response.status == 200 || response.status == 201) {
@@ -151,7 +168,8 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
                 items.add(new SearchableProduct(UUID.fromString(s.path("id").asString()),
                         s.path("name").asString(), s.path("description").asString(), s.path("price").longValue(),
                         s.path("onSale").booleanValue(),
-                        Instant.parse(s.path("updatedAt").asString())));
+                        Instant.parse(s.path("updatedAt").asString()), textOrNull(s, "category"),
+                        textOrNull(s, "imageKey")));
             }
             return new SearchPage(items, hits.path("total").path("value").longValue());
         } catch (RestClientException | IllegalStateException | JacksonException e) {
@@ -170,6 +188,9 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
         filter.add(Map.of("bool", Map.of("must_not", List.of(Map.of("term", Map.of("deleted", true))))));
         if (c.onSaleOnly()) {
             filter.add(Map.of("term", Map.of("onSale", true)));
+        }
+        if (c.category() != null) {
+            filter.add(Map.of("term", Map.of("category", c.category())));
         }
         if (c.minPrice() != null || c.maxPrice() != null) {
             Map<String, Object> range = new LinkedHashMap<>();
@@ -199,7 +220,7 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
         return body;
     }
 
-    /** 별칭이 없으면 {@code <별칭>-v1} 을 만들고 별칭을 건다. 이미 있으면(다른 인스턴스가 만듦) 그대로 쓴다 */
+    /** 별칭이 없으면 {@code <별칭>-v1} 을 만들고 별칭을 건다. 이미 있으면(다른 인스턴스가 만듦) 그대로 쓰고, 나중에 더한 필드를 매핑에 넣는다(멱등) */
     private void ensureIndex() {
         if (indexReady) {
             return;
@@ -220,8 +241,18 @@ class ElasticsearchProductAdapter implements ProductIndexPort, ProductSearchPort
             } else if (alias.status != 200) {
                 throw new IllegalStateException("검색 색인 별칭 확인 실패: " + alias.status);
             }
+            Response mapping = call(HttpMethod.PUT, "/" + this.alias + "/_mapping",
+                    json.readValue(ADDED_FIELDS, Map.class));
+            if (mapping.status != 200) {
+                throw new IllegalStateException("검색 색인 필드 추가 실패: " + mapping.status + " " + mapping.body);
+            }
             indexReady = true;
         }
+    }
+
+    private static String textOrNull(JsonNode source, String field) {
+        JsonNode node = source.get(field);
+        return node == null || node.isNull() ? null : node.asString();
     }
 
     private Response call(HttpMethod method, String uri, Object body) {

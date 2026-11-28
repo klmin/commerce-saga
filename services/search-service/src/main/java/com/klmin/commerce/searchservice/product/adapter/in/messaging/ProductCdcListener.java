@@ -84,7 +84,8 @@ class ProductCdcListener {
         }
         return new IndexProductCommand(id, requireText(row, "name", record), optionalText(row, "description"),
                 requireLong(row, "price", record), requireBoolean(row, "on_sale", record),
-                requireInstant(row, "updated_at", record), version);
+                requireInstant(row, "updated_at", record), version,
+                nullableText(row, "category_code", record), nullableText(row, "image_key", record));
     }
 
     private static UUID productId(String key) {
@@ -147,6 +148,18 @@ class ProductCdcListener {
     private static String optionalText(JsonNode row, String field) {
         JsonNode node = row.get(field);
         return node == null || node.isNull() ? "" : node.asString();
+    }
+
+    /** 열을 추가하기 전의 메시지(ADR 0021)에는 없다 → null. 있으면 문자열이어야 한다 */
+    private static String nullableText(JsonNode row, String field, ConsumerRecord<String, String> record) {
+        JsonNode node = row.get(field);
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isString()) {
+            throw new NonRetryableMessageException(field + " is not a string: " + describe(record));
+        }
+        return node.stringValue();
     }
 
     private static boolean requireBoolean(JsonNode row, String field, ConsumerRecord<String, String> record) {
