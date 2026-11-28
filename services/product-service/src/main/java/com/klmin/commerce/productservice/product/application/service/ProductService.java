@@ -9,9 +9,11 @@ import com.klmin.commerce.productservice.product.application.port.in.DescribePro
 import com.klmin.commerce.productservice.product.application.port.in.ManageProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
 import com.klmin.commerce.productservice.product.application.port.in.RegisterProductCommand;
+import com.klmin.commerce.productservice.product.application.port.out.CategoryPort;
 import com.klmin.commerce.productservice.product.application.port.out.PriceHistoryPort;
 import com.klmin.commerce.productservice.product.application.port.out.ProductAuditPort;
 import com.klmin.commerce.productservice.product.application.port.out.ProductPort;
+import com.klmin.commerce.productservice.product.domain.CategoryCode;
 import com.klmin.commerce.productservice.product.domain.Money;
 import com.klmin.commerce.productservice.product.domain.Product;
 import com.klmin.commerce.productservice.product.domain.ProductAction;
@@ -41,13 +43,15 @@ class ProductService implements ManageProductUseCase {
     private final ProductPort productPort;
     private final PriceHistoryPort priceHistoryPort;
     private final ProductAuditPort auditPort;
+    private final CategoryPort categoryPort;
     private final Clock clock;
 
     ProductService(ProductPort productPort, PriceHistoryPort priceHistoryPort, ProductAuditPort auditPort,
-                   Clock clock) {
+                   CategoryPort categoryPort, Clock clock) {
         this.productPort = productPort;
         this.priceHistoryPort = priceHistoryPort;
         this.auditPort = auditPort;
+        this.categoryPort = categoryPort;
         this.clock = clock;
     }
 
@@ -57,7 +61,8 @@ class ProductService implements ManageProductUseCase {
         UserId changedBy = UserId.of(command.changedBy());
         Instant now = clock.instant();
         Product saved = productPort.insert(Product.register(ProductId.of(UuidCreator.getTimeOrderedEpoch()),
-                command.name(), command.description(), Money.of(command.price()), now));
+                command.name(), command.description(), Money.of(command.price()),
+                command.categoryCode() == null ? CategoryCode.DEFAULT : category(command.categoryCode()), now));
         auditPort.save(ProductChange.registered(saved, changedBy, now));
         log.info("상품 등록 (productId={}, price={}, by={})", saved.id().value(), saved.price().value(),
                 command.changedBy());
@@ -71,7 +76,8 @@ class ProductService implements ManageProductUseCase {
         Product product = load(command.productId());
         ProductSnapshot before = product.snapshot();
         Instant now = clock.instant();
-        product.describe(command.name(), command.description(), now);
+        product.describe(command.name(), command.description(),
+                command.categoryCode() == null ? null : category(command.categoryCode()), now);
         ProductChange.between(product, ProductAction.DESCRIBED, before, changedBy, now).ifPresent(auditPort::save);
         return ProductResult.from(productPort.save(product));
     }
@@ -109,6 +115,15 @@ class ProductService implements ManageProductUseCase {
                             command.onSale(), command.changedBy());
                 });
         return ProductResult.from(productPort.save(product));
+    }
+
+    // 고정 목록에 있는 코드만 (DB 외래 키도 막지만, 500 대신 400 으로 알려 준다)
+    private CategoryCode category(String code) {
+        CategoryCode category = CategoryCode.of(code);
+        if (!categoryPort.exists(category)) {
+            throw new DomainValidationException("unknown category: " + code);
+        }
+        return category;
     }
 
     private Product load(UUID productId) {

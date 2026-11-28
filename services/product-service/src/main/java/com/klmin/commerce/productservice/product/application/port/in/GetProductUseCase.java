@@ -8,6 +8,9 @@ public interface GetProductUseCase {
     int MAX_IDS = 50;
     int MAX_PAGE_SIZE = 100;
 
+    /** 카테고리 고정 목록 (정해 둔 순서) */
+    List<CategoryResult> categories();
+
     ProductResult get(UUID productId);
 
     ProductPageResult list(ListProductsQuery query);

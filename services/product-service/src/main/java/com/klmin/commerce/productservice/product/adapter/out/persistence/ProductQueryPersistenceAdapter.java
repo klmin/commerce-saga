@@ -37,18 +37,20 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
                 auditLogRepository.findByProductIdOrderByChangedAtDescIdDesc(productId, PageRequest.of(page, size));
         return new ProductAuditPageResult(slice.getContent().stream().map(e -> new ProductAuditResult(
                 e.getAction(),
-                snapshot(e.getBeforeName(), e.getBeforeDescription(), e.getBeforePrice(), e.getBeforeOnSale()),
-                snapshot(e.getAfterName(), e.getAfterDescription(), e.getAfterPrice(), e.getAfterOnSale()),
+                snapshot(e.getBeforeName(), e.getBeforeDescription(), e.getBeforePrice(), e.getBeforeOnSale(),
+                        e.getBeforeCategoryCode()),
+                snapshot(e.getAfterName(), e.getAfterDescription(), e.getAfterPrice(), e.getAfterOnSale(),
+                        e.getAfterCategoryCode()),
                 e.getChangedBy(), e.getChangedAt())).toList(), slice.hasNext());
     }
 
     /** 값이 하나도 없으면(등록의 before) null */
     private static ProductAuditResult.Snapshot snapshot(String name, String description, Long price,
-                                                        Boolean onSale) {
-        if (name == null && description == null && price == null && onSale == null) {
+                                                        Boolean onSale, String categoryCode) {
+        if (name == null && description == null && price == null && onSale == null && categoryCode == null) {
             return null;
         }
-        return new ProductAuditResult.Snapshot(name, description, price, onSale);
+        return new ProductAuditResult.Snapshot(name, description, price, onSale, categoryCode);
     }
 
     @Override
@@ -88,6 +90,6 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
 
     private static ProductResult toResult(ProductJpaEntity e) {
         return new ProductResult(e.getId(), e.getName(), e.getDescription(), e.getPrice(), e.isOnSale(),
-                e.getUpdatedAt());
+                e.getCategoryCode(), e.getUpdatedAt());
     }
 }

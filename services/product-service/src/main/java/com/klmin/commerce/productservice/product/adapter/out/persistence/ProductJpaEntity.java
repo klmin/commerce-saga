@@ -27,6 +27,9 @@ class ProductJpaEntity {
     @Column(name = "on_sale", nullable = false)
     private boolean onSale;
 
+    @Column(name = "category_code", nullable = false, length = 30)
+    private String categoryCode;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -36,22 +39,25 @@ class ProductJpaEntity {
     protected ProductJpaEntity() {
     }
 
-    ProductJpaEntity(UUID id, String name, String description, long price, boolean onSale, Instant createdAt,
-                     Instant updatedAt) {
+    ProductJpaEntity(UUID id, String name, String description, long price, boolean onSale, String categoryCode,
+                     Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.price = price;
         this.onSale = onSale;
+        this.categoryCode = categoryCode;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    void update(String name, String description, long price, boolean onSale, Instant updatedAt) {
+    void update(String name, String description, long price, boolean onSale, String categoryCode,
+                Instant updatedAt) {
         this.name = name;
         this.description = description;
         this.price = price;
         this.onSale = onSale;
+        this.categoryCode = categoryCode;
         this.updatedAt = updatedAt;
     }
 
@@ -73,6 +79,10 @@ class ProductJpaEntity {
 
     boolean isOnSale() {
         return onSale;
+    }
+
+    String getCategoryCode() {
+        return categoryCode;
     }
 
     Instant getCreatedAt() {

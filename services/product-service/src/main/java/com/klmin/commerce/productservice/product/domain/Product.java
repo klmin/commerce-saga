@@ -8,7 +8,7 @@ import java.util.Optional;
 
 /**
  * 상품 애그리거트. 가격은 0 보다 커야 하고, 바꾸면 {@link PriceChange} 를 돌려줘 같은 트랜잭션에 이력을 남긴다.
- * 판매 중지 상품은 조회는 되지만 주문할 수 없다(order 가 422).
+ * 판매 중지 상품은 조회는 되지만 주문할 수 없다(order 가 422). 카테고리는 고정 목록의 코드 하나 (ADR 0021)
  */
 public final class Product {
 
@@ -20,46 +20,56 @@ public final class Product {
     private String description;
     private Money price;
     private boolean onSale;
+    private CategoryCode category;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private Product(ProductId id, String name, String description, Money price, boolean onSale,
-                    Instant createdAt, Instant updatedAt) {
+                    CategoryCode category, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.price = price;
         this.onSale = onSale;
+        this.category = Objects.requireNonNull(category, "category");
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    /** 새 상품. id 는 앱이 저장 전에 만든 UUIDv7 (ADR 0018) */
-    public static Product register(ProductId id, String name, String description, Money price, Instant now) {
+    /** 새 상품. id 는 앱이 저장 전에 만든 UUIDv7 (ADR 0018). 카테고리가 있는 코드인지는 서비스가 확인했다 */
+    public static Product register(ProductId id, String name, String description, Money price,
+                                   CategoryCode category, Instant now) {
         Objects.requireNonNull(id, "id");
         requirePositive(price);
-        return new Product(id,validName(name), validDescription(description), price, true, now, now);
+        return new Product(id, validName(name), validDescription(description), price, true, category, now, now);
     }
 
     public static Product restore(ProductId id, String name, String description, Money price, boolean onSale,
-                                  Instant createdAt, Instant updatedAt) {
-        return new Product(Objects.requireNonNull(id, "id"), name, description, price, onSale, createdAt, updatedAt);
+                                  CategoryCode category, Instant createdAt, Instant updatedAt) {
+        return new Product(Objects.requireNonNull(id, "id"), name, description, price, onSale, category, createdAt,
+                updatedAt);
     }
 
-    /** 이름·설명 수정. 같은 값이면 아무것도 바꾸지 않는다 */
-    public void describe(String name, String description, Instant now) {
+    /**
+     * 이름·설명·카테고리 수정. category 가 null 이면 그대로 둔다(카테고리를 모르는 옛 클라이언트).
+     * 같은 값이면 아무것도 바꾸지 않는다
+     */
+    public void describe(String name, String description, CategoryCode category, Instant now) {
         String newName = validName(name);
         String newDescription = validDescription(description);
-        if (!newName.equals(this.name) || !newDescription.equals(this.description)) {
+        CategoryCode newCategory = category == null ? this.category : category;
+        if (!newName.equals(this.name) || !newDescription.equals(this.description)
+                || !newCategory.equals(this.category)) {
             this.name = newName;
             this.description = newDescription;
+            this.category = newCategory;
             this.updatedAt = now;
         }
     }
 
     /** 관리 이력에 남길 지금 값 */
     public ProductSnapshot snapshot() {
-        return new ProductSnapshot(name, description, price, onSale);
+        return new ProductSnapshot(name, description, price, onSale, category);
     }
 
     /** 가격 변경. 같은 가격이면 아무것도 바꾸지 않고 이력도 남기지 않는다 */
@@ -126,6 +136,10 @@ public final class Product {
 
     public boolean onSale() {
         return onSale;
+    }
+
+    public CategoryCode category() {
+        return category;
     }
 
     public Instant createdAt() {

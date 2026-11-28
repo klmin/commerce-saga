@@ -6,10 +6,13 @@ import com.klmin.commerce.productservice.product.application.port.in.ChangePrice
 import com.klmin.commerce.productservice.product.application.port.in.ChangeSaleStatusCommand;
 import com.klmin.commerce.productservice.product.application.port.in.DescribeProductCommand;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
+import com.klmin.commerce.productservice.product.application.port.in.CategoryResult;
 import com.klmin.commerce.productservice.product.application.port.in.RegisterProductCommand;
+import com.klmin.commerce.productservice.product.application.port.out.CategoryPort;
 import com.klmin.commerce.productservice.product.application.port.out.PriceHistoryPort;
 import com.klmin.commerce.productservice.product.application.port.out.ProductAuditPort;
 import com.klmin.commerce.productservice.product.application.port.out.ProductPort;
+import com.klmin.commerce.productservice.product.domain.CategoryCode;
 import com.klmin.commerce.productservice.product.domain.Money;
 import com.klmin.commerce.productservice.product.domain.PriceChange;
 import com.klmin.commerce.productservice.product.domain.Product;
@@ -38,7 +41,7 @@ class ProductServiceTest {
     private static final UUID OTHER_ADMIN = UUID.fromString("01900000-0000-7000-8001-000000000101");
 
     private final InMemoryProducts products = new InMemoryProducts();
-    private final ProductService service = new ProductService(products, products, products,
+    private final ProductService service = new ProductService(products, products, products, products,
             Clock.fixed(Instant.parse("2026-11-25T00:00:00Z"), ZoneOffset.UTC));
 
     private ProductResult registerKeyboard() {
@@ -56,7 +59,8 @@ class ProductServiceTest {
             assertThat(a.productId().value()).isEqualTo(created.id());
             assertThat(a.action()).isEqualTo(ProductAction.REGISTERED);
             assertThat(a.before()).isNull();
-            assertThat(a.after()).isEqualTo(new ProductSnapshot("키보드", "무선", Money.of(39_000), true));
+            assertThat(a.after()).isEqualTo(new ProductSnapshot("키보드", "무선", Money.of(39_000), true,
+                    CategoryCode.DEFAULT));
             assertThat(a.changedBy().value()).isEqualTo(ADMIN);
         });
     }
@@ -144,7 +148,44 @@ class ProductServiceTest {
         assertThat(products.audit).isEmpty();
     }
 
-    static final class InMemoryProducts implements ProductPort, PriceHistoryPort, ProductAuditPort {
+    @Test
+    void register_withCategory_andUnknownCategoryIs400() {
+        ProductResult created = service.register(new RegisterProductCommand("키보드", "", 39_000, "digital", ADMIN));
+        assertThat(created.categoryCode()).isEqualTo("digital");
+        assertThat(products.audit).singleElement().satisfies(a -> assertThat(a.after().category().value())
+                .isEqualTo("digital"));
+
+        assertThatThrownBy(() -> service.register(new RegisterProductCommand("a", "", 1, "nope", ADMIN)))
+                .isInstanceOf(DomainValidationException.class).hasMessageContaining("unknown category");
+        assertThatThrownBy(() -> service.register(new RegisterProductCommand("a", "", 1, "Bad Code", ADMIN)))
+                .isInstanceOf(DomainValidationException.class);
+        assertThat(products.store).hasSize(1);
+    }
+
+    @Test
+    void register_withoutCategory_isEtc() {
+        assertThat(registerKeyboard().categoryCode()).isEqualTo("etc");
+    }
+
+    @Test
+    void describe_changesCategory_recordsBeforeAndAfter_andNullKeepsIt() {
+        ProductResult created = registerKeyboard();
+
+        ProductResult moved = service.describe(new DescribeProductCommand(created.id(), "키보드", "", "living", ADMIN));
+        service.describe(new DescribeProductCommand(created.id(), "키보드", "", null, ADMIN));
+
+        assertThat(moved.categoryCode()).isEqualTo("living");
+        assertThat(products.audit).singleElement().satisfies(a -> {
+            assertThat(a.action()).isEqualTo(ProductAction.DESCRIBED);
+            assertThat(a.before().category().value()).isEqualTo("etc");
+            assertThat(a.after().category().value()).isEqualTo("living");
+        });
+        assertThatThrownBy(() -> service.describe(new DescribeProductCommand(created.id(), "키보드", "", "nope", ADMIN)))
+                .isInstanceOf(DomainValidationException.class);
+        assertThat(products.store.get(created.id()).category().value()).isEqualTo("living");
+    }
+
+    static final class InMemoryProducts implements ProductPort, PriceHistoryPort, ProductAuditPort, CategoryPort {
 
         final Map<UUID, Product> store = new HashMap<>();
         final List<PriceChange> history = new ArrayList<>();
@@ -174,6 +215,17 @@ class ProductServiceTest {
         @Override
         public void save(ProductChange change) {
             audit.add(change);
+        }
+
+        @Override
+        public boolean exists(CategoryCode code) {
+            return List.of("digital", "living", "etc").contains(code.value());
+        }
+
+        @Override
+        public List<CategoryResult> findAll() {
+            return List.of(new CategoryResult("digital", "디지털"), new CategoryResult("living", "생활"),
+                    new CategoryResult("etc", "기타"));
         }
     }
 }

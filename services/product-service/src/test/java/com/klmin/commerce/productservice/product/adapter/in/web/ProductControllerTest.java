@@ -2,6 +2,7 @@ package com.klmin.commerce.productservice.product.adapter.in.web;
 
 import com.klmin.commerce.productservice.common.config.SecurityConfig;
 import com.klmin.commerce.productservice.product.application.ProductNotFoundException;
+import com.klmin.commerce.productservice.product.application.port.in.CategoryResult;
 import com.klmin.commerce.productservice.product.application.port.in.ChangePriceCommand;
 import com.klmin.commerce.productservice.product.application.port.in.ChangeSaleStatusCommand;
 import com.klmin.commerce.productservice.product.application.port.in.ProductAuditPageResult;
@@ -11,6 +12,8 @@ import com.klmin.commerce.productservice.product.application.port.in.ListProduct
 import com.klmin.commerce.productservice.product.application.port.in.ManageProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ProductPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
+import com.klmin.commerce.productservice.product.application.port.in.RegisterProductCommand;
+import com.klmin.commerce.productservice.product.application.port.in.DescribeProductCommand;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -32,6 +35,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,7 +50,7 @@ class ProductControllerTest {
     private static final UUID USER = UUID.fromString("01900000-0000-7000-8001-000000000001");
 
     private static final ProductResult KEYBOARD =
-            new ProductResult(ID, "무선 키보드", "", 39_000, true, Instant.parse("2026-11-25T00:00:00Z"));
+            new ProductResult(ID, "무선 키보드", "", 39_000, true, "digital", Instant.parse("2026-11-25T00:00:00Z"));
 
     @Autowired
     MockMvc mvc;
@@ -70,7 +74,41 @@ class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].id").value(ID.toString()))
                 .andExpect(jsonPath("$.items[0].price").value(39_000))
+                .andExpect(jsonPath("$.items[0].categoryCode").value("digital"))
                 .andExpect(jsonPath("$.hasNext").value(false));
+    }
+
+    @Test
+    void categories_isPublic_andNotTakenAsProductId() throws Exception {
+        given(getProductUseCase.categories())
+                .willReturn(List.of(new CategoryResult("digital", "디지털"), new CategoryResult("etc", "기타")));
+
+        mvc.perform(get("/products/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].code").value("digital"))
+                .andExpect(jsonPath("$[0].name").value("디지털"))
+                .andExpect(jsonPath("$[1].code").value("etc"));
+    }
+
+    @Test
+    void register_andDescribe_passCategoryCode() throws Exception {
+        given(manageProductUseCase.register(any())).willReturn(KEYBOARD);
+        given(manageProductUseCase.describe(any())).willReturn(KEYBOARD);
+
+        mvc.perform(post("/admin/products")
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"무선 키보드\",\"price\":39000,\"categoryCode\":\"digital\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.categoryCode").value("digital"));
+        mvc.perform(put("/admin/products/" + ID)
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"무선 키보드\"}"))
+                .andExpect(status().isOk());
+
+        verify(manageProductUseCase).register(new RegisterProductCommand("무선 키보드", null, 39_000, "digital", ADMIN));
+        verify(manageProductUseCase).describe(new DescribeProductCommand(ID, "무선 키보드", null, null, ADMIN));
     }
 
     @Test
@@ -141,11 +179,11 @@ class ProductControllerTest {
     void auditLog_adminOnly() throws Exception {
         given(getProductUseCase.auditLog(ID, 0, 20)).willReturn(new ProductAuditPageResult(List.of(
                 new ProductAuditResult("PRICE_CHANGED",
-                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
-                        new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true, "digital"),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true, "digital"),
                         ADMIN, Instant.parse("2026-11-25T00:00:00Z")),
                 new ProductAuditResult("REGISTERED", null,
-                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true, "digital"),
                         ADMIN, Instant.parse("2026-11-24T00:00:00Z"))), false));
 
         mvc.perform(get("/admin/products/" + ID + "/audit-log").with(jwt().jwt(j -> j.subject(USER.toString()))))
