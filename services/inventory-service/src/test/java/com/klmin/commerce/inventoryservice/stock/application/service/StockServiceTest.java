@@ -256,6 +256,91 @@ class StockServiceTest {
         assertThat(stocks.reserved(P1)).isZero();
     }
 
+    // 완료 후 취소 (ADR 0020)
+    @Test
+    void returnStock_afterConfirm_restocksSoldQuantity_once() {
+        stocks.put(P1, 10);
+        stocks.put(P2, 5);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(UUID.randomUUID(), command(orderId, line(P1, 3), line(P2, 2)));
+        service.confirm(UUID.randomUUID(), orderId);
+
+        service.returnStock(UUID.randomUUID(), orderId);
+        service.returnStock(UUID.randomUUID(), orderId);
+
+        assertThat(stocks.available(P1)).isEqualTo(10);
+        assertThat(stocks.reserved(P1)).isZero();
+        assertThat(stocks.available(P2)).isEqualTo(5);
+        assertThat(reservations.store.get(orderId).status()).isEqualTo(ReservationStatus.RETURNED);
+        assertThat(replies.log).containsExactly("reserved:" + orderId, "returned:" + orderId, "returned:" + orderId);
+    }
+
+    // OrderCompleted 보다 ReturnStock 이 먼저 처리되면 예약을 풀고, 뒤늦은 확정은 아무것도 하지 않는다
+    @Test
+    void returnStock_beforeConfirm_releasesReservation_andLateConfirmIsNoop() {
+        stocks.put(P1, 10);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(UUID.randomUUID(), command(orderId, line(P1, 3)));
+
+        service.returnStock(UUID.randomUUID(), orderId);
+        service.confirm(UUID.randomUUID(), orderId);
+
+        assertThat(stocks.available(P1)).isEqualTo(10);
+        assertThat(stocks.reserved(P1)).isZero();
+        assertThat(reservations.store.get(orderId).status()).isEqualTo(ReservationStatus.RETURNED);
+    }
+
+    @Test
+    void returnStock_ofReleasedRejectedOrMissing_changesNothing_butReplies() {
+        stocks.put(P1, 10);
+        UUID released = UUID.randomUUID();
+        UUID rejected = UUID.randomUUID();
+        UUID missing = UUID.randomUUID();
+        service.reserve(UUID.randomUUID(), command(released, line(P1, 3)));
+        service.release(UUID.randomUUID(), released);
+        service.reserve(UUID.randomUUID(), command(rejected, line(P1, 50)));
+
+        service.returnStock(UUID.randomUUID(), released);
+        service.returnStock(UUID.randomUUID(), rejected);
+        service.returnStock(UUID.randomUUID(), missing);
+
+        assertThat(stocks.available(P1)).isEqualTo(10);
+        assertThat(reservations.store.get(released).status()).isEqualTo(ReservationStatus.RELEASED);
+        assertThat(reservations.store.get(rejected).status()).isEqualTo(ReservationStatus.REJECTED);
+        assertThat(reservations.store).doesNotContainKey(missing);
+        assertThat(replies.log).endsWith("returned:" + released, "returned:" + rejected, "returned:" + missing);
+    }
+
+    @Test
+    void returnStock_sameMessageTwice_isProcessedOnce() {
+        stocks.put(P1, 10);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(UUID.randomUUID(), command(orderId, line(P1, 3)));
+        service.confirm(UUID.randomUUID(), orderId);
+        UUID messageId = UUID.randomUUID();
+
+        service.returnStock(messageId, orderId);
+        service.returnStock(messageId, orderId);
+
+        assertThat(stocks.available(P1)).isEqualTo(10);
+        assertThat(replies.log).filteredOn(s -> s.startsWith("returned:")).hasSize(1);
+    }
+
+    // 반환된 주문에 늦게 온 ReserveStock 은 재고를 잡지 않고 실패로 응답한다
+    @Test
+    void lateReserve_afterReturn_isFailure() {
+        stocks.put(P1, 10);
+        UUID orderId = UUID.randomUUID();
+        service.reserve(UUID.randomUUID(), command(orderId, line(P1, 3)));
+        service.confirm(UUID.randomUUID(), orderId);
+        service.returnStock(UUID.randomUUID(), orderId);
+
+        service.reserve(UUID.randomUUID(), command(orderId, line(P1, 3)));
+
+        assertThat(stocks.available(P1)).isEqualTo(10);
+        assertThat(replies.log).last().isEqualTo("failed:" + orderId + ":reservation already released");
+    }
+
     @Test
     void confirm_withoutReservation_isIgnored() {
         service.confirm(UUID.randomUUID(), UUID.randomUUID());
@@ -280,11 +365,11 @@ class StockServiceTest {
             store.put(ProductId.of(productId), Stock.restore(ProductId.of(productId), available, 0, NOW));
         }
 
-        int available(UUID productId) {
+        long available(UUID productId) {
             return store.get(ProductId.of(productId)).available();
         }
 
-        int reserved(UUID productId) {
+        long reserved(UUID productId) {
             return store.get(ProductId.of(productId)).reserved();
         }
 
@@ -367,6 +452,11 @@ class StockServiceTest {
         @Override
         public void stockReleased(UUID orderId) {
             log.add("released:" + orderId);
+        }
+
+        @Override
+        public void stockReturned(UUID orderId) {
+            log.add("returned:" + orderId);
         }
     }
 }

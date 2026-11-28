@@ -10,4 +10,6 @@ public interface SendStockReplyPort {
     void stockReservationFailed(UUID orderId, String reason);
 
     void stockReleased(UUID orderId);
+
+    void stockReturned(UUID orderId);
 }

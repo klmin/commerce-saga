@@ -53,7 +53,7 @@
   - `CONFIRMED`: 확정분을 가용으로 다시 들인다(available += 수량). 새 상태 `RETURNED`
   - `RESERVED`: 아직 `OrderCompleted` 를 처리하지 않은 경우(이벤트가 늦음). 예약을 풀어 가용으로 돌리고(release 와 같음) `RETURNED`. 뒤늦게 온 `OrderCompleted` 는 `RESERVED` 가 아니므로 아무것도 하지 않는다(지금 `confirm` 규칙 그대로)
   - `RETURNED`·`RELEASED`·기록 없음: 되돌릴 것 없음. 그래도 항상 `StockReturned` 로 응답한다(보상 커맨드 규칙)
-- 재고 반환은 관리자 입고(ADR 0019)와 같은 행 락 안에서 더한다. 예약분 합계 상한(ADR 0019)을 넘지 않는지 함께 본다
+- 재고 반환은 관리자 입고(ADR 0019)와 같은 행 락 안에서 더한다. 반환은 보상이라 거절하지 않는다. 반환되는 판매 확정분은 관리자 입고 상한(가용 + 예약)에 세지 않는 수량이라 반환이 쌓이면 int 를 넘을 수 있으므로 재고 수량을 bigint 로 넓힌다(inventory V7)
 
 ### 4. 주문 상태와 이벤트
 

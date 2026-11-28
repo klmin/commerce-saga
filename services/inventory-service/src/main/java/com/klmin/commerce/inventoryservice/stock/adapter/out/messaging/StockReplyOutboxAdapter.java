@@ -2,6 +2,7 @@ package com.klmin.commerce.inventoryservice.stock.adapter.out.messaging;
 
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.inventory.StockReleased;
+import com.klmin.commerce.contract.inventory.StockReturned;
 import com.klmin.commerce.contract.inventory.StockReservationFailed;
 import com.klmin.commerce.contract.inventory.StockReserved;
 import com.klmin.commerce.inventoryservice.stock.application.port.out.SendStockReplyPort;
@@ -36,5 +37,11 @@ class StockReplyOutboxAdapter implements SendStockReplyPort {
     public void stockReleased(UUID orderId) {
         outboxWriter.append(Topics.INVENTORY_REPLY, orderId.toString(), StockReleased.TYPE,
                 new StockReleased(orderId));
+    }
+
+    @Override
+    public void stockReturned(UUID orderId) {
+        outboxWriter.append(Topics.INVENTORY_REPLY, orderId.toString(), StockReturned.TYPE,
+                new StockReturned(orderId));
     }
 }
