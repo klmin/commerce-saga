@@ -58,7 +58,7 @@ function OrderList() {
                   {o.pointAmount > 0 && ` (포인트 ${o.pointAmount.toLocaleString("ko-KR")}P)`}
                 </span>
               </div>
-              <OrderStatusBadge status={o.status} />
+              <OrderStatusBadge status={o.status} cancelRequestedAt={o.cancelRequestedAt} />
             </Link>
           </li>
         ))}
