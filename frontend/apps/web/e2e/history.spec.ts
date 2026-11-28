@@ -17,7 +17,7 @@ test("가입 축하 지급과 주문 사용이 포인트 내역에, 결제가 �
   await signUpFresh(page);
 
   await page.goto("/points");
-  const history = page.getByRole("listitem");
+  const history = page.getByRole("main").getByRole("listitem");
   await expect(history).toHaveCount(1);
   await expect(history.first()).toContainText("가입 축하 포인트");
   await expect(history.first()).toContainText("+1,000P");
@@ -36,18 +36,21 @@ test("가입 축하 지급과 주문 사용이 포인트 내역에, 결제가 �
   const orderUrl = page.url();
 
   await page.goto("/payments");
-  await expect(page.getByRole("listitem")).toHaveCount(1);
-  await expect(page.getByRole("listitem").first()).toContainText("24,700원");
-  await expect(page.getByRole("listitem").first()).toContainText("결제 완료");
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("listitem").first()).toContainText("24,700원");
+  await expect(page.getByRole("main").getByRole("listitem").first()).toContainText("결제 완료");
 
   // 알림은 order.events 를 받아 비동기로 생긴다
   await expect(async () => {
     await page.goto("/notifications");
-    await expect(page.getByRole("listitem").first()).toContainText("주문이 완료되었습니다", {
-      timeout: 1_000,
-    });
+    await expect(page.getByRole("main").getByRole("listitem").first()).toContainText(
+      "주문이 완료되었습니다",
+      {
+        timeout: 1_000,
+      },
+    );
   }).toPass({ timeout: 20_000 });
-  await page.getByRole("listitem").first().getByRole("link").click();
+  await page.getByRole("main").getByRole("listitem").first().getByRole("link").click();
   await expect(page).toHaveURL(orderUrl);
 });
 
@@ -60,7 +63,7 @@ test("포인트가 모자란 주문은 내역에 '사용 안 됨'으로 남고 �
 
   await page.goto("/points");
   await expect(page.getByText("1,000P", { exact: true })).toBeVisible();
-  const first = page.getByRole("listitem").first();
+  const first = page.getByRole("main").getByRole("listitem").first();
   await expect(first).toContainText("사용 안 됨");
   await expect(first).toContainText("0P");
 
@@ -69,8 +72,11 @@ test("포인트가 모자란 주문은 내역에 '사용 안 됨'으로 남고 �
 
   await expect(async () => {
     await page.goto("/notifications");
-    await expect(page.getByRole("listitem").first()).toContainText("주문이 취소되었습니다", {
-      timeout: 1_000,
-    });
+    await expect(page.getByRole("main").getByRole("listitem").first()).toContainText(
+      "주문이 취소되었습니다",
+      {
+        timeout: 1_000,
+      },
+    );
   }).toPass({ timeout: 20_000 });
 });

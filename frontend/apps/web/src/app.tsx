@@ -16,12 +16,20 @@ export const queryClient = createQueryClient();
 /** 모든 화면은 로그인이 필요하다(지금 사용자를 /api/me 로 확인, 없으면 로그인 시작) */
 function Layout() {
   return (
-    <>
+    <div className="flex min-h-svh flex-col">
       <SiteHeader />
-      <SessionGate>
-        <Outlet />
-      </SessionGate>
-    </>
+      <div className="flex flex-1 flex-col">
+        <SessionGate>
+          <Outlet />
+        </SessionGate>
+      </div>
+      <footer className="border-t">
+        <p className="mx-auto w-full max-w-6xl px-4 py-6 text-xs text-muted-foreground">
+          commerce-saga · 주문·재고·포인트·결제를 Saga 로 맞추는 포트폴리오 데모입니다. 실제 결제는
+          일어나지 않습니다.
+        </p>
+      </footer>
+    </div>
   );
 }
 

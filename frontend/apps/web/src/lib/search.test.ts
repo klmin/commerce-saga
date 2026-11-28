@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseSearch, searchQuery } from "./search";
+import { categoryUrl, headerSearchUrl, parseSearch, searchQuery } from "./search";
 
 describe("parseSearch", () => {
   it("조건이 없으면 null (전체 목록)", () => {
@@ -46,5 +46,34 @@ describe("searchQuery", () => {
     expect(searchQuery({ minPrice: 0, maxPrice: 100, sort: "newest" }, 10)).toBe(
       "minPrice=0&maxPrice=100&sort=newest&size=10",
     );
+  });
+});
+
+describe("카테고리 (ADR 0021)", () => {
+  it("코드 모양만 받고, 카테고리만 골라도 검색으로 본다", () => {
+    expect(parseSearch({ category: "digital" })).toEqual({
+      category: "digital",
+      sort: "relevance",
+    });
+    expect(parseSearch({ category: "../x" })).toBeNull();
+    expect(parseSearch({ category: "Digital" })).toBeNull();
+    expect(searchQuery({ q: "a", category: "kitchen", sort: "relevance" }, 10)).toBe(
+      "q=a&category=kitchen&sort=relevance&size=10",
+    );
+  });
+
+  it("헤더 검색은 검색어를 새로 정하고 카테고리는 유지, 가격·정렬은 비운다", () => {
+    const current = new URLSearchParams("q=old&category=digital&minPrice=1&sort=newest");
+    expect(headerSearchUrl(" 마우 ", current)).toBe("/?q=%EB%A7%88%EC%9A%B0&category=digital");
+    expect(headerSearchUrl("  ", current)).toBe("/?category=digital");
+    expect(headerSearchUrl("", new URLSearchParams())).toBe("/");
+    expect(headerSearchUrl("a", new URLSearchParams("category=../x"))).toBe("/?q=a");
+  });
+
+  it("카테고리 메뉴는 검색어를 유지하고 가격·정렬은 비운다, 전체는 카테고리만 뺀다", () => {
+    const current = new URLSearchParams("q=a&category=digital&maxPrice=9&sort=newest");
+    expect(categoryUrl("kitchen", current)).toBe("/?q=a&category=kitchen");
+    expect(categoryUrl(undefined, current)).toBe("/?q=a");
+    expect(categoryUrl(undefined, new URLSearchParams())).toBe("/");
   });
 });

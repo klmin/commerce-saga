@@ -49,10 +49,10 @@ test("관리자가 결제 거절을 주입하면 사용자 주문이 결제 단�
     await expect(user.getByText("STOCK_RELEASED")).toBeVisible();
 
     await user.goto("/payments");
-    await expect(user.getByRole("listitem").first()).toContainText("결제 거절");
+    await expect(user.getByRole("main").getByRole("listitem").first()).toContainText("결제 거절");
     await user.goto("/points");
     await expect(user.getByText("1,000P", { exact: true })).toBeVisible();
-    await expect(user.getByRole("listitem").first()).toContainText("환불됨");
+    await expect(user.getByRole("main").getByRole("listitem").first()).toContainText("환불됨");
     await context.close();
   } finally {
     await setFault(page, /정상 승인/);

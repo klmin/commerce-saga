@@ -1,9 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import type { ReactNode } from "react";
 
-/** 화면 한 장의 틀 (가운데 정렬된 본문) */
-export function Page({ children }: { children: ReactNode }) {
-  return <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">{children}</main>;
+/**
+ * 화면 한 장의 틀 (가운데 정렬된 본문). wide 면 목록·카드 그리드용으로 넓게(헤더와 같은 폭).
+ * 앱 틀(헤더 등)이 main 을 따로 두지 않으므로 화면마다 main 은 이것 하나
+ */
+export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+  return (
+    <main
+      className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 ${wide ? "max-w-6xl" : "max-w-3xl"}`}
+    >
+      {children}
+    </main>
+  );
 }
 
 /** 제목 있는 카드. action 은 제목 오른쪽 */

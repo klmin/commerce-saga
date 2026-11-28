@@ -14,6 +14,15 @@ const product = z.object({
 
 const productList = z.object({ items: z.array(product) });
 
+const category = z.object({ code: z.string(), name: z.string() });
+
+export type Category = z.infer<typeof category>;
+
+/** 카테고리 고정 목록 (정해 둔 순서, ADR 0021). 공개 GET, 바뀌지 않아 한 번 읽고 둔다 */
+export async function listCategories(): Promise<Category[]> {
+  return z.array(category).parse(await api<unknown>("/api/products/categories"));
+}
+
 /** 화면에 한 번에 보여 줄 상품 수 (product-service 한 쪽 최대) */
 const LIST_SIZE = 100;
 /** 여러 건 조회 한 번의 최대 id 수 (product-service GetProductUseCase.MAX_IDS) */
