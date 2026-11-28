@@ -56,6 +56,20 @@ class ProductCdcListenerTest {
         assertThat(meters.get("search_indexed_total").tag("result", "applied").counter().count()).isEqualTo(1);
     }
 
+    /** 9-3 에 더한 열(ADR 0021). 없는 옛 메시지는 위 시험처럼 null */
+    @Test
+    void categoryAndImageColumns_areCarried_andMustBeText() {
+        String row = ROW.replace("}", ",\"category_code\":\"digital\",\"image_key\":\"products/" + K4 + "/seed.svg\"}");
+        listener.onMessage(record(K4, row, "5", null));
+        listener.onMessage(record(K4, ROW.replace("}", ",\"category_code\":\"digital\",\"image_key\":null}"), "6", null));
+
+        assertThat(useCase.indexed).extracting(IndexProductCommand::category, IndexProductCommand::imageKey)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("digital", "products/" + K4 + "/seed.svg"),
+                        org.assertj.core.groups.Tuple.tuple("digital", null));
+        assertThatThrownBy(() -> listener.onMessage(record(K4, ROW.replace("}", ",\"category_code\":3}"), "7", null)))
+                .isInstanceOf(NonRetryableMessageException.class).hasMessageContaining("category_code");
+    }
+
     @Test
     void staleVersion_countsAsSkipped() {
         useCase.result = false;

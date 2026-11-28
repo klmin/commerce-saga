@@ -65,4 +65,25 @@ class SearchCriteriaTest {
                 .isInstanceOf(DomainValidationException.class);
         assertThat(new SearchableProduct(ID, "a", null, 1, true, java.time.Instant.EPOCH).description()).isEmpty();
     }
+
+    /** 이미지 읽기 경로는 이 상품의 key 일 때만 (ADR 0021) */
+    @Test
+    void imagePath_onlyForOwnKey() {
+        java.time.Instant t = java.time.Instant.EPOCH;
+        assertThat(new SearchableProduct(ID, "a", "", 1, true, t, "digital", "products/" + ID + "/seed.svg").imagePath())
+                .isEqualTo("/products/" + ID + "/images/seed.svg");
+        assertThat(new SearchableProduct(ID, "a", "", 1, true, t, "digital", null).imagePath()).isNull();
+        assertThat(new SearchableProduct(ID, "a", "", 1, true, t, null,
+                "products/01900000-0000-7000-8000-000000000002/seed.svg").imagePath()).isNull();
+        assertThat(new SearchableProduct(ID, "a", "", 1, true, t, null, "products/" + ID + "/../x.png").imagePath()).isNull();
+        assertThat(new SearchableProduct(ID, "a", "", 1, true, t, " ", " ").category()).isNull();
+    }
+
+    @Test
+    void categoryFilterFormat() {
+        assertThat(new SearchCriteria(null, null, null, true, null, 0, 20, " kitchen ").category()).isEqualTo("kitchen");
+        assertThat(new SearchCriteria(null, null, null, true, null, 0, 20, "").category()).isNull();
+        assertThatThrownBy(() -> new SearchCriteria(null, null, null, true, null, 0, 20, "Kitchen*"))
+                .isInstanceOf(DomainValidationException.class);
+    }
 }

@@ -7,8 +7,9 @@
 | | |
 |---|---|
 | 커넥터 | `product-cdc` (compose `infra/connect/product-cdc.json`, k8s `KafkaConnector product-cdc`). `product_svc` 계정으로 `product_db` 의 WAL 을 읽는다(replication 권한, slot `product_cdc_slot`, publication `product_cdc_pub`) |
-| 대상 | `public.products` 의 열 6개만(`column.include.list`): `id`, `name`, `description`, `price`, `on_sale`, `updated_at` |
-| 처음 적재 | `snapshot.mode=initial`: 커넥터를 처음 등록하면 기존 행(시드 1~5 포함)을 먼저 보낸다 |
+| 대상 | `public.products` 의 열 8개만(`column.include.list`): `id`, `name`, `description`, `price`, `on_sale`, `updated_at`, `category_code`·`image_key`(후속 9-3 에 추가, ADR 0021) |
+| 처음 적재 | `snapshot.mode=initial`: 커넥터를 처음 등록하면 기존 행(시드 상품 포함)을 먼저 보낸다 |
+| 열을 더한 뒤 | 이미 등록된 커넥터에 열을 더하면 그 뒤의 변경부터 새 열이 실린다. 기존 행은 `scripts/resend-product-cdc.sh` 로 한 번 다시 보낸다(값이 그대로인 UPDATE → 새 `__lsn` 으로 변경 후 행). 처음 띄우는 환경은 스냅샷이 새 열까지 보내므로 필요 없다 |
 | relay 모드 | outbox relay 가 스케줄러 모드여도 이 커넥터는 등록한다(검색 읽기 모델은 CDC 로만 만든다) |
 
 ## 토픽 계약 `product.cdc.products` (product-service 소유)
@@ -18,7 +19,7 @@
 | 부분 | 내용 |
 |---|---|
 | 키 | 상품 id (UUID 문자열, 예: `01900000-0000-7000-8000-000000000004`). 상품 단위 순서 (AGENTS.md 키 규칙의 예외) |
-| 값 | 변경 **후** 행, 평평한 JSON (`ExtractNewRecordState`). 예: `{"id":"01900000-0000-7000-8000-000000000004","name":"…","description":"…","price":12100,"on_sale":true,"updated_at":"2026-11-25T05:00:00.123456Z"}` |
+| 값 | 변경 **후** 행, 평평한 JSON (`ExtractNewRecordState`). 예: `{"id":"01900000-0000-7000-8000-000000000004","name":"…","description":"…","price":12100,"on_sale":true,"updated_at":"2026-11-25T05:00:00.123456Z","category_code":"digital","image_key":"products/01900000-0000-7000-8000-000000000004/seed.svg"}`. `category_code`·`image_key` 는 9-3 전 메시지에는 없다(소비자는 없으면 null) |
 | 헤더 `__lsn` | 원본 WAL 위치. 같은 상품의 뒤 변경일수록 크다 → 검색 쪽이 외부 버전으로 쓴다(재전달·순서 뒤바뀜 무시) |
 | 헤더 `__source_ts_ms` | 원본 커밋 시각(ms). 색인 지연 지표에 쓴다 |
 | 삭제 | 값이 null 인 tombstone. 지금은 상품을 지우지 않는다(판매 중지 = `on_sale:false` 변경) |
@@ -40,7 +41,7 @@ k8s(kind): `KAFKA_EXEC="kubectl -n commerce exec -i commerce-dual-role-0 --" KAF
 | | 기대 |
 |---|---|
 | 16a 처음 적재 | 시드 상품 1(무선 키보드)이 키 `01900000-0000-7000-8000-000000000001` 로 토픽에 있다 |
-| 16b 가격 변경 | 관리자가 상품 4(한정판 키캡)의 가격을 바꾸면 키 `01900000-0000-7000-8000-000000000004`, 변경 후 행이 나간다. 열 6개만(`created_at` 없음), Debezium 봉투(`before`·`after`·`op`) 없음, 헤더 `__lsn`·`__source_ts_ms` |
+| 16b 가격 변경 | 관리자가 상품 4(한정판 키캡)의 가격을 바꾸면 키 `01900000-0000-7000-8000-000000000004`, 변경 후 행이 나간다. 열 8개만(`created_at` 없음), Debezium 봉투(`before`·`after`·`op`) 없음, 헤더 `__lsn`·`__source_ts_ms` |
 | 16c 순서 | 다음 변경의 `__lsn` 이 더 크다 |
 
 ## 결과
@@ -49,13 +50,13 @@ k8s(kind): `KAFKA_EXEC="kubectl -n commerce exec -i commerce-dual-role-0 --" KAF
 == 16a. 처음 적재: 시드 상품 1 이 키 01900000-0000-7000-8000-000000000001 로 있다
   ok  상품 1 스냅샷 있음
 == 16b. 가격 변경 → 변경 후 행이 키 = 상품 id 로
-  ok  키 01900000-0000-7000-8000-000000000004, 가격 12100, 열 6개만, 헤더 __lsn=57798856
+  ok  키 01900000-0000-7000-8000-000000000004, 가격 12100, 열 8개만, 헤더 __lsn=57798856
 == 16c. 다음 변경은 __lsn 이 더 크다
   ok  __lsn 57798856 → 57800016
 시나리오 16 통과
 ```
 
-(CI e2e scheduler 모드 로그, PR #82. `__lsn` 값은 실행마다 다르다)
+(CI e2e scheduler 모드 로그, PR #82, 9-3 에서 열 8개로. `__lsn` 값은 실행마다 다르다)
 
 ## 한계
 

@@ -2,6 +2,8 @@ package com.klmin.commerce.searchservice.product.domain;
 
 import com.klmin.commerce.searchservice.common.error.DomainValidationException;
 
+import java.util.regex.Pattern;
+
 /**
  * 상품 검색 조건.
  *
@@ -12,14 +14,16 @@ import com.klmin.commerce.searchservice.common.error.DomainValidationException;
  * @param sort       정렬
  * @param page       0부터
  * @param size       1~{@value #MAX_SIZE}. 앞에서부터 {@value #MAX_WINDOW}건까지만 넘겨 볼 수 있다
+ * @param category   카테고리 코드 (없으면 전체, ADR 0021). 없는 코드면 결과가 비어 있다
  */
 public record SearchCriteria(String keyword, Long minPrice, Long maxPrice, boolean onSaleOnly, SearchSort sort,
-                             int page, int size) {
+                             int page, int size, String category) {
 
     public static final int MAX_KEYWORD_LENGTH = 100;
     public static final int MAX_SIZE = 100;
     /** Elasticsearch 기본 max_result_window */
     public static final int MAX_WINDOW = 10_000;
+    private static final Pattern CATEGORY = Pattern.compile("[a-z][a-z0-9-]{0,29}");
 
     public SearchCriteria {
         keyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
@@ -45,6 +49,15 @@ public record SearchCriteria(String keyword, Long minPrice, Long maxPrice, boole
         if (((long) page + 1) * size > MAX_WINDOW) {
             throw new DomainValidationException("앞에서부터 " + MAX_WINDOW + "건까지만 볼 수 있습니다. 검색어를 좁혀 주세요");
         }
+        category = category == null || category.isBlank() ? null : category.trim();
+        if (category != null && !CATEGORY.matcher(category).matches()) {
+            throw new DomainValidationException("카테고리 코드 형식이 아닙니다");
+        }
+    }
+
+    public SearchCriteria(String keyword, Long minPrice, Long maxPrice, boolean onSaleOnly, SearchSort sort,
+                          int page, int size) {
+        this(keyword, minPrice, maxPrice, onSaleOnly, sort, page, size, null);
     }
 
     /** 위 검사로 {@value #MAX_WINDOW} 이하라 int 에 들어간다 */

@@ -10,7 +10,7 @@
 # 확인하는 것
 #   16a. 처음 적재(스냅샷): 시드 상품 1(무선 키보드)의 행이 키 = 그 상품 id(UUID 문자열)로 있다
 #   16b. 관리자가 상품 가격을 바꾸면 그 변경이 키 = 상품 id, 변경 후 행(평평한 JSON)으로 나간다
-#        검색에 필요한 열만(id, name, description, price, on_sale, updated_at), 헤더에 원본 __lsn·__source_ts_ms
+#        검색에 필요한 열만(id, name, description, price, on_sale, updated_at, category_code, image_key), 헤더에 원본 __lsn·__source_ts_ms
 #   16c. 같은 상품의 다음 변경은 __lsn 이 더 크다 (검색 쪽 외부 버전으로 쓴다)
 # 끝나면 가격을 원래대로 돌려놓는다
 set -euo pipefail
@@ -72,7 +72,7 @@ first=$(( original + 100 ))
 set_price "$first"
 r1=$(wait_record "$PRODUCT_ID" "$first") || fail "${TIMEOUT_SECONDS}초 안에 가격 $first 변경이 $TOPIC 에 오지 않음"
 value=$(cut -f3 <<< "$r1")
-for col in id name description price on_sale updated_at; do
+for col in id name description price on_sale updated_at category_code image_key; do
   grep -q "\"$col\":" <<< "$value" || fail "값에 $col 이 없음: $value"
 done
 grep -q '"created_at"' <<< "$value" && fail "포함하지 않은 열(created_at)이 나감: $value"
@@ -80,7 +80,7 @@ grep -q '"before"\|"after"\|"op"' <<< "$value" && fail "변경 후 행이 아니
 grep -q '__source_ts_ms:[0-9]' <<< "$r1" || fail "헤더에 __source_ts_ms 가 없음: $r1"
 lsn1=$(lsn_of <<< "$r1")
 [ -n "$lsn1" ] || fail "헤더에 __lsn 이 없음: $r1"
-ok "키 $PRODUCT_ID, 가격 $first, 열 6개만, 헤더 __lsn=$lsn1"
+ok "키 $PRODUCT_ID, 가격 $first, 열 8개만, 헤더 __lsn=$lsn1"
 
 echo "== 16c. 다음 변경은 __lsn 이 더 크다"
 second=$(( original + 200 ))
