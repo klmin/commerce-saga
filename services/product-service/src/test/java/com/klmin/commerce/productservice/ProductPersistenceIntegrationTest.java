@@ -54,6 +54,7 @@ class ProductPersistenceIntegrationTest {
 
         assertThat(seeded).extracting(ProductResult::id).containsExactly(seed(1), seed(2), seed(3), seed(4), seed(5));
         assertThat(seeded.getFirst().price()).isEqualTo(39_000);
+        assertThat(seeded).extracting(ProductResult::categoryCode).containsOnly("digital");
     }
 
     @Test
@@ -110,7 +111,7 @@ class ProductPersistenceIntegrationTest {
                         org.assertj.core.groups.Tuple.tuple("PRICE_CHANGED", admin(2)),
                         org.assertj.core.groups.Tuple.tuple("DESCRIBED", admin(1)));
         ProductAuditResult price = page.items().get(1);
-        assertThat(price.before()).isEqualTo(new ProductAuditResult.Snapshot("이력 상품 2", "설명", 7_000L, true));
+        assertThat(price.before()).isEqualTo(new ProductAuditResult.Snapshot("이력 상품 2", "설명", 7_000L, true, "etc"));
         assertThat(price.after().price()).isEqualTo(8_000L);
 
         var last = query.auditLog(created.id(), 1, 3);
@@ -120,6 +121,23 @@ class ProductPersistenceIntegrationTest {
             assertThat(r.before()).isNull();
             assertThat(r.after().name()).isEqualTo("이력 상품");
         });
+    }
+
+    // 카테고리 고정 목록(V4 시드)과 상품의 카테고리·관리 이력 (ADR 0021)
+    @Test
+    void categories_seeded_andProductCategoryIsStoredWithAudit() {
+        assertThat(query.categories()).extracting(c -> c.code())
+                .startsWith("digital", "appliance").endsWith("etc").hasSize(8);
+
+        ProductResult created = manage.register(new RegisterProductCommand("주방 상품", "", 3_000, "kitchen", ADMIN));
+        manage.describe(new DescribeProductCommand(created.id(), "주방 상품", "", "living", admin(1)));
+
+        assertThat(query.get(created.id()).categoryCode()).isEqualTo("living");
+        var described = query.auditLog(created.id(), 0, 1).items().getFirst();
+        assertThat(described.before().categoryCode()).isEqualTo("kitchen");
+        assertThat(described.after().categoryCode()).isEqualTo("living");
+        assertThat(manage.register(new RegisterProductCommand("기본 상품", "", 1_000, ADMIN)).categoryCode())
+                .isEqualTo("etc");
     }
 
     @Test

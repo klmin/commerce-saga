@@ -15,14 +15,15 @@ class ProductTest {
     private static final Instant T1 = T0.plusSeconds(60);
     private static final UserId ADMIN = UserId.of(UUID.fromString("01900000-0000-7000-8001-000000000100"));
     private static final ProductId ID = ProductId.of(UUID.fromString("01900000-0000-7000-8000-000000000001"));
+    private static final CategoryCode DIGITAL = CategoryCode.of("digital");
 
     private static Product product() {
-        return Product.restore(ID, "키보드", "", Money.of(39_000), true, T0, T0);
+        return Product.restore(ID, "키보드", "", Money.of(39_000), true, DIGITAL, T0, T0);
     }
 
     @Test
     void register_trimsNameAndDefaultsDescription() {
-        Product p = Product.register(ID, "  키보드 ", null, Money.of(1_000), T0);
+        Product p = Product.register(ID, "  키보드 ", null, Money.of(1_000), DIGITAL, T0);
 
         assertThat(p.id()).isEqualTo(ID);
         assertThat(p.name()).isEqualTo("키보드");
@@ -32,12 +33,12 @@ class ProductTest {
 
     @Test
     void register_rejectsZeroPriceAndBlankName() {
-        assertThatThrownBy(() -> Product.register(ID, "a", "", Money.of(0), T0))
+        assertThatThrownBy(() -> Product.register(ID, "a", "", Money.of(0), DIGITAL, T0))
                 .isInstanceOf(DomainValidationException.class);
-        assertThatThrownBy(() -> Product.register(ID, " ", "", Money.of(1), T0))
+        assertThatThrownBy(() -> Product.register(ID, " ", "", Money.of(1), DIGITAL, T0))
                 .isInstanceOf(DomainValidationException.class);
         assertThatThrownBy(() -> Product.register(ID, "a".repeat(Product.MAX_NAME_LENGTH + 1), "",
-                Money.of(1), T0))
+                Money.of(1), DIGITAL, T0))
                 .isInstanceOf(DomainValidationException.class);
     }
 
@@ -83,5 +84,27 @@ class ProductTest {
 
         assertThat(p.onSale()).isFalse();
         assertThat(p.updatedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    void describe_changesCategory_andNullKeepsIt() {
+        Product p = product();
+
+        p.describe("키보드", "", CategoryCode.of("living"), T1);
+        assertThat(p.category()).isEqualTo(CategoryCode.of("living"));
+        assertThat(p.updatedAt()).isEqualTo(T1);
+        assertThat(p.snapshot().category()).isEqualTo(CategoryCode.of("living"));
+
+        p.describe("키보드", "", null, T1.plusSeconds(1));
+        assertThat(p.category()).as("null 이면 그대로").isEqualTo(CategoryCode.of("living"));
+        assertThat(p.updatedAt()).as("바뀐 것이 없으면 시각도 그대로").isEqualTo(T1);
+    }
+
+    @Test
+    void categoryCode_rejectsBadFormat() {
+        assertThat(CategoryCode.of("sports-2").value()).isEqualTo("sports-2");
+        for (String bad : new String[] {null, "", "Digital", "1abc", "a b", "a".repeat(CategoryCode.MAX_LENGTH + 1)}) {
+            assertThatThrownBy(() -> CategoryCode.of(bad)).as(bad).isInstanceOf(DomainValidationException.class);
+        }
     }
 }

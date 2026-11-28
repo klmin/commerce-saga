@@ -54,7 +54,8 @@ class AdminProductController {
     ResponseEntity<ProductResponse> register(@CurrentUserId UUID adminId,
                                              @Valid @RequestBody ProductRequests.Register request) {
         ProductResult result = manageProductUseCase.register(
-                new RegisterProductCommand(request.name(), request.description(), request.price(), adminId));
+                new RegisterProductCommand(request.name(), request.description(), request.price(),
+                        request.categoryCode(), adminId));
         return ResponseEntity.created(URI.create("/products/" + result.id())).body(ProductResponse.from(result));
     }
 
@@ -62,7 +63,8 @@ class AdminProductController {
     ProductResponse describe(@CurrentUserId UUID adminId, @PathVariable UUID productId,
                              @Valid @RequestBody ProductRequests.Describe request) {
         return ProductResponse.from(manageProductUseCase.describe(
-                new DescribeProductCommand(productId, request.name(), request.description(), adminId)));
+                new DescribeProductCommand(productId, request.name(), request.description(),
+                        request.categoryCode(), adminId)));
     }
 
     @PutMapping("/{productId}/price")
