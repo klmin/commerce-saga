@@ -4,10 +4,12 @@ import com.klmin.commerce.contract.MessageHeaders;
 import com.klmin.commerce.contract.Topics;
 import com.klmin.commerce.contract.inventory.ReleaseStock;
 import com.klmin.commerce.contract.inventory.ReserveStock;
+import com.klmin.commerce.contract.inventory.ReturnStock;
 import com.klmin.commerce.inventoryservice.common.error.NonRetryableMessageException;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReleaseStockUseCase;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockCommand;
 import com.klmin.commerce.inventoryservice.stock.application.port.in.ReserveStockUseCase;
+import com.klmin.commerce.inventoryservice.stock.application.port.in.ReturnStockUseCase;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -28,7 +30,9 @@ class InventoryCommandListenerTest {
 
     private final ReserveStockUseCase reserve = mock(ReserveStockUseCase.class);
     private final ReleaseStockUseCase release = mock(ReleaseStockUseCase.class);
-    private final InventoryCommandListener listener = new InventoryCommandListener(reserve, release, new JsonMapper());
+    private final ReturnStockUseCase returnStock = mock(ReturnStockUseCase.class);
+    private final InventoryCommandListener listener =
+            new InventoryCommandListener(reserve, release, returnStock, new JsonMapper());
 
     static ConsumerRecord<String, String> record(String topic, String type, String value) {
         ConsumerRecord<String, String> record = new ConsumerRecord<>(topic, 0, 0L, "k", value);
@@ -60,6 +64,15 @@ class InventoryCommandListenerTest {
         listener.onMessage(record(ReleaseStock.TYPE, "{\"orderId\":\"" + orderId + "\"}"));
 
         verify(release).release(MESSAGE_ID, orderId);
+    }
+
+    @Test
+    void returnStock_callsUseCase() {
+        UUID orderId = UUID.randomUUID();
+
+        listener.onMessage(record(ReturnStock.TYPE, "{\"orderId\":\"" + orderId + "\"}"));
+
+        verify(returnStock).returnStock(MESSAGE_ID, orderId);
     }
 
     @Test

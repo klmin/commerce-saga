@@ -138,7 +138,7 @@ class StockAdjustmentServiceTest {
         assertThat(first.items()).extracting(AdjustStockResult.Adjustment::delta).containsExactly(5, -3);
         assertThat(first.hasNext()).isTrue();
         assertThat(service.adjustments(P1, 1, 2)).satisfies(second -> {
-            assertThat(second.items()).extracting(AdjustStockResult.Adjustment::availableAfter).containsExactly(10);
+            assertThat(second.items()).extracting(AdjustStockResult.Adjustment::availableAfter).containsExactly(10L);
             assertThat(second.hasNext()).isFalse();
         });
         assertThat(service.adjustments(UUID.randomUUID(), 0, 20).items()).isEmpty();

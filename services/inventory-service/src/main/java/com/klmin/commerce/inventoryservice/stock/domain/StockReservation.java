@@ -11,8 +11,9 @@ import java.util.UUID;
  *   <li>같은 주문의 ReserveStock 이 다시 오면 이 기록으로 응답하고 재고는 다시 잡지 않는다</li>
  *   <li>ReleaseStock(보상)은 이 기록의 항목만큼 되돌린다. RESERVED 에서만 실제로 되돌린다</li>
  *   <li>OrderCompleted 이벤트를 받으면 CONFIRMED 로 바꾸고 예약 수량을 판매로 확정한다</li>
+ *   <li>ReturnStock(완료 후 취소)은 확정분을 다시 들이거나, 확정 전이면 예약을 푼다 (ADR 0020)</li>
  * </ul>
- * 전이: RESERVED -> RELEASED | CONFIRMED. REJECTED, RELEASED, CONFIRMED 는 끝 상태.
+ * 전이: RESERVED -> RELEASED | CONFIRMED | RETURNED, CONFIRMED -> RETURNED. REJECTED, RELEASED, RETURNED 는 끝 상태.
  */
 public final class StockReservation {
 
@@ -80,6 +81,33 @@ public final class StockReservation {
         status = ReservationStatus.CONFIRMED;
         updatedAt = now;
         return true;
+    }
+
+    /** {@link #returnStock} 결과: 재고를 어떻게 되돌려야 하는가 */
+    public enum ReturnEffect {
+        /** 판매 확정된 수량을 가용으로 다시 들인다 (available += 수량) */
+        RESTOCK,
+        /** 아직 확정 전(OrderCompleted 처리 전)이라 예약을 푼다 (reserved -> available, release 와 같음) */
+        RELEASE,
+        /** 되돌릴 것이 없다 (이미 반환·해제됐거나 잡지 않았다) */
+        NOTHING
+    }
+
+    /**
+     * 완료 후 취소 (ADR 0020). CONFIRMED·RESERVED 에서만 RETURNED 로 바꾸고 되돌릴 방법을 돌려준다.
+     * RETURNED 가 되면 뒤늦게 온 OrderCompleted 는 {@link #confirm} 에서 아무것도 하지 않는다.
+     */
+    public ReturnEffect returnStock(Instant now) {
+        ReturnEffect effect = switch (status) {
+            case CONFIRMED -> ReturnEffect.RESTOCK;
+            case RESERVED -> ReturnEffect.RELEASE;
+            case REJECTED, RELEASED, RETURNED -> ReturnEffect.NOTHING;
+        };
+        if (effect != ReturnEffect.NOTHING) {
+            status = ReservationStatus.RETURNED;
+            updatedAt = now;
+        }
+        return effect;
     }
 
     private static String truncate(String reason) {
