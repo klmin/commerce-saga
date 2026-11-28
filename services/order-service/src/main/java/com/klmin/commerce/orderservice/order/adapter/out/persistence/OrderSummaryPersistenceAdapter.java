@@ -7,11 +7,13 @@ import org.springframework.stereotype.Component;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -22,7 +24,7 @@ import java.util.UUID;
 class OrderSummaryPersistenceAdapter implements LoadOrderSummariesPort {
 
     private static final String ORDERS = """
-            select id, status, total_amount, point_amount, cancel_reason, created_at, updated_at
+            select id, status, total_amount, point_amount, cancel_reason, created_at, updated_at, cancel_requested_at
             from orders
             where user_id = :userId and (cast(:before as uuid) is null or id < :before)
             order by id desc
@@ -63,17 +65,18 @@ class OrderSummaryPersistenceAdapter implements LoadOrderSummariesPort {
                 });
         return rows.stream()
                 .map(r -> new OrderSummaryResult(r.id(), r.status(), r.totalAmount(), r.pointAmount(), r.cancelReason(),
-                        lines.getOrDefault(r.id(), List.of()), r.createdAt(), r.updatedAt()))
+                        lines.getOrDefault(r.id(), List.of()), r.createdAt(), r.updatedAt(), r.cancelRequestedAt()))
                 .toList();
     }
 
     private static Row row(ResultSet rs, int n) throws SQLException {
         return new Row(rs.getObject("id", UUID.class), rs.getString("status"), rs.getLong("total_amount"),
                 rs.getLong("point_amount"), rs.getString("cancel_reason"),
-                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
+                Optional.ofNullable(rs.getTimestamp("cancel_requested_at")).map(Timestamp::toInstant).orElse(null));
     }
 
     private record Row(UUID id, String status, long totalAmount, long pointAmount, String cancelReason,
-                       Instant createdAt, Instant updatedAt) {
+                       Instant createdAt, Instant updatedAt, Instant cancelRequestedAt) {
     }
 }

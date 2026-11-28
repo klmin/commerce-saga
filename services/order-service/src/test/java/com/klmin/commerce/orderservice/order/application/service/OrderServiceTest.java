@@ -298,7 +298,7 @@ class OrderServiceTest {
 
         private static Order copy(Order o) {
             return Order.restore(o.id(), o.userId(), o.lines(), o.pointAmount(), o.status(), o.cancelReason(),
-                    o.createdAt(), o.updatedAt());
+                    o.cancelRequestedAt(), o.createdAt(), o.updatedAt());
         }
     }
 
@@ -340,7 +340,8 @@ class OrderServiceTest {
 
         private static OrderSaga copy(OrderSaga s) {
             return OrderSaga.restore(s.orderId(), s.userId(), s.pointAmount(), s.paidAmount(), s.state(),
-                    s.pointUsed(), s.failureReason(), s.stepResends(), s.history(), s.createdAt(), s.updatedAt());
+                    s.pointUsed(), s.failureReason(), s.stepResends(), s.cancelRequested(), s.afterCompletion(),
+                    s.history(), s.createdAt(), s.updatedAt());
         }
     }
 
@@ -356,6 +357,11 @@ class OrderServiceTest {
         @Override
         public void releaseStock(UUID orderId) {
             log.add("releaseStock:" + orderId);
+        }
+
+        @Override
+        public void returnStock(UUID orderId) {
+            log.add("returnStock:" + orderId);
         }
 
         @Override
@@ -384,8 +390,8 @@ class OrderServiceTest {
         }
 
         @Override
-        public void orderCancelled(Order order) {
-            log.add("cancelled:" + order.id());
+        public void orderCancelled(Order order, boolean afterCompletion) {
+            log.add("cancelled:" + order.id() + (afterCompletion ? ":afterCompletion" : ""));
         }
     }
 }

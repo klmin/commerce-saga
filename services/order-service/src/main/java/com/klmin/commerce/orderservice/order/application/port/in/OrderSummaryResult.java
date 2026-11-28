@@ -13,10 +13,17 @@ public record OrderSummaryResult(
         String cancelReason,
         List<Line> lines,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        Instant cancelRequestedAt) {
 
     public OrderSummaryResult {
         lines = List.copyOf(lines);
+    }
+
+    /** 취소 요청이 없는 주문 */
+    public OrderSummaryResult(UUID orderId, String status, long totalAmount, long pointAmount, String cancelReason,
+                              List<Line> lines, Instant createdAt, Instant updatedAt) {
+        this(orderId, status, totalAmount, pointAmount, cancelReason, lines, createdAt, updatedAt, null);
     }
 
     public long paidAmount() {

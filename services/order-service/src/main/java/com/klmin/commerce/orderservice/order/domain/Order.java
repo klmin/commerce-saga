@@ -27,10 +27,12 @@ public final class Order {
     private final Instant createdAt;
     private OrderStatus status;
     private String cancelReason;
+    private Instant cancelRequestedAt;
     private Instant updatedAt;
 
     private Order(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, OrderStatus status,
-                  String cancelReason, Instant createdAt, Instant updatedAt) {
+                  String cancelReason, Instant cancelRequestedAt, Instant createdAt, Instant updatedAt) {
+        this.cancelRequestedAt = cancelRequestedAt;
         this.id = Objects.requireNonNull(id, "id");
         this.userId = Objects.requireNonNull(userId, "userId");
         this.lines = validateLines(lines);
@@ -48,12 +50,33 @@ public final class Order {
     }
 
     public static Order place(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, Instant now) {
-        return new Order(id, userId, lines, pointAmount, OrderStatus.PENDING, null, now, now);
+        return new Order(id, userId, lines, pointAmount, OrderStatus.PENDING, null, null, now, now);
     }
 
     public static Order restore(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, OrderStatus status,
+                                String cancelReason, Instant cancelRequestedAt, Instant createdAt, Instant updatedAt) {
+        return new Order(id, userId, lines, pointAmount, status, cancelReason, cancelRequestedAt, createdAt,
+                updatedAt);
+    }
+
+    /** 취소 요청이 없는 주문 (취소 도입 전 테스트) */
+    public static Order restore(UUID id, UserId userId, List<OrderLine> lines, Points pointAmount, OrderStatus status,
                                 String cancelReason, Instant createdAt, Instant updatedAt) {
-        return new Order(id, userId, lines, pointAmount, status, cancelReason, createdAt, updatedAt);
+        return restore(id, userId, lines, pointAmount, status, cancelReason, null, createdAt, updatedAt);
+    }
+
+    /**
+     * 사용자 취소 요청을 기록한다 (ADR 0020). 실제 취소는 Saga 보상이 끝나면 {@link #cancel} 이 한다.
+     *
+     * @return 새로 기록했으면 true, 이미 요청했거나 취소된 주문이면 false
+     */
+    public boolean requestCancel(Instant now) {
+        if (status == OrderStatus.CANCELLED || cancelRequestedAt != null) {
+            return false;
+        }
+        cancelRequestedAt = now;
+        updatedAt = now;
+        return true;
     }
 
     /** @return 상태가 바뀌었으면 true, 이미 결론이 난 주문이면 false */
@@ -62,6 +85,22 @@ public final class Order {
             return false;
         }
         status = OrderStatus.COMPLETED;
+        updatedAt = now;
+        return true;
+    }
+
+    /**
+     * 완료된 주문의 사용자 취소가 끝났을 때 (ADR 0020). 취소를 요청한 완료 주문만 바뀐다: 늦게 온 보상 결과 등으로
+     * 완료된 주문이 취소되지 않게 {@link #cancel} 과 나눈다.
+     *
+     * @return 상태가 바뀌었으면 true
+     */
+    public boolean cancelAfterCompletion(String reason, Instant now) {
+        if (status != OrderStatus.COMPLETED || cancelRequestedAt == null) {
+            return false;
+        }
+        status = OrderStatus.CANCELLED;
+        cancelReason = truncate(reason);
         updatedAt = now;
         return true;
     }
@@ -136,6 +175,11 @@ public final class Order {
 
     public String cancelReason() {
         return cancelReason;
+    }
+
+    /** 사용자가 취소를 요청한 시각 (없으면 null). 취소가 끝나도 남는다 */
+    public Instant cancelRequestedAt() {
+        return cancelRequestedAt;
     }
 
     public Instant createdAt() {

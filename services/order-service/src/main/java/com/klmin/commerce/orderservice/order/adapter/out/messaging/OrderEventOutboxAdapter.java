@@ -26,8 +26,8 @@ class OrderEventOutboxAdapter implements OrderEventPort {
     }
 
     @Override
-    public void orderCancelled(Order order) {
+    public void orderCancelled(Order order, boolean afterCompletion) {
         outboxWriter.append(Topics.ORDER_EVENTS, order.id().toString(), OrderCancelled.TYPE,
-                new OrderCancelled(order.id(), order.userId().value(), order.cancelReason()));
+                new OrderCancelled(order.id(), order.userId().value(), order.cancelReason(), afterCompletion));
     }
 }

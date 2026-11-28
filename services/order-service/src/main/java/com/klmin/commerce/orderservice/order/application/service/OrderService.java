@@ -1,9 +1,13 @@
 package com.klmin.commerce.orderservice.order.application.service;
 
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.klmin.commerce.orderservice.common.error.InvariantViolationException;
 import com.klmin.commerce.orderservice.order.application.IdempotencyKeyReusedException;
 import com.klmin.commerce.orderservice.order.application.OrderNotFoundException;
 import com.klmin.commerce.orderservice.order.application.SagaNotFoundException;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderCommand;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderResult;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderSagaUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
@@ -21,6 +25,7 @@ import com.klmin.commerce.orderservice.order.application.port.out.SagaCommandPor
 import com.klmin.commerce.orderservice.order.application.port.out.SagaOutcomePort;
 import com.klmin.commerce.orderservice.order.application.port.out.SaveOrderPort;
 import com.klmin.commerce.orderservice.order.domain.Order;
+import com.klmin.commerce.orderservice.order.domain.OrderStatus;
 import com.klmin.commerce.orderservice.order.domain.OrderLine;
 import com.klmin.commerce.orderservice.order.domain.OrderSaga;
 import com.klmin.commerce.orderservice.order.domain.Points;
@@ -44,7 +49,7 @@ import java.util.UUID;
  * Order 와 OrderSaga 두 애그리거트를 함께 바꾸는 것은 의도한 타협이다 (같은 서비스·같은 DB, ADR 0003).
  */
 @Service
-class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderSagaUseCase {
+class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderSagaUseCase, CancelOrderUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -160,6 +165,33 @@ class OrderService implements GetOrderUseCase, HandleSagaReplyUseCase, GetOrderS
         executor.execute(action, saga, now);
         // Saga 진행을 로그로도 남긴다. trace_id 가 붙어 Loki 에서 주문 한 건의 흐름을 trace 와 함께 본다 (ADR 0013)
         log.info("Saga 진행: {} -> {} (orderId={})", reply.type(), saga.state(), reply.orderId());
+    }
+
+    /**
+     * 취소 요청 기록 + (완료된 주문이면) 첫 보상 커맨드 outbox = 한 트랜잭션. Saga 행을 잠가 응답 처리와 순서대로 반영된다
+     */
+    @Override
+    @Transactional
+    public CancelOrderResult cancelOrder(CancelOrderCommand command) {
+        // 소유권은 서비스 안에서 비교한다. 남의 주문은 없는 주문과 같게 404 (IDOR, ADR 0008)
+        OrderSaga saga = sagaPort.findByOrderIdForUpdate(command.orderId())
+                .filter(s -> s.isOwnedBy(UserId.of(command.userId())))
+                .orElseThrow(() -> new OrderNotFoundException(command.orderId()));
+        Order order = loadOrderPort.findById(command.orderId())
+                .orElseThrow(() -> new InvariantViolationException("saga exists but order is missing: "
+                        + command.orderId()));
+        if (order.status() == OrderStatus.CANCELLED) {
+            return new CancelOrderResult(order, false);
+        }
+        Instant now = clock.instant();
+        SagaAction action = saga.requestCancel(now);
+        if (order.requestCancel(now)) {
+            saveOrderPort.update(order);
+            sagaPort.update(saga);
+            log.info("주문 취소 요청 (orderId={}, state={})", command.orderId(), saga.state());
+        }
+        executor.execute(action, saga, now);
+        return new CancelOrderResult(order, true);
     }
 
     @Override

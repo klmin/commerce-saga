@@ -14,6 +14,9 @@ public interface SagaCommandPort {
 
     void releaseStock(UUID orderId);
 
+    /** 완료 후 취소: 팔린 재고를 다시 들인다 (ADR 0020) */
+    void returnStock(UUID orderId);
+
     void usePoint(UUID orderId, UserId userId, Points amount);
 
     void refundPoint(UUID orderId);

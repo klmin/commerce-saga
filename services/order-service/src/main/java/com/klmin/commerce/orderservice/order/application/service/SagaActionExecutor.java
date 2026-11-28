@@ -43,6 +43,7 @@ final class SagaActionExecutor {
             case SagaAction.Pay pay -> commandPort.pay(orderId, saga.userId(), pay.amount());
             case SagaAction.RefundPoint _ -> commandPort.refundPoint(orderId);
             case SagaAction.ReleaseStock _ -> commandPort.releaseStock(orderId);
+            case SagaAction.ReturnStock _ -> commandPort.returnStock(orderId);
             case SagaAction.CancelPayment cancel -> commandPort.cancelPayment(orderId, saga.userId(), cancel.amount());
             case SagaAction.Complete _ -> {
                 Order order = loadOrder(orderId);
@@ -54,11 +55,18 @@ final class SagaActionExecutor {
             }
             case SagaAction.Cancel cancel -> {
                 Order order = loadOrder(orderId);
-                if (order.cancel(cancel.reason(), now)) {
+                boolean changed = cancel.afterCompletion()
+                        ? order.cancelAfterCompletion(cancel.reason(), now)
+                        : order.cancel(cancel.reason(), now);
+                if (changed) {
                     saveOrderPort.update(order);
-                    eventPort.orderCancelled(order);
+                    eventPort.orderCancelled(order, cancel.afterCompletion());
                 }
-                recordFinished(saga, now);
+                // 완료 후 취소는 이미 COMPLETED 로 한 번 셌다. 주문 생성부터 재면 사용자가 기다린 시간이
+                // Saga 처리 시간 지표(p50·p95)에 섞이므로 다시 기록하지 않는다
+                if (!cancel.afterCompletion()) {
+                    recordFinished(saga, now);
+                }
             }
             case SagaAction.Ignore _ -> {
                 // 호출한 쪽에서 이미 걸렀다
@@ -66,7 +74,7 @@ final class SagaActionExecutor {
         }
     }
 
-    // Complete·Cancel 은 Saga 가 끝 상태로 바뀌는 전이에서 한 번만 나온다 (끝난 Saga 에 온 응답·타임아웃은 Ignore)
+    // Complete·Cancel(완료 후 취소 제외) 은 Saga 가 끝 상태로 바뀌는 전이에서 한 번만 나온다 (끝난 Saga 에 온 응답·타임아웃은 Ignore)
     private void recordFinished(OrderSaga saga, Instant now) {
         outcomePort.sagaFinished(saga.state(), Duration.between(saga.createdAt(), now));
     }

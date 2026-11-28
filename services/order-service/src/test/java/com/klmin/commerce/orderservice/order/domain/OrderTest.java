@@ -99,6 +99,27 @@ class OrderTest {
         assertThat(cancelled.status()).isEqualTo(OrderStatus.CANCELLED);
     }
 
+    // 주문 취소 (ADR 0020): 요청은 한 번만 기록, 완료된 주문은 요청했을 때만 취소로 바뀐다
+    @Test
+    void requestCancel_thenCancelAfterCompletion() {
+        Order order = pending(0L);
+        assertThat(order.cancelAfterCompletion("사용자 취소", T1)).isFalse();
+        assertThat(order.complete(T1)).isTrue();
+        // 요청 없이 완료된 주문을 취소하지 않는다 (늦은 보상 결과 등)
+        assertThat(order.cancelAfterCompletion("사용자 취소", T1)).isFalse();
+
+        assertThat(order.requestCancel(T1)).isTrue();
+        assertThat(order.requestCancel(T1.plusSeconds(1))).isFalse();
+        assertThat(order.cancelRequestedAt()).isEqualTo(T1);
+        assertThat(order.status()).isEqualTo(OrderStatus.COMPLETED);
+
+        assertThat(order.cancel("late", T1)).isFalse();
+        assertThat(order.cancelAfterCompletion("사용자 취소", T1)).isTrue();
+        assertThat(order.status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.cancelReason()).isEqualTo("사용자 취소");
+        assertThat(order.requestCancel(T1)).isFalse();
+    }
+
     @Test
     void isOwnedBy() {
         Order order = pending(0L);

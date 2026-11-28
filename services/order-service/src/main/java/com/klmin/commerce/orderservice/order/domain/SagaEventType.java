@@ -10,5 +10,7 @@ public enum SagaEventType {
     POINT_REFUNDED,
     PAYMENT_APPROVED,
     PAYMENT_FAILED,
-    PAYMENT_CANCELLED
+    PAYMENT_CANCELLED,
+    /** 완료 후 취소의 재고 반환 응답 (ADR 0020) */
+    STOCK_RETURNED
 }
