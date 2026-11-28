@@ -84,3 +84,13 @@ export function toOrderInput(
 export function isValidIdempotencyKey(key: string): boolean {
   return IDEMPOTENCY_KEY.test(key);
 }
+
+/** 수량 하나 (상세 화면 입력·주문 화면 ?quantity=) → 1 ~ MAX_QUANTITY 정수. 아니면 undefined */
+export function parseQuantity(text: string): number | undefined {
+  const t = text.trim();
+  if (!/^\d{1,4}$/.test(t)) {
+    return undefined;
+  }
+  const n = Number(t);
+  return n >= 1 && n <= MAX_QUANTITY ? n : undefined;
+}

@@ -1,21 +1,20 @@
 import { Button } from "@commerce/ui/button";
 import { Input } from "@commerce/ui/input";
 import { Label } from "@commerce/ui/label";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router";
 
-import { getCart, putCartItem } from "@/api/cart";
 import { myPointBalance } from "@/api/points";
 import { listProducts, searchProducts, stocksByProduct } from "@/api/products";
 import { LoadError, Page, Section } from "@commerce/ui/page";
 import { ListSkeleton, ValueSkeleton } from "@commerce/ui/skeletons";
 import { ApiError } from "@commerce/bff/api";
+import { ProductImage } from "@/components/product-image";
+import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useCategories } from "@/hooks/use-categories";
-import { cartErrorCode } from "@/lib/cart-errors";
-import { MAX_QUANTITY } from "@/lib/orders/order-input";
-import { type Product, type ProductId, won } from "@/lib/products";
+import { type Product, won } from "@/lib/products";
 import { parseSearch, type SearchCriteria, SORTS } from "@/lib/search";
+import { stockLabel, stockState } from "@/lib/stock";
 
 type Listing = { products: Product[]; total?: number; notice?: string };
 
@@ -136,63 +135,72 @@ function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
 }
 
 function ProductList({ products }: { products: Product[] }) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [adding, setAdding] = useState<ProductId>();
+  const { add, adding } = useAddToCart();
+  const categories = useCategories();
   const stocks = useQuery({
     queryKey: ["stocks", products.map((p) => p.id)],
     queryFn: () => stocksByProduct(products),
   });
 
-  /** "담기": 이미 있으면 하나 더. 결과는 장바구니 화면에서 본다 */
-  async function addToCart(productId: ProductId) {
-    setAdding(productId);
-    try {
-      const current = (await getCart()).items.find((i) => i.productId === productId)?.quantity ?? 0;
-      // 받은 장바구니로 캐시를 바꾼 뒤 옮긴다. 옛 캐시로 장바구니 주문 폼이 먼저 그려지면 방금 담은 상품이 빠진 채 주문될 수 있다
-      queryClient.setQueryData(
-        ["cart"],
-        await putCartItem(productId, Math.min(current + 1, MAX_QUANTITY)),
-      );
-      navigate("/cart");
-    } catch (e) {
-      navigate(`/cart?error=${cartErrorCode(e)}`);
-    } finally {
-      setAdding(undefined);
-    }
-  }
-
   return (
-    <ul aria-label="상품 목록" className="flex flex-col divide-y">
+    <ul aria-label="상품 목록" className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {products.map((p) => {
-        const stock = stocks.data?.[p.id];
+        const state = stockState(stocks.data?.[p.id], stocks.isPending);
+        const detail = `/products/${encodeURIComponent(p.id)}`;
+        const category = categories.data?.find((c) => c.code === p.categoryCode)?.name;
         return (
-          <li key={p.id} className="flex items-center gap-4 py-3">
-            <div className="flex flex-1 flex-col">
-              <span className="font-medium">{p.name}</span>
-              <span className="text-sm text-muted-foreground">
-                {won(p.price)} ·{" "}
-                {stocks.isPending
-                  ? "재고 확인 중"
-                  : stock === undefined
-                    ? "재고 확인 불가"
-                    : `재고 ${stock}개`}
-                {p.description && ` · ${p.description}`}
-              </span>
+          <li
+            key={p.id}
+            className="flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-xs"
+          >
+            {/* 이미지도 상세로 가지만 이름 링크와 같은 곳이라 탭 순서·읽기에서는 뺀다 */}
+            <Link to={detail} tabIndex={-1} aria-hidden="true" className="relative block">
+              <ProductImage product={p} decorative className="w-full rounded-none" />
+              {state.kind === "soldOut" && (
+                <span className="absolute top-2 left-2 rounded bg-foreground/80 px-2 py-0.5 text-xs font-medium text-background">
+                  품절
+                </span>
+              )}
+            </Link>
+            <div className="flex flex-1 flex-col gap-1 p-3">
+              {category && <span className="text-xs text-muted-foreground">{category}</span>}
+              <h3 className="line-clamp-2 font-medium">
+                <Link to={detail} className="hover:underline">
+                  {p.name}
+                </Link>
+              </h3>
+              <p className="font-semibold">{won(p.price)}</p>
+              <p
+                className={`text-xs ${
+                  state.kind === "soldOut" || state.kind === "low"
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {stockLabel(state)}
+              </p>
+              <div className="mt-auto flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  aria-label={`${p.name} 장바구니 담기`}
+                  disabled={adding !== undefined}
+                  onClick={() => add(p.id)}
+                >
+                  담기
+                </Button>
+                <Button
+                  size="sm"
+                  variant={state.kind === "soldOut" ? "outline" : "default"}
+                  className="flex-1"
+                  asChild
+                >
+                  <Link to={`/orders/new?productId=${encodeURIComponent(p.id)}`}>주문</Link>
+                </Button>
+              </div>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              aria-label={`${p.name} 장바구니 담기`}
-              disabled={adding !== undefined}
-              onClick={() => addToCart(p.id)}
-            >
-              담기
-            </Button>
-            <Button size="sm" variant={stock === 0 ? "outline" : "default"} asChild>
-              <Link to={`/orders/new?productId=${encodeURIComponent(p.id)}`}>주문</Link>
-            </Button>
           </li>
         );
       })}
