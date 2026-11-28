@@ -1,5 +1,6 @@
 import { LogoutForm, useMe } from "@commerce/bff/session";
 import { shortId } from "@commerce/bff/short-id";
+import { Brand } from "@commerce/ui/brand";
 import { Button } from "@commerce/ui/button";
 import {
   DropdownMenu,
@@ -155,14 +156,8 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 md:flex-nowrap">
-        <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-          <span
-            aria-hidden="true"
-            className="flex size-7 items-center justify-center rounded-md bg-primary text-sm text-primary-foreground"
-          >
-            cs
-          </span>
-          commerce-saga
+        <Link to="/">
+          <Brand />
         </Link>
         <HeaderSearch />
         {me.data && (
