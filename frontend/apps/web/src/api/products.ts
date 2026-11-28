@@ -4,13 +4,28 @@ import { api, ApiError } from "@commerce/bff/api";
 import { isProductId, type Product, type ProductId } from "@/lib/products";
 import { type SearchCriteria, searchQuery } from "@/lib/search";
 
-const product = z.object({
+// null·없는 값은 없음(undefined)으로 (Product 타입)
+const optionalText = z
+  .string()
+  .nullish()
+  .transform((v) => v ?? undefined);
+
+const productFields = {
   id: z.uuid(),
   name: z.string(),
   description: z.string(),
   price: z.number().int(),
   onSale: z.boolean(),
-});
+  imagePath: optionalText,
+};
+
+/** product-service 상품 (ADR 0021: categoryCode·imagePath) */
+const product = z.object({ ...productFields, categoryCode: optionalText });
+
+/** search-service 결과 항목: 카테고리 필드 이름이 category (9-3) */
+const searchItem = z
+  .object({ ...productFields, category: optionalText })
+  .transform(({ category, ...rest }) => ({ ...rest, categoryCode: category }));
 
 const productList = z.object({ items: z.array(product) });
 
@@ -42,6 +57,24 @@ export async function listProducts(): Promise<Product[]> {
 export async function productNames(
   ids: readonly (ProductId | undefined)[],
 ): Promise<Record<ProductId, string>> {
+  const products = await productsByIds(ids);
+  return Object.fromEntries(Object.values(products).map((p) => [p.id, p.name]));
+}
+
+/** 상품 하나 (판매 중지 포함, 상세 화면). 없으면 ApiError(404) */
+export async function getProduct(productId: ProductId): Promise<Product> {
+  if (!isProductId(productId)) {
+    throw new Error(`invalid product id: ${String(productId)}`);
+  }
+  return product.parse(await api<unknown>(`/api/products/${encodeURIComponent(productId)}`));
+}
+
+/**
+ * 여러 상품 (장바구니·내 주문의 이름·이미지). 못 읽으면 빈 값: 화면은 이름 대신 "상품 #id", 이미지 없이 그린다
+ */
+export async function productsByIds(
+  ids: readonly (ProductId | undefined)[],
+): Promise<Record<ProductId, Product>> {
   const unique = [...new Set(ids)].filter(isProductId).slice(0, MAX_IDS);
   if (unique.length === 0) {
     return {};
@@ -50,16 +83,16 @@ export async function productNames(
     const items = productList.parse(
       await api<unknown>(`/api/products?ids=${unique.join(",")}`),
     ).items;
-    return Object.fromEntries(items.map((p) => [p.id, p.name]));
+    return Object.fromEntries(items.map((p) => [p.id, p]));
   } catch (e) {
     if (!(e instanceof ApiError)) {
-      console.error("product names failed", e);
+      console.error("products by ids failed", e);
     }
     return {};
   }
 }
 
-const searchResult = z.object({ items: z.array(product), total: z.number().int() });
+const searchResult = z.object({ items: z.array(searchItem), total: z.number().int() });
 
 /**
  * 상품 검색 (search-service, ADR 0010). 판매 중인 상품만. 결과는 CDC 로 받은 읽기 모델이라 수 초 늦을 수 있고,

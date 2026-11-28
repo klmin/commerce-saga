@@ -45,7 +45,7 @@ test("가격 범위와 정렬", async ({ page }) => {
     await expect(page.getByText(/검색 결과 2개/)).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 30_000 });
   // 시드: USB-C 허브 18,000 < 무선 마우스 25,000 (다른 시나리오가 가격을 바꿨다 돌려놓는다)
-  const names = await products(page).locator("span.font-medium").allTextContents();
+  const names = await products(page).getByRole("heading").allTextContents();
   expect(names).toEqual(["USB-C 허브", "무선 마우스"]);
   await expect(page.getByLabel("정렬")).toHaveValue("price-asc");
 

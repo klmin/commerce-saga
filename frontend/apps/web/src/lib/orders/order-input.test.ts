@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isValidIdempotencyKey, orderTotal, toOrderInput } from "./order-input";
+import { isValidIdempotencyKey, orderTotal, parseQuantity, toOrderInput } from "./order-input";
 
 // product-service 시드와 같은 상품 (화면에 보인 값). id 는 시드 고정 UUID (ADR 0018)
 const KEYBOARD = "01900000-0000-7000-8000-000000000001";
@@ -71,5 +71,17 @@ describe("orderTotal / isValidIdempotencyKey", () => {
     expect(isValidIdempotencyKey("")).toBe(false);
     expect(isValidIdempotencyKey("has space")).toBe(false);
     expect(isValidIdempotencyKey("x".repeat(101))).toBe(false);
+  });
+});
+
+describe("parseQuantity", () => {
+  it("1 ~ 1,000 정수만", () => {
+    expect(parseQuantity(" 3 ")).toBe(3);
+    expect(parseQuantity("1000")).toBe(1000);
+    expect(parseQuantity("1001")).toBeUndefined();
+    expect(parseQuantity("0")).toBeUndefined();
+    expect(parseQuantity("-1")).toBeUndefined();
+    expect(parseQuantity("1.5")).toBeUndefined();
+    expect(parseQuantity("")).toBeUndefined();
   });
 });

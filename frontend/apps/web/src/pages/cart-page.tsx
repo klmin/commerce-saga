@@ -6,7 +6,8 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { type Cart, getCart, putCartItem, removeCartItem } from "@/api/cart";
 import { myPointBalance } from "@/api/points";
-import { stocksByProduct } from "@/api/products";
+import { productsByIds, stocksByProduct } from "@/api/products";
+import { ProductImage } from "@/components/product-image";
 import { OrderForm } from "@/components/order-form";
 import { LoadError, Page, Section } from "@commerce/ui/page";
 import { ListSkeleton } from "@commerce/ui/skeletons";
@@ -37,6 +38,13 @@ function CartContent({ cart }: { cart: Cart }) {
     enabled: orderable.length > 0,
   });
   const balance = useQuery({ queryKey: ["points", "balance"], queryFn: myPointBalance });
+  // 이미지는 상품에서 읽는다 (장바구니 응답에는 없다). 못 읽으면 자리 표시
+  const ids = cart.items.map((i) => i.productId);
+  const details = useQuery({
+    queryKey: ["products-by-ids", ids],
+    queryFn: () => productsByIds(ids),
+    enabled: ids.length > 0,
+  });
 
   /** 바꾼 장바구니를 그대로 보여 주고 오류 표시는 지운다. 실패하면 이유를 ?error= 로 */
   async function change(work: () => Promise<Cart>) {
@@ -95,8 +103,21 @@ function CartContent({ cart }: { cart: Cart }) {
       <ul className="flex flex-col divide-y rounded-md border" aria-label="장바구니 상품">
         {cart.items.map((i) => (
           <li key={i.productId} className="flex flex-wrap items-center gap-4 p-3">
-            <div className="flex flex-1 flex-col">
-              <span className="font-medium">{i.name ?? productName(i.productId)}</span>
+            <ProductImage
+              product={{
+                name: i.name ?? productName(i.productId),
+                imagePath: details.data?.[i.productId]?.imagePath,
+              }}
+              decorative
+              className="w-16 shrink-0"
+            />
+            <div className="flex min-w-32 flex-1 flex-col">
+              <Link
+                to={`/products/${encodeURIComponent(i.productId)}`}
+                className="font-medium hover:underline"
+              >
+                {i.name ?? productName(i.productId)}
+              </Link>
               <span className="text-sm text-muted-foreground">
                 {i.onSale === false ? (
                   <span className="text-destructive">판매 중지 (주문할 수 없음)</span>

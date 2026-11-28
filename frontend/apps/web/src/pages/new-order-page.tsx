@@ -6,6 +6,7 @@ import { listProducts, stocksByProduct } from "@/api/products";
 import { OrderForm } from "@/components/order-form";
 import { LoadError, Page, Section } from "@commerce/ui/page";
 import { FormSkeleton } from "@commerce/ui/skeletons";
+import { parseQuantity } from "@/lib/orders/order-input";
 import { isProductId } from "@/lib/products";
 
 export function NewOrderPage() {
@@ -13,6 +14,8 @@ export function NewOrderPage() {
   // 형식이 틀린 값(옛 숫자 id 등)이면 고른 상품 없이 연다
   const raw = params.get("productId");
   const productId = isProductId(raw) ? raw.toLowerCase() : undefined;
+  // 상세 화면의 "바로 주문" 수량 (1 ~ MAX_QUANTITY, 아니면 1)
+  const quantity = parseQuantity(params.get("quantity") ?? "") ?? 1;
   const products = useQuery({ queryKey: ["products"], queryFn: listProducts });
   const stocks = useQuery({
     queryKey: ["stocks", products.data?.map((p) => p.id)],
@@ -31,11 +34,16 @@ export function NewOrderPage() {
         ) : (
           <OrderForm
             // 화면을 열 때마다 새 Idempotency-Key (폼 안에서 정함). 이 폼에서 다시 누르는 것은 같은 주문으로 처리된다
-            key={productId ?? ""}
+            key={`${productId ?? ""}:${quantity}`}
             products={products.data}
             stocks={stocks.data ?? {}}
             pointBalance={balance.data}
             initialProductId={products.data.find((p) => p.id === productId)?.id}
+            initialQuantities={
+              productId && products.data.some((p) => p.id === productId)
+                ? { [productId]: quantity }
+                : undefined
+            }
           />
         )}
       </Section>

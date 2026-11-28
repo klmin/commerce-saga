@@ -9,6 +9,7 @@ import { HomePage } from "@/pages/home-page";
 import { NewOrderPage } from "@/pages/new-order-page";
 import { OrderDetailPage } from "@/pages/order-detail-page";
 import { OrdersPage } from "@/pages/orders-page";
+import { ProductDetailPage } from "@/pages/product-detail-page";
 import { ErrorPage, NotFoundPage } from "@/pages/not-found-page";
 
 export const queryClient = createQueryClient();
@@ -41,6 +42,7 @@ export const router = createBrowserRouter(
       errorElement: <ErrorPage />,
       children: [
         { index: true, element: <HomePage /> },
+        { path: "products/:productId", element: <ProductDetailPage /> },
         { path: "cart", element: <CartPage /> },
         { path: "orders", element: <OrdersPage /> },
         { path: "orders/new", element: <NewOrderPage /> },
