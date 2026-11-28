@@ -63,12 +63,19 @@ class ProductCdcIndexingIntegrationTest {
         // 늦게 온 옛 변경
         send(KEYBOARD, row(KEYBOARD, "통합 시험 키보드", 29_000, true), 999);
         // 처리 순서 표시용 (같은 파티션이 아니어도 위 셋이 끝날 시간을 준다)
-        send(MARKER, row(MARKER, "통합 시험 마커", 1_000, true), 1_000);
+        // 마커는 9-3 에 더한 열(카테고리·이미지 key)까지 있는 행
+        send(MARKER, row(MARKER, "통합 시험 마커", 1_000, true).replace("}",
+                ",\"category_code\":\"kitchen\",\"image_key\":\"products/" + MARKER + "/seed.svg\"}"), 1_000);
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             assertThat(find("통합 시험 마커")).hasSize(1);
             assertThat(find("통합 시험 키보드")).singleElement()
                     .satisfies(i -> assertThat(i.price()).isEqualTo(31_000));
+            assertThat(search.search(new SearchProductsQuery("통합 시험", null, null, false, null, 0, 20, "kitchen"))
+                    .items()).singleElement().satisfies(i -> {
+                        assertThat(i.id()).isEqualTo(MARKER);
+                        assertThat(i.imagePath()).isEqualTo("/products/" + MARKER + "/images/seed.svg");
+                    });
         });
 
         send(KEYBOARD, null, 1_002);

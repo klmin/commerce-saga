@@ -6,11 +6,11 @@
 
 | | |
 |---|---|
-| 색인 | 별칭 `products` → 실제 색인 `products-v1`. search-service 가 처음 쓸 때 별칭이 없으면 만든다. 매핑 strict |
+| 색인 | 별칭 `products` → 실제 색인 `products-v1`. search-service 가 처음 쓸 때 별칭이 없으면 만든다. 매핑 strict. 9-3 에 더한 필드(`category` keyword, `imageKey` 색인 안 함)는 시작할 때 `PUT _mapping` 으로 기존 색인에도 넣는다(멱등, 재색인 없음, ADR 0021) |
 | 멱등·순서 | 문서 id = 상품 id, **외부 버전 = 헤더 `__lsn`**(`version_type=external`). 저장된 버전 이하이면 ES 가 409 → 건너뜀. 같은 변경 재전달, 늦게 온 옛 변경 모두 색인을 되돌리지 못한다. `processed_message` 표가 필요 없다 |
 | 삭제 | tombstone 이면 문서를 지우지 않고 **삭제 표시 문서**(`deleted:true`, 같은 외부 버전)로 바꿔 검색에서 뺀다. ES 는 지운 문서의 버전을 `index.gc_deletes` 동안만 기억하므로, 진짜로 지우면 그 뒤 DLT 재처리된 옛 행이 지운 상품을 되살릴 수 있다. 버전 없는 tombstone 은 가장 큰 버전으로 표시(영구) |
 | 한글 | ngram(1~2글자) 분석기. "마우" → "무선 마우스", "키캡" → "한정판 키캡"(키보드는 아님: 모든 글자 조각이 있어야 함). 형태소 분석(nori)은 쓰지 않는다 |
-| 검색 API | `GET /api/search/products` (로그인 없이): `q`, `minPrice`, `maxPrice`, `onSaleOnly`(기본 true), `sort`(relevance·price-asc·price-desc·newest), `page`, `size`(≤100, 앞 10,000건까지) |
+| 검색 API | `GET /api/search/products` (로그인 없이): `q`, `minPrice`, `maxPrice`, `onSaleOnly`(기본 true), `sort`(relevance·price-asc·price-desc·newest), `category`(카테고리 코드, 9-3), `page`, `size`(≤100, 앞 10,000건까지). 결과 항목에 `category`·`imagePath`(product-service 이미지 읽기 경로, 화면이 `/api` 를 붙인다. 저장소 key 는 내보내지 않음) |
 | 장애 | ES 가 멈추면 검색만 503. 상품 목록·상세·주문은 product-service 라 그대로. 색인 소비자는 ES 가 돌아올 때까지 제자리 재시도(ADR 0012) → 돌아오면 멈춘 동안의 변경을 차례로 반영 |
 | 영구 오류 | 본문·키·헤더가 계약과 다르거나 ES 가 문서를 거절(400)하면 `product.cdc.products.DLT` (`scripts/dlt.sh`) |
 | 지표 | `search_indexing_lag_seconds`(마지막 메시지의 원본 커밋 → 색인), `search_indexed_total{result=applied|skipped}`, 소비자 lag 은 기존 kafka-exporter 경보 |
@@ -35,6 +35,7 @@ k8s(kind): `KAFKA_EXEC="kubectl -n commerce exec -i commerce-dual-role-0 --" KAF
 | 17c 판매 중지 | 기본 검색에서 빠지고 `onSaleOnly=false` 로는 보인다. 판매 재개하면 다시 나온다 |
 | 17d 옛 변경 | 토픽에 `__lsn:1`, 가격 1 인 옛 변경을 직접 넣어도 다음 변경이 반영된 뒤 가격이 1 로 되돌아가지 않는다 |
 | 17e ES 중단 (compose) | 검색 503, 상품 목록 200, 가격 변경 성공. ES 재개 뒤 멈춘 동안의 가격이 검색에 반영된다 |
+| 17f 카테고리·이미지 | `category=digital` 이면 무선 마우스가 나오고 `kitchen` 이면 안 나온다. 결과의 `imagePath`(시드 SVG)를 Gateway 로 읽으면 200 |
 
 ## 결과
 
@@ -50,10 +51,12 @@ k8s(kind): `KAFKA_EXEC="kubectl -n commerce exec -i commerce-dual-role-0 --" KAF
 == 17e. Elasticsearch 중단 → 검색만 503, 재개 후 따라잡음
   ok  검색 503, 상품 목록·가격 변경은 정상
   ok  재개 뒤 가격 25502 반영 (색인 소비자가 제자리 재시도로 기다렸다가 처리)
+== 17f. 카테고리 필터·이미지 경로
+  ok  category=digital 에만 나오고, 이미지 /products/01900000-0000-7000-8000-000000000002/images/seed.svg 읽기 200
 시나리오 17 통과
 ```
 
-(CI e2e scheduler 모드 로그, PR #89. k8s kind 는 17e 를 빼고 통과)
+(CI e2e scheduler 모드 로그, 17a~17e 는 PR #89, 17f 는 후속 9-3. k8s kind 는 17e 를 빼고 통과)
 
 화면: 홈 상품 목록의 검색 폼(4-2c). 검색 저장소가 멈추면 전체 목록으로 대신 보여 준다
 

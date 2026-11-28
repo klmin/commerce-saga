@@ -21,11 +21,12 @@ class ProductSearchService implements SearchProductsUseCase {
     @Override
     public ProductSearchResult search(SearchProductsQuery query) {
         SearchCriteria criteria = new SearchCriteria(query.keyword(), query.minPrice(), query.maxPrice(),
-                query.onSaleOnly(), SearchSort.parse(query.sort()), query.page(), query.size());
+                query.onSaleOnly(), SearchSort.parse(query.sort()), query.page(), query.size(), query.category());
         SearchPage page = searchPort.search(criteria);
         return new ProductSearchResult(
                 page.items().stream()
-                        .map(p -> new ProductSearchResult.Item(p.id(), p.name(), p.description(), p.price(), p.onSale()))
+                        .map(p -> new ProductSearchResult.Item(p.id(), p.name(), p.description(), p.price(), p.onSale(),
+                                p.category(), p.imagePath()))
                         .toList(),
                 page.total(), criteria.page(), criteria.size());
     }

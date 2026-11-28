@@ -129,7 +129,7 @@ spec:
     database.dbname: {{ $svc.db }}_db
     topic.prefix: {{ $connector }}
     table.include.list: public.products
-    column.include.list: public.products.id,public.products.name,public.products.description,public.products.price,public.products.on_sale,public.products.updated_at
+    column.include.list: public.products.id,public.products.name,public.products.description,public.products.price,public.products.on_sale,public.products.updated_at,public.products.category_code,public.products.image_key
     slot.name: {{ $svc.db }}_cdc_slot
     publication.name: {{ $svc.db }}_cdc_pub
     publication.autocreate.mode: filtered

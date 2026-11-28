@@ -9,7 +9,7 @@
   "database.dbname": "product_db",
   "topic.prefix": "product-cdc",
   "table.include.list": "public.products",
-  "column.include.list": "public.products.id,public.products.name,public.products.description,public.products.price,public.products.on_sale,public.products.updated_at",
+  "column.include.list": "public.products.id,public.products.name,public.products.description,public.products.price,public.products.on_sale,public.products.updated_at,public.products.category_code,public.products.image_key",
   "slot.name": "product_cdc_slot",
   "publication.name": "product_cdc_pub",
   "publication.autocreate.mode": "filtered",

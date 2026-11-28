@@ -31,20 +31,24 @@ class SearchController {
                                   @RequestParam(required = false) Long maxPrice,
                                   @RequestParam(defaultValue = "true") boolean onSaleOnly,
                                   @RequestParam(required = false) String sort,
+                                  @RequestParam(required = false) String category,
                                   @RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "20") int size) {
         ProductSearchResult result = searchProductsUseCase.search(
-                new SearchProductsQuery(q, minPrice, maxPrice, onSaleOnly, sort, page, size));
+                new SearchProductsQuery(q, minPrice, maxPrice, onSaleOnly, sort, page, size, category));
         return new SearchResponse(
                 result.items().stream()
-                        .map(i -> new SearchResponse.Item(i.id(), i.name(), i.description(), i.price(), i.onSale()))
+                        .map(i -> new SearchResponse.Item(i.id(), i.name(), i.description(), i.price(), i.onSale(),
+                                i.category(), i.imagePath()))
                         .toList(),
                 result.total(), result.page(), result.size());
     }
 
     record SearchResponse(List<Item> items, long total, int page, int size) {
 
-        record Item(UUID id, String name, String description, long price, boolean onSale) {
+        /** imagePath: 화면이 {@code /api} 를 붙여 읽는다(product-service 이미지 API, ADR 0021). 없으면 null */
+        record Item(UUID id, String name, String description, long price, boolean onSale, String category,
+                    String imagePath) {
         }
     }
 }

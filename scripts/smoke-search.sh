@@ -11,6 +11,7 @@
 #   17c. 판매 중지하면 기본 검색(판매 중만)에서 빠지고, onSaleOnly=false 면 보인다
 #   17d. 늦게 온 옛 변경(작은 __lsn)을 토픽에 넣어도 검색 결과가 되돌아가지 않는다
 #   17e. (compose) Elasticsearch 를 멈추면 검색만 503, 상품 목록·가격 변경은 그대로. 다시 띄우면 멈춘 동안의 변경을 따라잡는다
+#   17f. 카테고리 필터(category=digital 이면 나오고 kitchen 이면 안 나옴)와 결과의 이미지 경로 (ADR 0021)
 # 끝나면 가격·판매 상태를 원래대로 돌려놓는다
 set -euo pipefail
 source "$(dirname "$0")/lib/auth.sh"
@@ -117,5 +118,15 @@ else
   wait_until "ES 재개 뒤 멈춘 동안의 변경($during)을 따라잡지 못함" caught_up
   ok "재개 뒤 가격 $during 반영 (색인 소비자가 제자리 재시도로 기다렸다가 처리)"
 fi
+
+echo "== 17f. 카테고리 필터·이미지 경로"
+in_category() { [ -n "$(price_in "마우" "&category=$1")" ]; }
+wait_until "category=digital 검색에 상품 $PRODUCT_ID 가 나오지 않음 (커넥터 열·색인 매핑 확인)" in_category digital
+in_category kitchen && fail "category=kitchen 검색에 상품 $PRODUCT_ID(digital) 가 나옴"
+image=$(search "마우" | grep -oE "\{\"id\":\"$PRODUCT_ID\",[^}]*\}" | field imagePath)
+[ "$image" = "/products/$PRODUCT_ID/images/seed.svg" ] || fail "imagePath 가 시드 이미지 경로가 아님: $image"
+code=$(curl -s -o /dev/null -w "%{http_code}" "$GATEWAY_URL/api$image")
+[ "$code" = 200 ] || fail "이미지 $image 읽기 → $code (기대 200, product-service·RustFS 확인)"
+ok "category=digital 에만 나오고, 이미지 $image 읽기 200"
 
 echo "시나리오 17 통과"

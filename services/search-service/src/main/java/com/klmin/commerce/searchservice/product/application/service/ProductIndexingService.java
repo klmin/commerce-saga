@@ -27,7 +27,7 @@ class ProductIndexingService implements IndexProductUseCase {
     @Override
     public boolean index(IndexProductCommand command) {
         SearchableProduct product = new SearchableProduct(command.productId(), command.name(), command.description(),
-                command.price(), command.onSale(), command.updatedAt());
+                command.price(), command.onSale(), command.updatedAt(), command.category(), command.imageKey());
         boolean saved = indexPort.save(product, command.version());
         if (!saved) {
             log.info("같은·옛 버전이라 색인 건너뜀 (productId={}, version={})", command.productId(), command.version());

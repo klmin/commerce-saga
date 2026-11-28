@@ -48,8 +48,9 @@
 
 - `product.cdc.products` 에 `category_code`·`image_key` 열을 추가한다(ADR 0010: 열은 추가만). 커넥터 `column.include.list` 를 compose·Helm 둘 다 고친다
 - 색인 매핑(`dynamic: strict`)에 `category`(keyword)·`imageKey`(keyword, 색인 안 함)를 더한다. 필드 추가는 기존 색인에 바로 할 수 있어(`PUT _mapping`) 새 색인·재색인이 필요 없다. 시작할 때 없으면 더한다(멱등)
-- 커넥터 설정을 바꾸기 전에 저장된 행은 새 열 없이 색인돼 있다. 커넥터를 바꾼 뒤 기존 행을 다시 보낸다(방법은 9-3 에서 정한다: Debezium 증분 스냅샷 signal 을 먼저 본다). 새 열이 없는 옛 메시지도 받아들인다(없으면 비어 있음)
-- 검색 API 에 `category` 필터를 더한다. 정렬(관련도·가격·최신)은 이미 있다
+- 커넥터 설정을 바꾸기 전에 저장된 행은 새 열 없이 색인돼 있다. 커넥터를 바꾼 뒤 기존 행을 다시 보낸다: `scripts/resend-product-cdc.sh` 가 `products` 행을 값이 그대로인 UPDATE 로 한 번 건드려, Debezium 이 새 열까지 실은 변경 후 행을 새 `__lsn` 으로 보낸다(9-3 에서 정함).
+  Debezium 증분 스냅샷 signal 은 signal 테이블(product_db 에 새 테이블·Flyway)과 publication·커넥터 설정 변경이 더 필요해 쓰지 않았다. 처음 띄우는 환경은 커넥터 스냅샷이 새 열까지 보내므로 필요 없다. 새 열이 없는 옛 메시지도 받아들인다(없으면 null, 카테고리 필터에는 걸리지 않음)
+- 검색 API 에 `category` 필터를 더한다. 정렬(관련도·가격·최신)은 이미 있다. 결과 항목에 `category`·`imagePath`(3절의 읽기 경로, search-service 가 key 에서 만든다. key 가 그 상품의 것이 아니면 내보내지 않는다)
 
 ### 5. 인프라
 
