@@ -41,6 +41,9 @@ class OrderJpaEntity {
     @Column(name = "cancel_reason", length = 200)
     private String cancelReason;
 
+    @Column(name = "cancel_requested_at")
+    private Instant cancelRequestedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -73,10 +76,15 @@ class OrderJpaEntity {
         this.lines = new ArrayList<>(lines);
     }
 
-    void changeStatus(OrderStatus status, String cancelReason, Instant updatedAt) {
+    void changeStatus(OrderStatus status, String cancelReason, Instant cancelRequestedAt, Instant updatedAt) {
         this.status = status;
         this.cancelReason = cancelReason;
+        this.cancelRequestedAt = cancelRequestedAt;
         this.updatedAt = updatedAt;
+    }
+
+    Instant getCancelRequestedAt() {
+        return cancelRequestedAt;
     }
 
     UUID getId() {

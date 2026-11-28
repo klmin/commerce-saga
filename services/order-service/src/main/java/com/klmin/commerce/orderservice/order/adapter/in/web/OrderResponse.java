@@ -16,7 +16,9 @@ record OrderResponse(
         String cancelReason,
         List<Line> lines,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        // 사용자가 취소를 요청한 시각 (없으면 null). 진행 중이면 화면이 "취소 요청됨"을 보인다 (ADR 0020)
+        Instant cancelRequestedAt) {
 
     record Line(UUID productId, int quantity, long unitPrice) {
     }
@@ -25,6 +27,6 @@ record OrderResponse(
         return new OrderResponse(order.id(), order.userId().value(), order.status().name(),
                 order.totalAmount().value(), order.pointAmount().value(), order.paidAmount().value(), order.cancelReason(),
                 order.lines().stream().map(l -> new Line(l.productId().value(), l.quantity().value(), l.unitPrice().value())).toList(),
-                order.createdAt(), order.updatedAt());
+                order.createdAt(), order.updatedAt(), order.cancelRequestedAt());
     }
 }

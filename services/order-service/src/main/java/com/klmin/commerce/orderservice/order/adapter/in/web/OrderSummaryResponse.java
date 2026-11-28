@@ -15,12 +15,13 @@ record OrderSummaryResponse(
         String cancelReason,
         List<OrderResponse.Line> lines,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        Instant cancelRequestedAt) {
 
     static OrderSummaryResponse from(OrderSummaryResult s) {
         return new OrderSummaryResponse(s.orderId(), s.status(), s.totalAmount(), s.pointAmount(), s.paidAmount(),
                 s.cancelReason(),
                 s.lines().stream().map(l -> new OrderResponse.Line(l.productId(), l.quantity(), l.unitPrice())).toList(),
-                s.createdAt(), s.updatedAt());
+                s.createdAt(), s.updatedAt(), s.cancelRequestedAt());
     }
 }

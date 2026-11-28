@@ -1,6 +1,9 @@
 package com.klmin.commerce.orderservice.order.adapter.in.web;
 
 import com.klmin.commerce.orderservice.common.web.CurrentUserId;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderCommand;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderResult;
+import com.klmin.commerce.orderservice.order.application.port.in.CancelOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderQuery;
 import com.klmin.commerce.orderservice.order.application.port.in.GetOrderUseCase;
 import com.klmin.commerce.orderservice.order.application.port.in.ListMyOrdersQuery;
@@ -35,9 +38,11 @@ class OrderController {
     private final PlaceOrderUseCase placeOrderUseCase;
     private final GetOrderUseCase getOrderUseCase;
     private final ListMyOrdersUseCase listMyOrdersUseCase;
+    private final CancelOrderUseCase cancelOrderUseCase;
 
     OrderController(PlaceOrderUseCase placeOrderUseCase, GetOrderUseCase getOrderUseCase,
-                    ListMyOrdersUseCase listMyOrdersUseCase) {
+                    ListMyOrdersUseCase listMyOrdersUseCase, CancelOrderUseCase cancelOrderUseCase) {
+        this.cancelOrderUseCase = cancelOrderUseCase;
         this.placeOrderUseCase = placeOrderUseCase;
         this.getOrderUseCase = getOrderUseCase;
         this.listMyOrdersUseCase = listMyOrdersUseCase;
@@ -79,5 +84,16 @@ class OrderController {
             @CurrentUserId UUID userId,
             @PathVariable UUID orderId) {
         return OrderResponse.from(getOrderUseCase.getOrder(new GetOrderQuery(orderId, userId)));
+    }
+
+    /**
+     * 주문 취소 (ADR 0020). 본인 주문만(남의 주문은 404). 진행 중이면 다음 응답에서, 완료됐으면 결제 취소(환불)부터 되돌린다.
+     * 접수되면 202(결과는 주문 상태·Saga 타임라인으로 본다), 이미 취소된 주문이면 200. 여러 번 보내도 한 번만 반영된다
+     */
+    @PostMapping("/{orderId}/cancel")
+    ResponseEntity<OrderResponse> cancelOrder(@CurrentUserId UUID userId, @PathVariable UUID orderId) {
+        CancelOrderResult result = cancelOrderUseCase.cancelOrder(new CancelOrderCommand(orderId, userId));
+        return ResponseEntity.status(result.inProgress() ? HttpStatus.ACCEPTED : HttpStatus.OK)
+                .body(OrderResponse.from(result.order()));
     }
 }

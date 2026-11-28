@@ -30,7 +30,7 @@ class OrderPersistenceAdapter implements LoadOrderPort, SaveOrderPort {
     public void update(Order order) {
         OrderJpaEntity entity = repository.findById(order.id())
                 .orElseThrow(() -> new IllegalStateException("order not found: " + order.id()));
-        entity.changeStatus(order.status(), order.cancelReason(), order.updatedAt());
+        entity.changeStatus(order.status(), order.cancelReason(), order.cancelRequestedAt(), order.updatedAt());
     }
 
     @Override
@@ -51,7 +51,8 @@ class OrderPersistenceAdapter implements LoadOrderPort, SaveOrderPort {
                 entity.getLines().stream()
                         .map(l -> OrderLine.of(l.getProductId(), l.getQuantity(), l.getUnitPrice()))
                         .toList(),
-                Points.of(entity.getPointAmount()), entity.getStatus(), entity.getCancelReason(), entity.getCreatedAt(),
+                Points.of(entity.getPointAmount()), entity.getStatus(), entity.getCancelReason(),
+                entity.getCancelRequestedAt(), entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }
 }

@@ -20,6 +20,10 @@ public sealed interface SagaAction {
     record ReleaseStock() implements SagaAction {
     }
 
+    /** 완료 후 취소: 팔린 재고를 다시 들인다 (ADR 0020) */
+    record ReturnStock() implements SagaAction {
+    }
+
     /** 결제 취소 (결제 결과를 끝내 못 받아 포기). 승인됐으면 결제 서비스가 환불한다 */
     record CancelPayment(Money amount) implements SagaAction {
     }
@@ -28,8 +32,15 @@ public sealed interface SagaAction {
     record Complete() implements SagaAction {
     }
 
-    /** 주문 취소 처리 + OrderCancelled 이벤트. reason 은 처음 실패한 단계의 사유 */
-    record Cancel(String reason) implements SagaAction {
+    /**
+     * 주문 취소 처리 + OrderCancelled 이벤트. reason 은 처음 실패한 단계의 사유 또는 사용자 취소.
+     * afterCompletion 이면 완료됐던 주문을 사용자가 취소했다 (ADR 0020)
+     */
+    record Cancel(String reason, boolean afterCompletion) implements SagaAction {
+
+        public Cancel(String reason) {
+            this(reason, false);
+        }
     }
 
     /** 현재 단계와 맞지 않는 응답 (중복·늦은 응답). 아무것도 하지 않는다 */
