@@ -1,0 +1,76 @@
+{{- if .Values.rustfs.enabled }}
+# 상품 이미지 저장소 (후속 9-2, ADR 0021). S3 API, product-service 만 쓴다. 버킷은 비공개(화면은 product-service 를 거쳐 읽는다).
+# 버킷·시드 이미지는 product-service 가 시작할 때 없으면 만든다(초기화 Job 없음). 단일 노드, 파일은 PVC
+{{- if .Values.rustfs.accessKey }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.rustfs.credentialsSecret }}
+  labels: {{- include "commerce.labels" (dict "name" "rustfs" "root" .) | nindent 4 }}
+type: Opaque
+stringData:
+  # 로컬 개발용 값 (infra/docker-compose.yml 과 같음)
+  access-key: {{ .Values.rustfs.accessKey | quote }}
+  secret-key: {{ .Values.rustfs.secretKey | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  labels: {{- include "commerce.labels" (dict "name" "rustfs" "root" .) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: rustfs
+  ports:
+    - name: s3
+      port: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rustfs
+  labels: {{- include "commerce.labels" (dict "name" "rustfs" "root" .) | nindent 4 }}
+spec:
+  serviceName: rustfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rustfs
+  template:
+    metadata:
+      labels: {{- include "commerce.labels" (dict "name" "rustfs" "root" .) | nindent 8 }}
+    spec:
+      securityContext:
+        # 이미지가 uid 10001(rustfs) 로 돈다. PVC 에 쓸 수 있게
+        fsGroup: 10001
+      containers:
+        - name: rustfs
+          image: {{ .Values.rustfs.image }}
+          env:
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.rustfs.credentialsSecret }}, key: access-key }
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.rustfs.credentialsSecret }}, key: secret-key }
+          ports:
+            - name: s3
+              containerPort: 9000
+          readinessProbe:
+            httpGet: { path: /health, port: s3 }
+            periodSeconds: 5
+            failureThreshold: 60
+          resources: {{- toYaml .Values.rustfs.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.rustfs.storage }}
+{{- end }}

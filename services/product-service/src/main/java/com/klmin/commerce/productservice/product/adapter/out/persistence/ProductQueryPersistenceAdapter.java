@@ -38,19 +38,20 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
         return new ProductAuditPageResult(slice.getContent().stream().map(e -> new ProductAuditResult(
                 e.getAction(),
                 snapshot(e.getBeforeName(), e.getBeforeDescription(), e.getBeforePrice(), e.getBeforeOnSale(),
-                        e.getBeforeCategoryCode()),
+                        e.getBeforeCategoryCode(), e.getBeforeImageKey()),
                 snapshot(e.getAfterName(), e.getAfterDescription(), e.getAfterPrice(), e.getAfterOnSale(),
-                        e.getAfterCategoryCode()),
+                        e.getAfterCategoryCode(), e.getAfterImageKey()),
                 e.getChangedBy(), e.getChangedAt())).toList(), slice.hasNext());
     }
 
     /** 값이 하나도 없으면(등록의 before) null */
     private static ProductAuditResult.Snapshot snapshot(String name, String description, Long price,
-                                                        Boolean onSale, String categoryCode) {
-        if (name == null && description == null && price == null && onSale == null && categoryCode == null) {
+                                                        Boolean onSale, String categoryCode, String imageKey) {
+        if (name == null && description == null && price == null && onSale == null && categoryCode == null
+                && imageKey == null) {
             return null;
         }
-        return new ProductAuditResult.Snapshot(name, description, price, onSale, categoryCode);
+        return new ProductAuditResult.Snapshot(name, description, price, onSale, categoryCode, imageKey);
     }
 
     @Override
@@ -90,6 +91,6 @@ class ProductQueryPersistenceAdapter implements LoadProductPort {
 
     private static ProductResult toResult(ProductJpaEntity e) {
         return new ProductResult(e.getId(), e.getName(), e.getDescription(), e.getPrice(), e.isOnSale(),
-                e.getCategoryCode(), e.getUpdatedAt());
+                e.getCategoryCode(), e.getImageKey(), e.getUpdatedAt());
     }
 }

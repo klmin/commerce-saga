@@ -14,6 +14,7 @@ import com.klmin.commerce.productservice.product.application.port.out.PriceHisto
 import com.klmin.commerce.productservice.product.application.port.out.ProductAuditPort;
 import com.klmin.commerce.productservice.product.application.port.out.ProductPort;
 import com.klmin.commerce.productservice.product.domain.CategoryCode;
+import com.klmin.commerce.productservice.product.domain.ImageKey;
 import com.klmin.commerce.productservice.product.domain.Money;
 import com.klmin.commerce.productservice.product.domain.Product;
 import com.klmin.commerce.productservice.product.domain.ProductAction;
@@ -114,6 +115,24 @@ class ProductService implements ManageProductUseCase {
                     log.info("판매 상태 변경 (productId={}, onSale={}, by={})", command.productId(),
                             command.onSale(), command.changedBy());
                 });
+        return ProductResult.from(productPort.save(product));
+    }
+
+    /**
+     * 이미 저장소에 올린 이미지로 바꾼다 (ProductImageService 가 올린 뒤 부른다, ADR 0021). 행을 잠그고 관리 이력을 같은 트랜잭션에.
+     * 여기서 실패하면 상품은 그대로고 저장소에 쓰이지 않는 파일만 남는다
+     */
+    @Transactional
+    public ProductResult applyImage(ImageKey image, UUID changedBy) {
+        UserId by = UserId.of(changedBy);
+        Product product = load(image.productId().value());
+        ProductSnapshot before = product.snapshot();
+        Instant now = clock.instant();
+        product.changeImage(image, now);
+        ProductChange.between(product, ProductAction.IMAGE_CHANGED, before, by, now).ifPresent(change -> {
+            auditPort.save(change);
+            log.info("이미지 변경 (productId={}, key={}, by={})", product.id().value(), image.value(), changedBy);
+        });
         return ProductResult.from(productPort.save(product));
     }
 

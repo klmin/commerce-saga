@@ -60,7 +60,7 @@ class ProductServiceTest {
             assertThat(a.action()).isEqualTo(ProductAction.REGISTERED);
             assertThat(a.before()).isNull();
             assertThat(a.after()).isEqualTo(new ProductSnapshot("키보드", "무선", Money.of(39_000), true,
-                    CategoryCode.DEFAULT));
+                    CategoryCode.DEFAULT, null));
             assertThat(a.changedBy().value()).isEqualTo(ADMIN);
         });
     }

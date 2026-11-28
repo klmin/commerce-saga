@@ -12,6 +12,12 @@ import com.klmin.commerce.productservice.product.application.port.in.ListProduct
 import com.klmin.commerce.productservice.product.application.port.in.ManageProductUseCase;
 import com.klmin.commerce.productservice.product.application.port.in.ProductPageResult;
 import com.klmin.commerce.productservice.product.application.port.in.ProductResult;
+import com.klmin.commerce.productservice.product.application.port.in.ChangeProductImageCommand;
+import com.klmin.commerce.productservice.product.application.port.in.ProductImageResult;
+import com.klmin.commerce.productservice.product.application.port.in.ProductImageUseCase;
+import com.klmin.commerce.productservice.product.application.ImageStoreUnavailableException;
+import com.klmin.commerce.productservice.product.application.ProductImageNotFoundException;
+import org.springframework.mock.web.MockMultipartFile;
 import com.klmin.commerce.productservice.product.application.port.in.RegisterProductCommand;
 import com.klmin.commerce.productservice.product.application.port.in.DescribeProductCommand;
 import org.junit.jupiter.api.Test;
@@ -35,6 +41,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,7 +59,8 @@ class ProductControllerTest {
     private static final UUID USER = UUID.fromString("01900000-0000-7000-8001-000000000001");
 
     private static final ProductResult KEYBOARD =
-            new ProductResult(ID, "무선 키보드", "", 39_000, true, "digital", Instant.parse("2026-11-25T00:00:00Z"));
+            new ProductResult(ID, "무선 키보드", "", 39_000, true, "digital",
+                    "products/" + ID + "/seed.svg", Instant.parse("2026-11-25T00:00:00Z"));
 
     @Autowired
     MockMvc mvc;
@@ -60,6 +70,9 @@ class ProductControllerTest {
 
     @MockitoBean
     ManageProductUseCase manageProductUseCase;
+
+    @MockitoBean
+    ProductImageUseCase productImageUseCase;
 
     // 실제 Bearer 토큰 경로(디코드 → converter)를 태우려고 디코더만 바꾼다
     @MockitoBean
@@ -75,6 +88,7 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.items[0].id").value(ID.toString()))
                 .andExpect(jsonPath("$.items[0].price").value(39_000))
                 .andExpect(jsonPath("$.items[0].categoryCode").value("digital"))
+                .andExpect(jsonPath("$.items[0].imagePath").value("/products/" + ID + "/images/seed.svg"))
                 .andExpect(jsonPath("$.hasNext").value(false));
     }
 
@@ -109,6 +123,48 @@ class ProductControllerTest {
 
         verify(manageProductUseCase).register(new RegisterProductCommand("무선 키보드", null, 39_000, "digital", ADMIN));
         verify(manageProductUseCase).describe(new DescribeProductCommand(ID, "무선 키보드", null, null, ADMIN));
+    }
+
+    @Test
+    void image_isPublic_cachedLong_andSandboxed() throws Exception {
+        given(productImageUseCase.image(ID.toString(), "seed.svg"))
+                .willReturn(new ProductImageResult("<svg/>".getBytes(), "image/svg+xml"));
+        given(productImageUseCase.image(ID.toString(), "nope.png")).willThrow(new ProductImageNotFoundException());
+
+        mvc.perform(get("/products/" + ID + "/images/seed.svg"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/svg+xml"))
+                .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Content-Security-Policy", org.hamcrest.Matchers.containsString("sandbox")))
+                .andExpect(content().bytes("<svg/>".getBytes()));
+        mvc.perform(get("/products/" + ID + "/images/nope.png")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void uploadImage_adminOnly_passesBytes_and503WhenStoreDown() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "a.png", "image/png", new byte[] {1, 2, 3});
+        given(productImageUseCase.changeImage(any())).willReturn(KEYBOARD);
+
+        mvc.perform(multipart("/admin/products/" + ID + "/image").file(file)
+                        .with(jwt().jwt(j -> j.subject(USER.toString()))))
+                .andExpect(status().isForbidden());
+        mvc.perform(multipart("/admin/products/" + ID + "/image").file(file)
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagePath").value("/products/" + ID + "/images/seed.svg"));
+        org.mockito.ArgumentCaptor<ChangeProductImageCommand> captor =
+                org.mockito.ArgumentCaptor.forClass(ChangeProductImageCommand.class);
+        verify(productImageUseCase).changeImage(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().data()).containsExactly(1, 2, 3);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().changedBy()).isEqualTo(ADMIN);
+
+        given(productImageUseCase.changeImage(any()))
+                .willThrow(new ImageStoreUnavailableException(new RuntimeException("down")));
+        mvc.perform(multipart("/admin/products/" + ID + "/image").file(file)
+                        .with(jwt().jwt(j -> j.subject(ADMIN.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("down"))));
     }
 
     @Test
@@ -179,11 +235,11 @@ class ProductControllerTest {
     void auditLog_adminOnly() throws Exception {
         given(getProductUseCase.auditLog(ID, 0, 20)).willReturn(new ProductAuditPageResult(List.of(
                 new ProductAuditResult("PRICE_CHANGED",
-                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true, "digital"),
-                        new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true, "digital"),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true, "digital", null),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 35_000L, true, "digital", null),
                         ADMIN, Instant.parse("2026-11-25T00:00:00Z")),
                 new ProductAuditResult("REGISTERED", null,
-                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true, "digital"),
+                        new ProductAuditResult.Snapshot("무선 키보드", "", 39_000L, true, "digital", null),
                         ADMIN, Instant.parse("2026-11-24T00:00:00Z"))), false));
 
         mvc.perform(get("/admin/products/" + ID + "/audit-log").with(jwt().jwt(j -> j.subject(USER.toString()))))

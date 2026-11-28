@@ -5,5 +5,6 @@ public enum ProductAction {
     REGISTERED,
     DESCRIBED,
     PRICE_CHANGED,
-    SALE_STATUS_CHANGED
+    SALE_STATUS_CHANGED,
+    IMAGE_CHANGED
 }
