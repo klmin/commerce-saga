@@ -1,3 +1,4 @@
+import { Brand } from "@commerce/ui/brand";
 import { Button } from "@commerce/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@commerce/ui/card";
 import { useCallback, useEffect, useState } from "react";
@@ -81,76 +82,80 @@ export function DevicesPage({
   const others = state.status === "ready" ? state.devices.filter((d) => !d.current) : [];
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-8">
-      <div className="flex flex-col gap-1">
-        <p className="text-sm text-muted-foreground">commerce-saga</p>
-        <h1 className="text-xl font-semibold">로그인 기기</h1>
-        <p className="text-sm text-muted-foreground">
-          이 계정으로 로그인한 브라우저입니다. 모르는 기기는 로그아웃하세요. 로그아웃한 기기는 15분
-          안에 로그인이 끝납니다.
-        </p>
-      </div>
-      {state.status === "loading" && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
-      {state.status === "error" && (
-        <div role="alert" className="flex flex-col items-start gap-2 text-sm">
-          <p className="text-destructive">{state.message}</p>
-          <button
-            type="button"
-            className="underline underline-offset-4"
-            onClick={() => {
-              setState({ status: "loading" });
-              reload();
-            }}
-          >
-            다시 시도
-          </button>
+    <div className="flex min-h-svh flex-1 flex-col bg-muted/30">
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-8">
+        <Brand />
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold">로그인 기기</h1>
+          <p className="text-sm text-muted-foreground">
+            이 계정으로 로그인한 브라우저입니다. 모르는 기기는 로그아웃하세요. 로그아웃한 기기는
+            15분 안에 로그인이 끝납니다.
+          </p>
         </div>
-      )}
-      {state.status === "ready" && (
-        <ul aria-label="로그인 기기" className="flex flex-col gap-3">
-          {state.devices.map((d) => (
-            <li key={d.id}>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-4">
-                  <CardTitle className="text-base">
-                    {deviceName(d.userAgent)}
-                    {d.current && (
-                      <span className="ml-2 rounded bg-secondary px-2 py-0.5 text-xs font-normal">
-                        이 기기
-                      </span>
+        {state.status === "loading" && (
+          <p className="text-sm text-muted-foreground">불러오는 중…</p>
+        )}
+        {state.status === "error" && (
+          <div role="alert" className="flex flex-col items-start gap-2 text-sm">
+            <p className="text-destructive">{state.message}</p>
+            <button
+              type="button"
+              className="underline underline-offset-4"
+              onClick={() => {
+                setState({ status: "loading" });
+                reload();
+              }}
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
+        {state.status === "ready" && (
+          <ul aria-label="로그인 기기" className="flex flex-col gap-3">
+            {state.devices.map((d) => (
+              <li key={d.id}>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-4">
+                    <CardTitle className="text-base">
+                      {deviceName(d.userAgent)}
+                      {d.current && (
+                        <span className="ml-2 rounded bg-secondary px-2 py-0.5 text-xs font-normal">
+                          이 기기
+                        </span>
+                      )}
+                    </CardTitle>
+                    {!d.current && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void logout(d.id)}
+                        aria-label={`${deviceName(d.userAgent)} 로그아웃`}
+                      >
+                        로그아웃
+                      </Button>
                     )}
-                  </CardTitle>
-                  {!d.current && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void logout(d.id)}
-                      aria-label={`${deviceName(d.userAgent)} 로그아웃`}
-                    >
-                      로그아웃
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  로그인 {time.format(new Date(d.loginAt))} · 최근 사용{" "}
-                  {time.format(new Date(d.lastSeenAt))}
-                </CardContent>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      )}
-      {others.length > 0 && (
-        <Button
-          variant="destructive"
-          className="self-start"
-          disabled={busy}
-          onClick={() => void logout()}
-        >
-          다른 기기 모두 로그아웃
-        </Button>
-      )}
-    </main>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    로그인 {time.format(new Date(d.loginAt))} · 최근 사용{" "}
+                    {time.format(new Date(d.lastSeenAt))}
+                  </CardContent>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+        {others.length > 0 && (
+          <Button
+            variant="destructive"
+            className="self-start"
+            disabled={busy}
+            onClick={() => void logout()}
+          >
+            다른 기기 모두 로그아웃
+          </Button>
+        )}
+      </main>
+    </div>
   );
 }

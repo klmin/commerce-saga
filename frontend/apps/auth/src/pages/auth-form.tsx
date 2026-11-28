@@ -1,3 +1,4 @@
+import { Brand } from "@commerce/ui/brand";
 import { Button } from "@commerce/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@commerce/ui/card";
 import { Input } from "@commerce/ui/input";
@@ -28,41 +29,46 @@ export function AuthForm({
 }) {
   const csrf = useCsrf();
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-8">
-      <Card>
-        <CardHeader>
-          <p className="text-sm text-muted-foreground">commerce-saga</p>
-          <CardTitle>
-            <h1 className="text-xl">{title}</h1>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          {csrf.status === "error" && (
-            <div role="alert" className="flex flex-col items-start gap-2 text-sm">
-              <p className="text-destructive">로그인 서버에 연결하지 못했습니다.</p>
-              <button type="button" className="underline underline-offset-4" onClick={csrf.retry}>
-                다시 시도
-              </button>
-            </div>
-          )}
-          <form method="post" action={action} className="flex flex-col gap-4">
-            {csrf.status === "ready" && (
-              <input type="hidden" name={csrf.csrf.parameterName} value={csrf.csrf.token} />
+    // 사용자·관리자 화면과 같은 로고·색 (후속 9-6). 배경을 살짝 깔아 카드가 떠 보이게
+    <div className="flex min-h-svh flex-1 flex-col bg-muted/30">
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-8">
+        <div className="flex justify-center">
+          <Brand />
+        </div>
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle>
+              <h1 className="text-xl">{title}</h1>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
             )}
-            {children}
-            <Button type="submit" disabled={csrf.status !== "ready"}>
-              {submitLabel}
-            </Button>
-          </form>
-          <div className="text-sm text-muted-foreground">{footer}</div>
-        </CardContent>
-      </Card>
-    </main>
+            {csrf.status === "error" && (
+              <div role="alert" className="flex flex-col items-start gap-2 text-sm">
+                <p className="text-destructive">로그인 서버에 연결하지 못했습니다.</p>
+                <button type="button" className="underline underline-offset-4" onClick={csrf.retry}>
+                  다시 시도
+                </button>
+              </div>
+            )}
+            <form method="post" action={action} className="flex flex-col gap-4">
+              {csrf.status === "ready" && (
+                <input type="hidden" name={csrf.csrf.parameterName} value={csrf.csrf.token} />
+              )}
+              {children}
+              <Button type="submit" disabled={csrf.status !== "ready"}>
+                {submitLabel}
+              </Button>
+            </form>
+            <div className="text-sm text-muted-foreground">{footer}</div>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
   );
 }
 

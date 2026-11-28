@@ -5,6 +5,7 @@
   "description": "화면 SPA 들이 같이 쓰는 shadcn/ui 컴포넌트와 테마. 빌드 없이 소스(tsx·css)를 그대로 내보내고 각 앱의 Vite 가 함께 묶는다",
   "exports": {
     "./button": "./src/button.tsx",
+    "./brand": "./src/brand.tsx",
     "./card": "./src/card.tsx",
     "./dropdown-menu": "./src/dropdown-menu.tsx",
     "./input": "./src/input.tsx",
