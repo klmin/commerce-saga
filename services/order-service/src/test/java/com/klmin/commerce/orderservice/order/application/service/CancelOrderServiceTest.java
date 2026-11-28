@@ -31,9 +31,10 @@ class CancelOrderServiceTest {
     private final OrderServiceTest.InMemoryOrders orders = new OrderServiceTest.InMemoryOrders();
     private final OrderServiceTest.InMemorySagas sagas = new OrderServiceTest.InMemorySagas();
     private final OrderServiceTest.Recording sent = new OrderServiceTest.Recording();
+    private final InMemorySagaOutcomes outcomes = new InMemorySagaOutcomes();
     private final OrderService service = new OrderService(orders, orders, sagas, sent, sent,
             new InMemoryProcessedMessages(), new InMemoryIdempotencyKeys(), new InMemoryCart(),
-            new InMemorySagaOutcomes(), Clock.fixed(NOW, ZoneOffset.UTC));
+            outcomes, Clock.fixed(NOW, ZoneOffset.UTC));
 
     /** 합계 2,500 */
     private Order place(long pointAmount) {
@@ -81,6 +82,8 @@ class CancelOrderServiceTest {
         Order cancelled = orders.store.get(order.id());
         assertThat(cancelled.status()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(cancelled.cancelReason()).isEqualTo(OrderSaga.USER_CANCEL_REASON);
+        assertThat(outcomes.recorded).extracting(InMemorySagaOutcomes.Outcome::result)
+                .containsExactly(SagaState.CANCELLED);
     }
 
     @Test
@@ -108,6 +111,9 @@ class CancelOrderServiceTest {
                 "cancelled:" + order.id() + ":afterCompletion");
         assertThat(orders.store.get(order.id()).status()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(sagas.store.get(order.id()).state()).isEqualTo(SagaState.CANCELLED);
+        // Saga 처리 시간 지표는 완료 때 한 번만 (완료 후 취소는 다시 세지 않는다)
+        assertThat(outcomes.recorded).extracting(InMemorySagaOutcomes.Outcome::result)
+                .containsExactly(SagaState.COMPLETED);
     }
 
     @Test
