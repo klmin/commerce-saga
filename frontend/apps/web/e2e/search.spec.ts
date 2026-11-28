@@ -10,8 +10,9 @@ test("검색어로 상품을 찾고, 조건은 URL 에 남으며, 전체 보기�
   await login(page);
   await expect(products(page).filter({ hasText: "무선 키보드" })).toBeVisible();
 
-  const search = page.getByRole("search");
-  await search.getByLabel("검색어").fill("마우");
+  // 헤더 검색창 (후속 9-5a)
+  const search = page.getByRole("search", { name: "상품 검색" });
+  await search.getByLabel("상품 검색어").fill("마우");
   await search.getByRole("button", { name: "검색" }).click();
   await expect(page).toHaveURL(/[?&]q=%EB%A7%88%EC%9A%B0/);
 
@@ -31,6 +32,8 @@ test("검색어로 상품을 찾고, 조건은 URL 에 남으며, 전체 보기�
   await page.getByRole("link", { name: "전체 보기" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(products(page).filter({ hasText: "무선 키보드" })).toBeVisible();
+  // 전체로 돌아오면 헤더 검색창도 비워진다
+  await expect(search.getByLabel("상품 검색어")).toHaveValue("");
 });
 
 test("가격 범위와 정렬", async ({ page }) => {

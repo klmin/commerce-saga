@@ -11,6 +11,7 @@ import { listProducts, searchProducts, stocksByProduct } from "@/api/products";
 import { LoadError, Page, Section } from "@commerce/ui/page";
 import { ListSkeleton, ValueSkeleton } from "@commerce/ui/skeletons";
 import { ApiError } from "@commerce/bff/api";
+import { useCategories } from "@/hooks/use-categories";
 import { cartErrorCode } from "@/lib/cart-errors";
 import { MAX_QUANTITY } from "@/lib/orders/order-input";
 import { type Product, type ProductId, won } from "@/lib/products";
@@ -62,19 +63,23 @@ export function PointBalance() {
   return <p className="text-2xl font-semibold">{balance.data.toLocaleString("ko-KR")}P</p>;
 }
 
-/** 검색 폼. 조건을 URL(?q=...)에 남겨 새로고침·공유가 된다. 조건마다 key 를 달리해 입력을 다시 채운다 */
+/**
+ * 검색 조건 폼 (가격 범위·정렬). 검색어는 헤더 검색창, 카테고리는 헤더 메뉴가 정하고 여기서는 그대로 넘긴다.
+ * 조건을 URL 에 남겨 새로고침·공유가 된다. 조건마다 key 를 달리해 입력을 다시 채운다
+ */
 function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
   const [, setParams] = useSearchParams();
   return (
     <form
       key={JSON.stringify(criteria)}
       role="search"
+      aria-label="검색 조건"
       className="flex flex-wrap items-end gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         const data = new FormData(e.currentTarget);
         const next = new URLSearchParams();
-        for (const name of ["q", "minPrice", "maxPrice", "sort"]) {
+        for (const name of ["q", "category", "minPrice", "maxPrice", "sort"]) {
           const value = String(data.get(name) ?? "").trim();
           if (value) {
             next.set(name, value);
@@ -83,17 +88,8 @@ function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
         setParams(next);
       }}
     >
-      <div className="flex min-w-40 flex-1 flex-col gap-1">
-        <Label htmlFor="search-q">검색어</Label>
-        <Input
-          id="search-q"
-          name="q"
-          type="search"
-          maxLength={100}
-          placeholder="상품 이름·설명 (예: 마우)"
-          defaultValue={criteria?.q ?? ""}
-        />
-      </div>
+      <input type="hidden" name="q" value={criteria?.q ?? ""} />
+      <input type="hidden" name="category" value={criteria?.category ?? ""} />
       <div className="flex w-28 flex-col gap-1">
         <Label htmlFor="search-min">최소 가격</Label>
         <Input
@@ -129,7 +125,7 @@ function ProductSearchForm({ criteria }: { criteria: SearchCriteria | null }) {
           ))}
         </select>
       </div>
-      <Button type="submit">검색</Button>
+      <Button type="submit">적용</Button>
       {criteria && (
         <Button variant="ghost" asChild>
           <Link to="/">전체 보기</Link>
@@ -243,13 +239,27 @@ function ProductSection() {
   );
 }
 
+/** 목록 제목: 고른 카테고리 이름(모르는 코드는 "상품")과 검색어 */
+function useListingTitle(): string {
+  const [params] = useSearchParams();
+  const categories = useCategories();
+  const criteria = parseSearch(Object.fromEntries(params));
+  const category = criteria?.category
+    ? categories.data?.find((c) => c.code === criteria.category)?.name
+    : undefined;
+  const base = category ?? "상품";
+  return criteria?.q ? `${base} · "${criteria.q}" 검색` : base;
+}
+
 export function HomePage() {
+  const title = useListingTitle();
   return (
-    <Page>
+    <Page wide>
       <Section title="내 포인트">
         <PointBalance />
       </Section>
-      <Section title="상품">
+      {/* 고른 카테고리·검색어가 바뀌는 목록 제목 (화면 읽기 프로그램이 제목으로 찾게) */}
+      <Section title={<h2>{title}</h2>}>
         <p className="text-sm text-muted-foreground">
           가격은 주문할 때 다시 확인합니다. 그사이 가격이 바뀌면 바뀐 가격을 보여 드리고 확인을
           받습니다. 품절 상품도 주문할 수 있습니다. 재고 예약 단계에서 실패하고 주문이 취소되는

@@ -62,8 +62,9 @@ test("로그인 기기: 다른 브라우저를 로그아웃하면 그 브라우�
   const other = await (await browser.newContext()).newPage();
   await login(other, "/", loginId, "e2e-password");
 
-  // 사용자 화면 헤더 → 인증 화면의 기기 목록 (SSO 세션이 있어 로그인 화면 없이)
-  await page.getByRole("link", { name: "로그인 기기" }).click();
+  // 사용자 화면 헤더의 내 정보 메뉴 → 인증 화면의 기기 목록 (SSO 세션이 있어 로그인 화면 없이)
+  await page.getByRole("button", { name: "내 정보" }).click();
+  await page.getByRole("menuitem", { name: "로그인 기기" }).click();
   await expect(page).toHaveURL(/\/devices$/);
   const devices = page.getByRole("list", { name: "로그인 기기" });
   await expect(devices.getByRole("listitem")).toHaveCount(2);
@@ -73,6 +74,7 @@ test("로그인 기기: 다른 브라우저를 로그아웃하면 그 브라우�
   await expect(devices.getByRole("listitem")).toHaveCount(1);
 
   // 로그아웃된 브라우저: SSO 세션이 없어 기기 화면을 열면 로그인 화면으로
-  await other.getByRole("link", { name: "로그인 기기" }).click();
+  await other.getByRole("button", { name: "내 정보" }).click();
+  await other.getByRole("menuitem", { name: "로그인 기기" }).click();
   await expect(other).toHaveURL(/\/signin/);
 });
