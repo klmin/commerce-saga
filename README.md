@@ -159,6 +159,7 @@ scripts/smoke-signup-points.sh                             # 가입 → auth.eve
 - [0017 인증 재구성: auth-service 를 Spring Authorization Server(OIDC IdP)로, Gateway 를 BFF 로, 화면을 SPA 3개로](docs/adr/0017-auth-sas-gateway-bff-spa.md)
 - [0018 사용자·상품·알림 id 를 UUIDv7 로 (출시 전 일괄 변경)](docs/adr/0018-uuidv7-ids.md)
 - [0019 관리자 재고 조정: inventory 관리자 API 로 입고·차감 (증감 + 이력 + 요청 키)](docs/adr/0019-admin-stock-adjustment.md)
+- [0020 주문 취소: 진행 중이면 다음 응답에서 보상으로, 완료 후면 같은 Saga 의 취소 단계로](docs/adr/0020-order-cancellation.md)
 
 ## 구성
 
