@@ -143,8 +143,8 @@ export function HomePage() {
     <Page>
       <Section title="상품 관리">
         <p className="text-sm text-muted-foreground">
-          상품 등록·이름·설명·카테고리·대표 이미지·가격·판매 상태를 바꾸고, 상품마다 누가·언제·무엇을
-          바꿨는지 관리 이력을 본다.
+          상품 등록·이름·설명·카테고리·대표 이미지·가격·판매 상태를 바꾸고, 상품마다
+          누가·언제·무엇을 바꿨는지 관리 이력을 본다.
         </p>
         <Link to="/products" className="self-start text-sm underline underline-offset-4">
           상품 관리로 가기
