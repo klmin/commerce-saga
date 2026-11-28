@@ -57,6 +57,22 @@ describe("api", () => {
     expect(new Headers(fetchMock.mock.calls[0][1].headers).has("X-XSRF-TOKEN")).toBe(false);
   });
 
+  it("FormData 본문은 Content-Type 을 정하지 않는다 (브라우저가 multipart boundary 를 붙인다)", async () => {
+    document.cookie = "XSRF-TOKEN=tok";
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const body = new FormData();
+    body.set("file", new Blob(["x"], { type: "image/png" }), "a.png");
+    await api("/api/admin/products/01900000-0000-7000-8000-000000000001/image", {
+      method: "POST",
+      body,
+    });
+    const headers = new Headers(fetchMock.mock.calls[0][1].headers);
+    expect(headers.has("Content-Type")).toBe(false);
+    expect(headers.get("X-XSRF-TOKEN")).toBe("tok");
+    expect(fetchMock.mock.calls[0][1].body).toBe(body);
+  });
+
   it("오류는 Problem Details 로 읽는다", async () => {
     vi.stubGlobal(
       "fetch",

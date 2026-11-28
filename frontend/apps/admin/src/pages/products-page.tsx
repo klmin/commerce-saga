@@ -4,13 +4,28 @@ import { ListSkeleton } from "@commerce/ui/skeletons";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import { listAllProducts, registerProduct, shortProductId } from "@/api/admin";
+import {
+  type Category,
+  listAllProducts,
+  listCategories,
+  registerProduct,
+  shortProductId,
+} from "@/api/admin";
 import { pageNumber, won } from "@/lib/format";
 import { parseRegisterInput } from "@/lib/product-input";
 
-import { RegisterProductForm, type SubmitResult } from "./product-forms";
+import { ProductThumb, RegisterProductForm, type SubmitResult } from "./product-forms";
+
+function useCategories() {
+  return useQuery({ queryKey: ["categories"], queryFn: listCategories, staleTime: Infinity });
+}
+
+function categoryName(categories: Category[] | undefined, code: string): string {
+  return categories?.find((c) => c.code === code)?.name ?? code;
+}
 
 function ProductTable() {
+  const categories = useCategories();
   const [params] = useSearchParams();
   const page = pageNumber(params.get("page"));
   const products = useQuery({
@@ -28,15 +43,19 @@ function ProductTable() {
       <ul aria-label="관리 상품 목록" className="flex flex-col divide-y text-sm">
         {products.data.items.map((p) => (
           <li key={p.id} className="flex items-center justify-between gap-2 py-2">
-            <span className="flex flex-col">
-              <span className="font-medium">
-                <span className="text-muted-foreground" title={p.id}>
-                  #{shortProductId(p.id)}
-                </span>{" "}
-                {p.name}
-              </span>
-              <span className="text-muted-foreground">
-                {won(p.price)} · {p.onSale ? "판매 중" : "판매 중지"}
+            <span className="flex items-center gap-3">
+              <ProductThumb product={p} />
+              <span className="flex flex-col">
+                <span className="font-medium">
+                  <span className="text-muted-foreground" title={p.id}>
+                    #{shortProductId(p.id)}
+                  </span>{" "}
+                  {p.name}
+                </span>
+                <span className="text-muted-foreground">
+                  {categoryName(categories.data, p.categoryCode)} · {won(p.price)} ·{" "}
+                  {p.onSale ? "판매 중" : "판매 중지"}
+                </span>
               </span>
             </span>
             <Button variant="outline" size="sm" asChild>
@@ -65,6 +84,7 @@ function ProductTable() {
 
 export function ProductsPage() {
   const navigate = useNavigate();
+  const categories = useCategories();
 
   async function register(formData: FormData): Promise<SubmitResult> {
     const input = parseRegisterInput(formData);
@@ -86,7 +106,13 @@ export function ProductsPage() {
         <ProductTable />
       </Section>
       <Section title="상품 등록">
-        <RegisterProductForm onSubmit={register} />
+        {categories.isError ? (
+          <LoadError error={categories.error} retry={() => categories.refetch()} />
+        ) : categories.data ? (
+          <RegisterProductForm categories={categories.data} onSubmit={register} />
+        ) : (
+          <ListSkeleton rows={2} />
+        )}
       </Section>
     </Page>
   );

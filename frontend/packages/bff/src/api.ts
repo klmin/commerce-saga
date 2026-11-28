@@ -114,7 +114,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
-  if (init.body !== undefined && !headers.has("Content-Type")) {
+  // FormData(파일 업로드)는 브라우저가 boundary 를 붙인 multipart 형식을 정한다
+  if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (!SAFE_METHODS.has(method)) {
